@@ -1,0 +1,435 @@
+version: '3.8'
+
+x-environment: &common-environment
+  DB_HOST: postgres
+  DB_NAME: displaydeck_prod
+  DB_USER: displaydeck_user
+  REDIS_URL: redis://redis:6379/0
+  
+x-restart-policy: &restart-policy
+  restart_policy:
+    condition: on-failure
+    delay: 5s
+    max_attempts: 3
+    window: 120s
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: displaydeck_prod
+      POSTGRES_USER: displaydeck_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    deploy:
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.labels.postgres == true
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U displaydeck_user -d displaydeck_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache and Channel Layer
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass-file /run/secrets/redis_password
+    secrets:
+      - redis_password
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    deploy:
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.labels.redis == true
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "$(cat /run/secrets/redis_password)", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Django Backend
+  backend:
+    image: displaydeck/backend:latest
+    environment:
+      <<: *common-environment
+      DEBUG: 'False'
+      SECRET_KEY_FILE: /run/secrets/django_secret_key
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      ALLOWED_HOSTS: '${DOMAIN_NAME:-displaydeck.com},backend'
+    secrets:
+      - django_secret_key
+      - postgres_password
+      - redis_password
+    volumes:
+      - backend_media:/app/media
+      - backend_static:/app/staticfiles
+    networks:
+      - backend
+      - frontend
+    deploy:
+      replicas: 2
+      <<: *restart-policy
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      placement:
+        constraints:
+          - node.labels.backend == true
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery Worker (for background tasks)
+  celery-worker:
+    image: displaydeck/backend:latest
+    command: celery -A core worker -l info
+    environment:
+      <<: *common-environment
+      DEBUG: 'False'
+      SECRET_KEY_FILE: /run/secrets/django_secret_key
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    secrets:
+      - django_secret_key
+      - postgres_password
+      - redis_password
+    volumes:
+      - backend_media:/app/media
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.labels.worker == true
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+    depends_on:
+      - postgres
+      - redis
+
+  # Celery Beat (for scheduled tasks)
+  celery-beat:
+    image: displaydeck/backend:latest
+    command: celery -A core beat -l info
+    environment:
+      <<: *common-environment
+      DEBUG: 'False'
+      SECRET_KEY_FILE: /run/secrets/django_secret_key
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    secrets:
+      - django_secret_key
+      - postgres_password
+      - redis_password
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.labels.beat == true
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.1'
+        reservations:
+          memory: 128M
+          cpus: '0.05'
+    depends_on:
+      - postgres
+      - redis
+
+  # React Frontend
+  frontend:
+    image: displaydeck/frontend:latest
+    environment:
+      NODE_ENV: production
+      REACT_APP_API_URL: https://${DOMAIN_NAME:-displaydeck.com}/api/v1
+      REACT_APP_WS_URL: wss://${DOMAIN_NAME:-displaydeck.com}/ws
+    networks:
+      - frontend
+    deploy:
+      replicas: 2
+      <<: *restart-policy
+      update_config:
+        parallelism: 1
+        delay: 10s
+      placement:
+        constraints:
+          - node.labels.frontend == true
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # Nginx Load Balancer & Reverse Proxy
+  nginx:
+    image: displaydeck/nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME:-displaydeck.com}
+      EMAIL: ${LETSENCRYPT_EMAIL:-admin@displaydeck.com}
+    volumes:
+      - nginx_conf:/etc/nginx/conf.d
+      - nginx_certs:/etc/nginx/certs
+      - nginx_dhparam:/etc/nginx/dhparam
+      - nginx_html:/usr/share/nginx/html
+      - backend_static:/var/www/static:ro
+      - backend_media:/var/www/media:ro
+    networks:
+      - frontend
+    deploy:
+      replicas: 1
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+    depends_on:
+      - backend
+      - frontend
+
+  # Let's Encrypt SSL Certificate Manager
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    environment:
+      NGINX_PROXY_CONTAINER: nginx
+      DEFAULT_EMAIL: ${LETSENCRYPT_EMAIL:-admin@displaydeck.com}
+    volumes:
+      - nginx_conf:/etc/nginx/conf.d
+      - nginx_certs:/etc/nginx/certs
+      - nginx_dhparam:/etc/nginx/dhparam
+      - nginx_html:/usr/share/nginx/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - frontend
+    deploy:
+      replicas: 1
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.1'
+    depends_on:
+      - nginx
+
+  # Monitoring - Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - prometheus_config:/etc/prometheus
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring
+      - backend
+    deploy:
+      replicas: 1
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.labels.monitoring == true
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+
+  # Monitoring - Grafana
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_password
+    secrets:
+      - grafana_password
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - monitoring
+      - frontend
+    deploy:
+      replicas: 1
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.labels.monitoring == true
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.1'
+
+  # Log aggregation - Loki
+  loki:
+    image: grafana/loki:latest
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    networks:
+      - monitoring
+    deploy:
+      replicas: 1
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.labels.monitoring == true
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.1'
+
+  # Database backup service
+  backup:
+    image: displaydeck/backup:latest
+    environment:
+      <<: *common-environment
+      BACKUP_SCHEDULE: "0 2 * * *"  # Daily at 2 AM
+      BACKUP_RETENTION_DAYS: 30
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+      AWS_ACCESS_KEY_ID_FILE: /run/secrets/aws_access_key
+      AWS_SECRET_ACCESS_KEY_FILE: /run/secrets/aws_secret_key
+      S3_BUCKET: ${BACKUP_S3_BUCKET:-displaydeck-backups}
+    secrets:
+      - postgres_password
+      - aws_access_key
+      - aws_secret_key
+    volumes:
+      - backup_data:/backups
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+      <<: *restart-policy
+      placement:
+        constraints:
+          - node.labels.backup == true
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.1'
+    depends_on:
+      - postgres
+
+networks:
+  frontend:
+    driver: overlay
+    attachable: true
+  backend:
+    driver: overlay
+    attachable: true
+  monitoring:
+    driver: overlay
+    attachable: true
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_media:
+    driver: local
+  backend_static:
+    driver: local
+  nginx_conf:
+    driver: local
+  nginx_certs:
+    driver: local
+  nginx_dhparam:
+    driver: local
+  nginx_html:
+    driver: local
+  prometheus_config:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  loki_data:
+    driver: local
+  backup_data:
+    driver: local
+
+secrets:
+  django_secret_key:
+    external: true
+  postgres_password:
+    external: true
+  redis_password:
+    external: true
+  grafana_password:
+    external: true
+  aws_access_key:
+    external: true
+  aws_secret_key:
+    external: true
+
+configs:
+  nginx_config:
+    external: true
+  prometheus_config:
+    external: true

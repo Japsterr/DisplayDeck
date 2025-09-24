@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title|default:"API Documentation" }}</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui.css" />
+    <link rel="icon" type="image/png" href="https://displaydeck.com/favicon.png" sizes="32x32" />
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow: -moz-scrollbars-vertical;
+            overflow-y: scroll;
+        }
+        *, *:before, *:after {
+            box-sizing: inherit;
+        }
+        body {
+            margin: 0;
+            background: #fafafa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .swagger-ui .topbar {
+            background-color: #2c3e50;
+            padding: 10px 20px;
+        }
+        .swagger-ui .topbar .download-url-wrapper {
+            display: none;
+        }
+        .swagger-ui .topbar .link {
+            color: #ecf0f1;
+            font-weight: bold;
+            text-decoration: none;
+            font-size: 18px;
+        }
+        .swagger-ui .topbar .link:hover {
+            color: #3498db;
+        }
+        .custom-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .custom-header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .custom-header p {
+            margin: 10px 0 0 0;
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        .api-info {
+            background: white;
+            padding: 20px;
+            margin: 0;
+            border-bottom: 1px solid #e1e8ed;
+        }
+        .api-info .info-section {
+            display: inline-block;
+            margin-right: 30px;
+            vertical-align: top;
+        }
+        .api-info .info-section h3 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+        .api-info .info-section p {
+            margin: 5px 0;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        .api-info .info-section a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .api-info .info-section a:hover {
+            text-decoration: underline;
+        }
+        #swagger-ui {
+            max-width: none;
+        }
+        .swagger-ui .info {
+            display: none; /* Hide default info section since we have custom header */
+        }
+        /* Custom styling for better readability */
+        .swagger-ui .scheme-container {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .swagger-ui .scheme-container .schemes-title {
+            color: #2c3e50;
+            font-weight: bold;
+        }
+        /* Enhance operation blocks */
+        .swagger-ui .opblock {
+            margin: 10px 0;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .swagger-ui .opblock.opblock-post {
+            background: rgba(73, 204, 144, 0.1);
+            border-color: #49cc90;
+        }
+        .swagger-ui .opblock.opblock-get {
+            background: rgba(97, 175, 254, 0.1);
+            border-color: #61affe;
+        }
+        .swagger-ui .opblock.opblock-put {
+            background: rgba(252, 161, 48, 0.1);
+            border-color: #fca130;
+        }
+        .swagger-ui .opblock.opblock-delete {
+            background: rgba(249, 62, 62, 0.1);
+            border-color: #f93e3e;
+        }
+        /* Footer */
+        .api-footer {
+            background: #34495e;
+            color: #ecf0f1;
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+        }
+        .api-footer a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .api-footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <!-- Custom Header -->
+    <div class="custom-header">
+        <h1>{{ brand_name|default:"DisplayDeck" }} API</h1>
+        <p>Comprehensive Digital Menu Management System API</p>
+    </div>
+
+    <!-- API Information Bar -->
+    <div class="api-info">
+        <div class="info-section">
+            <h3>Version</h3>
+            <p>v1.0.0</p>
+        </div>
+        <div class="info-section">
+            <h3>Base URL</h3>
+            <p id="base-url">{{ request.get_host }}</p>
+        </div>
+        <div class="info-section">
+            <h3>Documentation</h3>
+            <p><a href="https://docs.displaydeck.com" target="_blank">Full Documentation</a></p>
+        </div>
+        <div class="info-section">
+            <h3>Support</h3>
+            <p><a href="mailto:{{ support_email|default:'support@displaydeck.com' }}">{{ support_email|default:"support@displaydeck.com" }}</a></p>
+        </div>
+        <div class="info-section">
+            <h3>Authentication</h3>
+            <p>JWT Bearer Token Required</p>
+        </div>
+    </div>
+
+    <!-- Swagger UI Container -->
+    <div id="swagger-ui"></div>
+
+    <!-- Footer -->
+    <div class="api-footer">
+        <p>
+            &copy; 2024 <a href="{{ brand_url|default:'https://displaydeck.com' }}" target="_blank">{{ brand_name|default:"DisplayDeck" }}</a>. 
+            Built with Django REST Framework and drf-spectacular.
+        </p>
+        <p>
+            <a href="/api/schema/" target="_blank">Download OpenAPI Schema</a> | 
+            <a href="/api/redoc/" target="_blank">ReDoc Documentation</a> |
+            <a href="https://github.com/displaydeck/api" target="_blank">Source Code</a>
+        </p>
+    </div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            const ui = SwaggerUIBundle({
+                url: '{% url "schema" %}',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                requestInterceptor: (request) => {
+                    // Add authentication header if token is available
+                    const token = localStorage.getItem('access_token');
+                    if (token) {
+                        request.headers['Authorization'] = `Bearer ${token}`;
+                    }
+                    return request;
+                },
+                responseInterceptor: (response) => {
+                    // Handle token refresh on 401
+                    if (response.status === 401) {
+                        console.log('Authentication required. Please login.');
+                        // Could trigger login modal here
+                    }
+                    return response;
+                },
+                // Custom configuration
+                defaultModelsExpandDepth: 1,
+                defaultModelExpandDepth: 1,
+                displayOperationId: false,
+                displayRequestDuration: true,
+                docExpansion: "list",
+                filter: true,
+                showExtensions: true,
+                showCommonExtensions: true,
+                tryItOutEnabled: true,
+                persistAuthorization: true,
+                
+                // Custom validation
+                validatorUrl: null,
+                
+                // OAuth2 configuration (if needed)
+                initOAuth: {
+                    clientId: "displaydeck-swagger-ui",
+                    realm: "displaydeck",
+                    appName: "DisplayDeck API Documentation",
+                    scopeSeparator: " ",
+                    additionalQueryStringParams: {}
+                }
+            });
+
+            // Custom functionality
+            window.ui = ui;
+
+            // Add authentication helper
+            window.authenticateAPI = function(token) {
+                localStorage.setItem('access_token', token);
+                ui.authActions.authorize({
+                    'JWT': {
+                        name: 'JWT',
+                        schema: {
+                            type: 'http',
+                            scheme: 'bearer'
+                        },
+                        value: token
+                    }
+                });
+                console.log('API authenticated successfully');
+            };
+
+            // Add logout helper
+            window.logoutAPI = function() {
+                localStorage.removeItem('access_token');
+                ui.authActions.logout(['JWT']);
+                console.log('API logout successful');
+            };
+
+            // Display authentication status
+            const token = localStorage.getItem('access_token');
+            if (token) {
+                console.log('Existing authentication token found');
+                window.authenticateAPI(token);
+            }
+
+            // Update base URL display
+            const protocol = window.location.protocol;
+            const host = window.location.host;
+            document.getElementById('base-url').textContent = `${protocol}//${host}`;
+        };
+    </script>
+</body>
+</html>

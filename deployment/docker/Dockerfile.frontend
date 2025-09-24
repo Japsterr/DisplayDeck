@@ -1,0 +1,83 @@
+# Multi-stage Dockerfile for React Frontend
+FROM node:18-alpine as base
+
+# Install dependencies for node-gyp
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Dependencies stage
+FROM base as deps
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install dependencies
+RUN npm ci --only=production --silent \
+    && npm cache clean --force
+
+# Development stage
+FROM base as development
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install all dependencies (including dev)
+RUN npm ci --silent
+
+# Copy source code
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
+
+# Builder stage
+FROM base as builder
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install all dependencies
+RUN npm ci --silent
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM nginx:alpine as production
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy custom nginx config
+COPY deployment/docker/nginx.conf /etc/nginx/nginx.conf
+
+# Copy built application from builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Create non-root user for nginx
+RUN addgroup -g 1001 -S nginx-user \
+    && adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G nginx-user -g nginx-user nginx-user
+
+# Change ownership of nginx directories
+RUN chown -R nginx-user:nginx-user /var/cache/nginx \
+    && chown -R nginx-user:nginx-user /var/log/nginx \
+    && chown -R nginx-user:nginx-user /etc/nginx/conf.d \
+    && touch /var/run/nginx.pid \
+    && chown -R nginx-user:nginx-user /var/run/nginx.pid \
+    && chown -R nginx-user:nginx-user /usr/share/nginx/html
+
+# Switch to non-root user
+USER nginx-user
+
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

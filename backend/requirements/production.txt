@@ -1,0 +1,15 @@
+# Production-specific requirements
+-r base.txt
+
+# Production server
+gunicorn>=21.2.0
+daphne>=4.0.0  # For ASGI/WebSocket support
+
+# Production database optimizations
+django-connection-pool>=1.0.0
+
+# Monitoring and logging
+sentry-sdk>=1.32.0
+
+# Performance monitoring
+django-prometheus>=2.3.0

@@ -1,0 +1,63 @@
+# Core Django Framework
+Django>=4.2.0,<5.0.0
+django-environ>=0.11.0
+python-decouple>=3.8
+
+# Database
+psycopg2-binary>=2.9.0
+django-redis>=5.4.0
+
+# Django REST Framework and API
+djangorestframework>=3.14.0
+djangorestframework-simplejwt>=5.3.0
+django-cors-headers>=4.3.0
+django-filter>=23.4
+drf-spectacular>=0.26.0
+
+# WebSocket support
+channels>=4.0.0
+channels-redis>=4.1.0
+
+# Authentication and Permissions
+django-guardian>=2.4.0
+django-allauth>=0.57.0
+
+# File handling and media
+Pillow>=10.0.0
+django-storages[boto3]>=1.14.0
+
+# Background tasks
+celery>=5.3.0
+django-celery-beat>=2.5.0
+redis>=5.0.0
+
+# Development and debugging
+django-debug-toolbar>=4.2.0
+django-extensions>=3.2.0
+
+# Production server
+gunicorn>=21.2.0
+whitenoise>=6.6.0
+
+# Validation and security
+django-ratelimit>=4.1.0
+cryptography>=41.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+Faker>=19.13.0
+
+# Testing
+pytest>=7.4.0
+pytest-django>=4.7.0
+pytest-cov>=4.1.0
+factory-boy>=3.3.0
+
+# Linting and formatting
+black>=23.9.0
+isort>=5.12.0
+flake8>=6.1.0
+
+# API documentation
+mkdocs>=1.5.0
+mkdocs-material>=9.4.0

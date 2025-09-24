@@ -1,0 +1,83 @@
+# Multi-stage Dockerfile for Django Backend
+FROM python:3.11-slim as base
+
+# Install system dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        postgresql-client \
+        build-essential \
+        libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Development stage
+FROM base as development
+
+# Install development dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY . .
+
+EXPOSE 8000
+
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+# Production builder stage
+FROM base as builder
+
+# Install production dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY . .
+
+# Collect static files
+RUN python manage.py collectstatic --noinput
+
+# Production stage
+FROM python:3.11-slim as production
+
+# Install runtime dependencies only
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        postgresql-client \
+        libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r django && useradd -r -g django django
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=core.settings.production
+
+WORKDIR /app
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application and static files
+COPY --from=builder /app .
+COPY --from=builder /app/staticfiles ./staticfiles
+
+# Change ownership to django user
+RUN chown -R django:django /app
+
+USER django
+
+EXPOSE 8000
+
+# Use gunicorn for production
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--worker-class", "gevent", "core.wsgi:application"]

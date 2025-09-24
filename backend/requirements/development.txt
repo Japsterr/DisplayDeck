@@ -1,0 +1,23 @@
+# Development-specific requirements
+-r base.txt
+
+# Development and testing tools
+pytest>=7.4.0
+pytest-django>=4.5.2
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+factory-boy>=3.3.0
+
+# Code quality
+black>=23.7.0
+isort>=5.12.0
+flake8>=6.0.0
+mypy>=1.5.0
+
+# Debugging
+django-debug-toolbar>=4.2.0
+ipython>=8.14.0
+
+# Development server enhancements
+django-extensions>=3.2.0
+werkzeug>=2.3.0  # For enhanced debugger

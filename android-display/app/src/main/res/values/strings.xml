@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DisplayDeck TV</string>
+    <string name="pairing_title">DisplayDeck</string>
+    <string name="pairing_subtitle">Digital Menu Display</string>
+    <string name="pairing_instructions">Scan this QR code with the DisplayDeck mobile app to pair this display</string>
+    <string name="waiting_for_pairing">Waiting for pairing...</string>
+    <string name="connected">Connected</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="no_menu_items">No menu items available</string>
+    <string name="error_generating_qr">Error generating QR code</string>
+    <string name="pairing_failed">Pairing failed</string>
+    <string name="return_to_pairing">Return to Pairing</string>
+    <string name="retry">Retry</string>
+</resources>

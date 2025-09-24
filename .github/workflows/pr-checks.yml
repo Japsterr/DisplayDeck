@@ -1,0 +1,94 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint-and-format:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    # Backend Linting
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+        
+    - name: Install Python dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install black isort flake8 mypy
+        
+    - name: Run Python linting
+      working-directory: ./backend
+      run: |
+        black --check src/
+        isort --check-only src/
+        flake8 src/
+        
+    # Frontend Linting
+    - name: Use Node.js 18
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+        cache: 'npm'
+        cache-dependency-path: |
+          frontend/package-lock.json
+          mobile/package-lock.json
+          
+    - name: Install Frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+      
+    - name: Run Frontend linting
+      working-directory: ./frontend
+      run: |
+        npm run lint
+        npm run format:check
+        npm run type-check
+        
+    - name: Install Mobile dependencies
+      working-directory: ./mobile
+      run: npm ci
+      
+    - name: Run Mobile linting
+      working-directory: ./mobile
+      run: |
+        npm run lint
+        npm run format:check
+        npm run type-check
+
+  test-quick:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    # Quick smoke tests without full infrastructure
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+        
+    - name: Run Python syntax check
+      working-directory: ./backend/src
+      run: python -m py_compile $(find . -name "*.py" | grep -v migrations)
+      
+    - name: Use Node.js 18
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+        
+    - name: Check Frontend build
+      working-directory: ./frontend
+      run: |
+        npm ci
+        npm run build
+        
+    - name: Check Mobile TypeScript
+      working-directory: ./mobile
+      run: |
+        npm ci
+        npm run type-check
