@@ -21,11 +21,13 @@ type
 
   TUploadUrlResponse = class
   private
+    FMediaFileId: Integer;
     FUploadUrl: string;
     FStorageKey: string;
     FSuccess: Boolean;
     FMessage: string;
   public
+    property MediaFileId: Integer read FMediaFileId write FMediaFileId;
     property UploadUrl: string read FUploadUrl write FUploadUrl;
     property StorageKey: string read FStorageKey write FStorageKey;
     property Success: Boolean read FSuccess write FSuccess;

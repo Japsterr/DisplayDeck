@@ -27,5 +27,8 @@ type
 
 implementation
 
+initialization
+  RegisterServiceType(TypeInfo(IOrganizationService));
+
 end.
 

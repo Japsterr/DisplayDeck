@@ -75,6 +75,7 @@ dcc32 command line for "DisplayDeck.dpr"
   C:\Users\bosma\OneDrive\Documents\Embarcadero\Studio\23.0\CatalogRepository\ICS_VCL-12\source\Include -V -VN 
   -NBC:\Users\Public\Documents\Embarcadero\Studio\23.0\Dcp -NHC:\Users\Public\Documents\Embarcadero\Studio\23.0\hpp\Win32 -NO.\Win32\Debug  
   DisplayDeck.dpr   
-[dcc32 Fatal Error] F2039 Could not create output file '.\Win32\Debug\DisplayDeck.exe'
+[dcc32 Error] ServiceRegistration.pas(55): E2029 'END' expected but ')' found
+[dcc32 Fatal Error] uServerContainer.pas(13): F2063 Could not compile used unit 'ServiceRegistration.pas'
 Failed
-Elapsed time: 00:00:02.9
+Elapsed time: 00:00:02.2

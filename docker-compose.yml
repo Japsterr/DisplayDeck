@@ -13,8 +13,8 @@ services:
       POSTGRES_HOST_AUTH_METHOD: md5
       POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=trust"
     ports:
-      # Makes the database accessible on your local machine at port 5432
-      - "5432:5432"
+      # Map container 5432 to host 5433 to avoid conflicts with local Postgres
+      - "5433:5432"
     volumes:
       # This persists the database data on your local machine
       - postgres_data:/var/lib/postgresql/data

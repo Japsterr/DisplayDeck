@@ -23,6 +23,7 @@ type
     function VerifyPassword(const Password, Hash: string): Boolean;
     function GenerateJWT(const UserId: Integer; const Email: string): string;
     function GetUserByEmail(const Email: string): TUser;
+    procedure LogError(const Msg: string);
   public
     function Register(const Request: TRegisterRequest): TAuthResponse;
     function Login(const Request: TLoginRequest): TAuthResponse;
@@ -34,7 +35,8 @@ uses
   uServerContainer,
   System.JSON,
   System.DateUtils,
-  System.NetEncoding;
+  System.NetEncoding,
+  System.IOUtils;
 
 { TAuthService }
 
@@ -42,6 +44,8 @@ function TAuthService.GetConnection: TFDConnection;
 begin
   // Get the shared connection from the server container
   Result := ServerContainer.FDConnection;
+  OutputDebugString(PChar('AuthService.GetConnection: Connection object = ' + IntToHex(IntPtr(Result), 8)));
+  OutputDebugString(PChar('AuthService.GetConnection: Connection connected = ' + BoolToStr(Result.Connected, True)));
 end;
 
 function TAuthService.HashPassword(const Password: string): string;
@@ -93,16 +97,39 @@ begin
   end;
 end;
 
+procedure TAuthService.LogError(const Msg: string);
+var
+  LogFile: string;
+begin
+  try
+    LogFile := TPath.Combine(ExtractFilePath(ParamStr(0)), 'server_error.log');
+    TFile.AppendAllText(LogFile, FormatDateTime('yyyy-mm-dd hh:nn:ss', Now) + ' ' + Msg + sLineBreak, TEncoding.UTF8);
+  except
+    // ignore logging errors
+  end;
+end;
+
 function TAuthService.Register(const Request: TRegisterRequest): TAuthResponse;
 var
   Query: TFDQuery;
   ExistingUser: TUser;
   NewOrgId, NewUserId: Integer;
 begin
+  OutputDebugString(PChar('AuthService.Register: Starting registration for ' + Request.Email));
   Result := TAuthResponse.Create;
 
   // Check if user already exists
-  ExistingUser := GetUserByEmail(Request.Email);
+  try
+    ExistingUser := GetUserByEmail(Request.Email);
+  except
+    on E: Exception do
+    begin
+      LogError('AuthService.Register GetUserByEmail failed: ' + E.ClassName + ': ' + E.Message);
+      Result.Success := False;
+      Result.Message := 'Registration failed: ' + E.Message;
+      Exit;
+    end;
+  end;
   if Assigned(ExistingUser) then
   begin
     Result.Success := False;
@@ -158,6 +185,7 @@ begin
       on E: Exception do
       begin
         Query.Connection.Rollback;
+        LogError('AuthService.Register failed: ' + E.ClassName + ': ' + E.Message);
         Result.Success := False;
         Result.Message := 'Registration failed: ' + E.Message;
       end;
@@ -175,7 +203,17 @@ begin
   Result := TAuthResponse.Create;
 
   // Get user by email
-  User := GetUserByEmail(Request.Email);
+  try
+    User := GetUserByEmail(Request.Email);
+  except
+    on E: Exception do
+    begin
+      LogError('AuthService.Login GetUserByEmail failed: ' + E.ClassName + ': ' + E.Message);
+      Result.Success := False;
+      Result.Message := 'Login failed: ' + E.Message;
+      Exit;
+    end;
+  end;
   if not Assigned(User) then
   begin
     Result.Success := False;
@@ -186,7 +224,7 @@ begin
   // Verify password
   if not VerifyPassword(Request.Password, User.PasswordHash) then
   begin
-    Result.Success := True;
+    Result.Success := False;
     Result.Message := 'Invalid email or password';
     User.Free;
     Exit;
