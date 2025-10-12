@@ -58,9 +58,10 @@
         <Icon_MainIcon>$(BDS)\bin\delphi_PROJECTICON.ico</Icon_MainIcon>
         <Icns_MainIcns>$(BDS)\bin\delphi_PROJECTICNS.icns</Icns_MainIcns>
         <SanitizedProjectName>DisplayDeck</SanitizedProjectName>
+        <DCC_UnitSearchPath>Data;Services\Interfaces;Services\Implementations;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
-        <DCC_UsePackage>vclwinx;DataSnapServer;fmx;emshosting;vclie;DbxCommonDriver;bindengine;IndyIPCommon;VCLRESTComponents;DBXMSSQLDriver;FireDACCommonODBC;emsclient;FireDACCommonDriver;aurelius;appanalytics;IndyProtocols;vclx;Skia.Package.RTL;sparkle;IndyIPClient;dbxcds;vcledge;bindcompvclwinx;emsedge;bindcompfmx;TMSVCLUIPackPkgExDXE15;DBXFirebirdDriver;inetdb;FireDACSqliteDriver;DbxClientDriver;FireDACASADriver;soapmidas;vclactnband;TMSVCLUIPackPkgXlsDXE15;fmxFireDAC;dbexpress;FireDACInfxDriver;DBXMySQLDriver;VclSmp;inet;DataSnapCommon;vcltouch;fmxase;TMSVCLUIPackPkgWizDXE15;DBXOdbcDriver;dbrtl;FireDACDBXDriver;Skia.Package.FMX;FireDACOracleDriver;fmxdae;FireDACMSAccDriver;tmsbcl;CustomIPTransport;FireDACMSSQLDriver;DataSnapIndy10ServerTransport;DataSnapConnectors;vcldsnap;DBXInterBaseDriver;FireDACMongoDBDriver;IndySystem;FireDACTDataDriver;Skia.Package.VCL;vcldb;vclFireDAC;bindcomp;FireDACCommon;DataSnapServerMidas;FireDACODBCDriver;emsserverresource;inetstn;IndyCore;RESTBackendComponents;bindcompdbx;rtl;FireDACMySQLDriver;FireDACADSDriver;RESTComponents;DBXSqliteDriver;vcl;IndyIPServer;dsnapxml;dsnapcon;DataSnapClient;DataSnapProviderClient;adortl;TMSVCLUIPackPkgDXE15;IcsCommonNewRun;DBXSybaseASEDriver;TMSWEBCorePkgDXE15;IcsVclNewRun;DBXDb2Driver;vclimg;DataSnapFireDAC;emsclientfiredac;FireDACPgDriver;FireDAC;FireDACDSDriver;inetdbxpress;xmlrtl;tethering;bindcompvcl;dsnap;xdata;CloudService;DBXSybaseASADriver;DBXOracleDriver;FireDACDb2Driver;DBXInformixDriver;fmxobj;bindcompvclsmp;DataSnapNativeClient;TMSWEBCorePkgLibDXE15;DatasnapConnectorsFreePascal;soaprtl;soapserver;FireDACIBDriver;$(DCC_UsePackage)</DCC_UsePackage>
+        <DCC_UsePackage>vclwinx;DataSnapServer;fmx;emshosting;vclie;DbxCommonDriver;bindengine;IndyIPCommon;VCLRESTComponents;DBXMSSQLDriver;FireDACCommonODBC;emsclient;FireDACCommonDriver;appanalytics;IndyProtocols;vclx;Skia.Package.RTL;sparkle;IndyIPClient;dbxcds;vcledge;bindcompvclwinx;emsedge;bindcompfmx;TMSVCLUIPackPkgExDXE15;DBXFirebirdDriver;inetdb;FireDACSqliteDriver;DbxClientDriver;FireDACASADriver;soapmidas;vclactnband;TMSVCLUIPackPkgXlsDXE15;fmxFireDAC;dbexpress;FireDACInfxDriver;DBXMySQLDriver;VclSmp;inet;DataSnapCommon;vcltouch;fmxase;TMSVCLUIPackPkgWizDXE15;DBXOdbcDriver;dbrtl;FireDACDBXDriver;Skia.Package.FMX;FireDACOracleDriver;fmxdae;FireDACMSAccDriver;tmsbcl;CustomIPTransport;FireDACMSSQLDriver;DataSnapIndy10ServerTransport;DataSnapConnectors;vcldsnap;DBXInterBaseDriver;FireDACMongoDBDriver;IndySystem;FireDACTDataDriver;Skia.Package.VCL;vcldb;vclFireDAC;bindcomp;FireDACCommon;DataSnapServerMidas;FireDACODBCDriver;emsserverresource;inetstn;IndyCore;RESTBackendComponents;bindcompdbx;rtl;FireDACMySQLDriver;FireDACADSDriver;RESTComponents;DBXSqliteDriver;vcl;IndyIPServer;dsnapxml;dsnapcon;DataSnapClient;DataSnapProviderClient;adortl;TMSVCLUIPackPkgDXE15;IcsCommonNewRun;DBXSybaseASEDriver;TMSWEBCorePkgDXE15;IcsVclNewRun;DBXDb2Driver;vclimg;DataSnapFireDAC;emsclientfiredac;FireDACPgDriver;FireDAC;FireDACDSDriver;inetdbxpress;xmlrtl;tethering;bindcompvcl;dsnap;xdata;CloudService;DBXSybaseASADriver;DBXOracleDriver;FireDACDb2Driver;DBXInformixDriver;fmxobj;bindcompvclsmp;DataSnapNativeClient;TMSWEBCorePkgLibDXE15;DatasnapConnectorsFreePascal;soaprtl;soapserver;FireDACIBDriver;$(DCC_UsePackage)</DCC_UsePackage>
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <BT_BuildType>Debug</BT_BuildType>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
@@ -98,6 +99,7 @@
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
+        <DCCReference Include="uEntities.pas"/>
         <DCCReference Include="uServerContainer.pas">
             <Form>ServerContainer</Form>
             <FormType>dfm</FormType>
@@ -107,6 +109,28 @@
             <Form>MainForm</Form>
             <FormType>dfm</FormType>
         </DCCReference>
+        <DCCReference Include="Services\Implementations\CampaignItemServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\CampaignServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\DisplayCampaignServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\DisplayServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\MediaFileServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\OrganizationServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\PlanServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\PlaybackLogServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\RoleServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\SubscriptionServiceImplementation.pas"/>
+        <DCCReference Include="Services\Implementations\UserServiceImplementation.pas"/>
+        <DCCReference Include="Services\Interfaces\CampaignItemService.pas"/>
+        <DCCReference Include="Services\Interfaces\CampaignService.pas"/>
+        <DCCReference Include="Services\Interfaces\DisplayCampaignService.pas"/>
+        <DCCReference Include="Services\Interfaces\DisplayService.pas"/>
+        <DCCReference Include="Services\Interfaces\MediaFileService.pas"/>
+        <DCCReference Include="Services\Interfaces\OrganizationService.pas"/>
+        <DCCReference Include="Services\Interfaces\PlanService.pas"/>
+        <DCCReference Include="Services\Interfaces\PlaybackLogService.pas"/>
+        <DCCReference Include="Services\Interfaces\RoleService.pas"/>
+        <DCCReference Include="Services\Interfaces\SubscriptionService.pas"/>
+        <DCCReference Include="Services\Interfaces\UserService.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

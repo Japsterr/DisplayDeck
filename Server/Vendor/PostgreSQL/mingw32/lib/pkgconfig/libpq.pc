@@ -1,0 +1,14 @@
+prefix=/mingw32
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libpq
+Description: PostgreSQL libpq library
+URL: https://www.postgresql.org/
+Version: 16.1
+Requires: 
+Requires.private: libssl, libcrypto
+Cflags: -I${includedir}
+Libs: -L${libdir} -lpq
+Libs.private:  -lpgcommon -lpgport -lintl -lssl -lm -lwldap32 -lshell32 -lws2_32 -lsecur32

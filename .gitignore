@@ -1,0 +1,47 @@
+# Delphi / RAD Studio
+__history/
+Win32/
+Win64/
+Android/
+Android64/
+iOSDevice32/
+iOSDevice64/
+iOSSimulator/
+Linux64/
+OSX32/
+OSX64/
+OSXARM64/
+
+# Compiled files
+*.exe
+*.dll
+*.so
+*.bpl
+*.dcp
+
+# Object files
+*.dcu
+*.obj
+
+# Other generated files
+*.map
+*.tds
+*.drc
+*.dsk
+*.local
+*.identcache
+*.bak
+*.~*
+*.stat
+
+# TMS Business Core
+*.aurelius
+*.xdata
+
+# VS Code
+.vscode/
+
+# Bundled PostgreSQL client libraries
+!Server/Vendor/
+!Server/Vendor/**/
+!Server/Vendor/**/*.dll

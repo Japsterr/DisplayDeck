@@ -10,14 +10,17 @@ services:
       POSTGRES_DB: displaydeck
       POSTGRES_USER: displaydeck_user
       POSTGRES_PASSWORD: verysecretpassword
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=trust"
     ports:
       # Makes the database accessible on your local machine at port 5432
       - "5432:5432"
     volumes:
       # This persists the database data on your local machine
       - postgres_data:/var/lib/postgresql/data
-      # This runs the schema.sql script on first startup
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # This runs the initialization scripts on first startup
+      - ./init-user.sql:/docker-entrypoint-initdb.d/01-init-user.sql
+      - ./schema.sql:/docker-entrypoint-initdb.d/02-schema.sql
 
   # MinIO S3-Compatible Object Storage
   minio:

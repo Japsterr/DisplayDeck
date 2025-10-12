@@ -10,7 +10,7 @@ DisplayDeck is a platform for managing and displaying digital content on various
 
 *   **Language:** Delphi (Object Pascal)
 *   **API Framework:** TMS XData
-*   **ORM Framework:** TMS Aurelius
+*   **Data Access:** FireDAC with PostgreSQL
 *   **Database:** PostgreSQL (running in Docker)
 *   **Object Storage:** MinIO (S3-compatible, running in Docker)
 *   **Deployment Target:** Linux via Docker (as an Apache Module)
@@ -42,4 +42,13 @@ The project is now successfully set up. The Delphi server can connect to the Pos
     ```
 
 4.  **Run the API Server:**
-    The Delphi XData server project is located in the `Server/` directory. Open `Server/DisplayDeck.dproj` in the Delphi IDE, compile, and run the project. The server will start and automatically connect to the database.
+    The Delphi XData server project is located in the `Server/` directory. Open `Server/DisplayDeck.dproj` in the Delphi IDE, compile, and run the *Win32* Debug build. The server will start and connect to the database on first API request.
+
+### PostgreSQL client libraries
+
+FireDAC requires the native PostgreSQL client (`libpq.dll` and its companion DLLs). The repository includes vendor libraries under `Server/Vendor/PostgreSQL/<arch>/lib/`:
+
+*   **Win32:** Complete PostgreSQL 16.1 client libraries from MSYS2 (11 DLLs including dependencies)
+*   **Win64:** PostgreSQL 15 client libraries from official binaries (7 DLLs)
+
+The server automatically detects the architecture and loads the appropriate vendor libraries at runtime.

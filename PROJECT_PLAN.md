@@ -40,7 +40,7 @@ To create a modern, flexible, and multi-tenant SaaS platform for digital signage
 
 *   **Language:** Delphi (Object Pascal)
 *   **API Framework:** TMS XData (with Swagger/OpenAPI support)
-*   **ORM Framework:** TMS Aurelius
+*   **Data Access:** FireDAC (direct SQL, no ORM)
 *   **Database:** PostgreSQL (running in Docker)
 *   **Object Storage:** MinIO (S3-compatible, running in Docker)
 *   **Deployment:**
@@ -60,18 +60,28 @@ This roadmap is divided into phases to manage development effectively.
     *   [X] Create the `TMS XData VCL Server` project.
     *   [X] Commit initial project files to the Git repository.
     *   [X] Successfully connect the Delphi server to the PostgreSQL database.
-*   [ ] **Task 3:** Define core data models (Entities) using TMS Aurelius.
-    *   [ ] `TOrganization`, `TUser`, `TRole`
-    *   [ ] `TPlan`, `TSubscription`
-    *   [ ] `TMediaFile`, `TCampaign`, `TCampaignItem`
-    *   [ ] `TDisplay`, `TSchedule`, `TDisplayCampaign`
-    *   [ ] `TPlaybackLog`
-*   [ ] **Task 4:** Implement API Endpoints.
-    *   [ ] Authentication (`/auth/register`, `/auth/login`).
-    *   [ ] Campaign Management (CRUD).
-    *   [ ] Display Management (CRUD & Provisioning).
-    *   [ ] Media Upload Workflow (using pre-signed URLs with MinIO).
-    *   [ ] Device-specific endpoints (`/device/config`, `/device/logs`).
+*   [X] **Task 3:** Define core data models (Entities) using pure Delphi classes (moved from TMS Aurelius to FireDAC).
+    *   [X] `TOrganization`, `TUser`
+    *   [X] `TPlan`, `TSubscription`
+    *   [X] `TMediaFile`, `TCampaign`, `TCampaignItem`
+    *   [X] `TDisplay`, `TSchedule`, `TDisplayCampaign`
+    *   [X] `TPlaybackLog`
+*   [X] **Task 4:** Implement API Endpoints.
+    *   [X] Campaign Management (CRUD) - Full implementation with FireDAC
+    *   [X] User Management (CRUD) - Full implementation with FireDAC  
+    *   [X] Organization Management (CRUD) - Full implementation with FireDAC
+    *   [X] Display Management (CRUD) - Full implementation with FireDAC
+    *   [X] Media File Management (CRUD) - Full implementation with FireDAC
+    *   [X] Plan Management (CRUD) - Full implementation with FireDAC
+    *   [X] Subscription Management (CRUD) - Full implementation with FireDAC
+    *   [X] Role Management (CRUD) - Predefined roles implementation
+    *   [X] Playback Log Management (CRUD) - Full implementation with FireDAC
+    *   [X] Campaign Item Management (CRUD) - Full implementation with FireDAC
+    *   [X] Display Campaign Management (CRUD) - Full implementation with FireDAC
+    * [X] Authentication (`/auth/register`, `/auth/login`) - JWT-based with password hashing
+    * [X] Media Upload Workflow (using pre-signed URLs with MinIO) - Pre-signed URL generation
+    * [X] Device-specific endpoints (`/device/config`, `/device/logs`) - Configuration and logging endpoints
+    * **Note:** All Task 4 services implemented and compiling successfully, but XData service registration issue preventing API endpoint access (404 errors)
 
 ### Phase 2: Deployment & Infrastructure
 
@@ -82,7 +92,7 @@ This roadmap is divided into phases to manage development effectively.
 *   [ ] **Task 6:** Containerize the API for production.
     *   [ ] Create `Dockerfile` for the final API server (Apache + .so module).
 *   [ ] **Task 7:** Implement a robust database migration strategy.
-    *   [ ] Transition from the initial `schema.sql` to using Aurelius `TDatabaseManager` for updates.
+    *   [ ] Use versioned SQL migration scripts for schema updates.
 *   [ ] **Task 8:** (Optional) Set up a CI/CD pipeline on GitHub Actions to automatically build the Docker image on push.
 
 ### Phase 3: Client Development

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+EXE="$( dirname ${BASH_SOURCE[0]} )/pg_dumpall.exe"
+
+if [ -t 0 -a -t 1 -a -x /usr/bin/winpty ]; then
+  /usr/bin/winpty $EXE "$@"
+else
+  exec $EXE "$@"
+fi
