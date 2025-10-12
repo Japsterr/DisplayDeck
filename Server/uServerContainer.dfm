@@ -1,4 +1,5 @@
 object ServerContainer: TServerContainer
+  OnCreate = DataModuleCreate
   Height = 210
   Width = 431
   object SparkleHttpSysDispatcher: TSparkleHttpSysDispatcher
@@ -22,5 +23,12 @@ object ServerContainer: TServerContainer
   object AureliusConnection: TAureliusConnection
     Left = 216
     Top = 128
+  end
+  object FDConnection: TFDConnection
+    Params.Strings = (
+      'DriverID=PG')
+    LoginPrompt = False
+    Left = 72
+    Top = 72
   end
 end

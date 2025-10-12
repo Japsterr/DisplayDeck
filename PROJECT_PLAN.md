@@ -53,12 +53,13 @@ This roadmap is divided into phases to manage development effectively.
 
 ### Phase 1: Core API Development (MVP)
 
-*   [ ] **Task 1:** Set up the local development environment.
-    *   [ ] Create `docker-compose.yml` for PostgreSQL and MinIO services.
-    *   [ ] Create initial database schema script (`schema.sql`).
-*   [X] **Task 2:** Create the initial Delphi project structure.
+*   [X] **Task 1:** Set up the local development environment.
+    *   [X] Create `docker-compose.yml` for PostgreSQL and MinIO services.
+    *   [X] Create initial database schema script (`schema.sql`).
+*   [X] **Task 2:** Create the initial Delphi project structure and establish database connectivity.
     *   [X] Create the `TMS XData VCL Server` project.
     *   [X] Commit initial project files to the Git repository.
+    *   [X] Successfully connect the Delphi server to the PostgreSQL database.
 *   [ ] **Task 3:** Define core data models (Entities) using TMS Aurelius.
     *   [ ] `TOrganization`, `TUser`, `TRole`
     *   [ ] `TPlan`, `TSubscription`

@@ -17,7 +17,7 @@ DisplayDeck is a platform for managing and displaying digital content on various
 
 ## Getting Started
 
-This project is currently in the initial setup phase.
+The project is now successfully set up. The Delphi server can connect to the PostgreSQL database running in Docker.
 
 ### Prerequisites
 
@@ -35,8 +35,11 @@ This project is currently in the initial setup phase.
     ```bash
     cd DisplayDeck
     ```
-3.  **Backend Services:**
-    The backend dependencies (PostgreSQL, MinIO) are intended to be run via Docker. A `docker-compose.yml` file will be added to manage this environment.
+3.  **Start Backend Services:**
+    Use Docker Compose to start the PostgreSQL database.
+    ```bash
+    docker-compose up -d
+    ```
 
-4.  **API Server:**
-    The Delphi XData server project is located in the `Server/` directory. Open `Server/DisplayDeck.dproj` in the Delphi IDE to get started.
+4.  **Run the API Server:**
+    The Delphi XData server project is located in the `Server/` directory. Open `Server/DisplayDeck.dproj` in the Delphi IDE, compile, and run the project. The server will start and automatically connect to the database.
