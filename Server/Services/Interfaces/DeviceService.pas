@@ -52,10 +52,16 @@ type
   end;
 
   [ServiceContract]
+  [Route('')]
   IDeviceService = interface(IInvokable)
     ['{98765432-1234-1234-1234-123456789ABC}']
-
+    // Provisioning/config retrieval by provisioning token in body
+    [HttpPost]
+    [Route('device/config')]
     function GetConfig(const Request: TDeviceConfigRequest): TDeviceConfigResponse;
+    // Device log ingestion
+    [HttpPost]
+    [Route('device/logs')]
     function SendLog(const Request: TDeviceLogRequest): TDeviceLogResponse;
   end;
 

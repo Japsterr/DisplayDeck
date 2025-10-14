@@ -24,7 +24,8 @@ uses
   PlaybackLogServiceImplementation,
   RoleServiceImplementation,
   SubscriptionServiceImplementation,
-  UserServiceImplementation;
+  UserServiceImplementation,
+  HealthServiceImplementation;
 
 type
   TServerContainer = class(TDataModule)
@@ -34,8 +35,9 @@ type
     XDataConnectionPool: TXDataConnectionPool;
     procedure DataModuleCreate(Sender: TObject);
   private
-      FPgDriverLink: TFDPhysPgDriverLink;
+    FPgDriverLink: TFDPhysPgDriverLink;
     procedure LogToFile(const FileName, Msg: string);
+    procedure ConfigureXDataServer;
   public
     { Public declarations }
   end;
@@ -49,6 +51,12 @@ implementation
 
 {$R *.dfm}
 
+procedure TServerContainer.ConfigureXDataServer;
+begin
+  // Attribute-based registration is handled via [ServiceImplementation] and unit initialization.
+  // TXDataServer visual component doesn't expose Options; keep defaults here.
+end;
+
 procedure TServerContainer.DataModuleCreate(Sender: TObject);
 var
   ArchFolder: string;
@@ -56,6 +64,8 @@ var
   LogMsg: string;
   VendorLibPath: string;
 begin
+  ConfigureXDataServer;
+
   if SizeOf(Pointer) = 8 then
     ArchFolder := 'Win64'
   else
@@ -129,8 +139,9 @@ begin
       // Don't raise exception, continue with service registration
     end;
   end;
-  RegisterAllServices(XDataServer, FDConnection);
-  
+  // RegisterAllServices is no longer needed as services are registered
+  // in the initialization section of their respective implementation units.
+
   // Now activate the HTTP dispatcher to start listening
   SparkleHttpSysDispatcher.Active := True;
 end;

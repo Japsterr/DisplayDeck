@@ -106,3 +106,26 @@ This roadmap is divided into phases to manage development effectively.
 *   [ ] **Task 12:** Integrate with a payment provider (e.g., Stripe) to handle subscriptions.
 *   [ ] **Task 13:** Build out the analytics dashboard in the web admin panel.
 *   [ ] **Task 14:** Implement the advanced scheduling features (recurring schedules, etc.).
+
+### API Routing Fix Plan (Completed)
+
+1.  Consolidated service registration using implementation-unit initialization.
+    - Each service implementation now calls `RegisterServiceType(TMyService)` in its `initialization` section.
+    - Interfaces keep `RegisterServiceType(TypeInfo(IMyService))` to ensure contracts are published.
+
+2.  Attribute routing flattened at interface level.
+    - Added `[Route('')]` to service interfaces to provide friendly paths like `/health` and `/organizations`.
+    - No component-level `Options` configuration was required/used.
+
+3.  Simplified server container.
+    - Removed ad-hoc middleware; rely on XData services for health and other endpoints.
+
+4.  Rebuilt and verified.
+    - Performed clean build, stopped existing process, started new binary.
+    - Verified:
+      - `GET /tms/xdata/health` → 200 `{ "value": "OK" }`.
+      - `GET /tms/xdata/organizations` → 200 JSON array (e.g., demo row present).
+
+5.  Aligned Organization service to FireDAC (no Aurelius).
+    - Rewrote `OrganizationServiceImplementation` to use FireDAC queries for list/get/create.
+    - Eliminated access violation caused by previous Aurelius usage.

@@ -26,13 +26,17 @@ uses
   CampaignServiceImplementation in 'Services\Implementations\CampaignServiceImplementation.pas',
   DisplayCampaignServiceImplementation in 'Services\Implementations\DisplayCampaignServiceImplementation.pas',
   DisplayServiceImplementation in 'Services\Implementations\DisplayServiceImplementation.pas',
+  HealthServiceImplementation in 'Services\Implementations\HealthServiceImplementation.pas',
   MediaFileServiceImplementation in 'Services\Implementations\MediaFileServiceImplementation.pas',
   OrganizationServiceImplementation in 'Services\Implementations\OrganizationServiceImplementation.pas',
   PlanServiceImplementation in 'Services\Implementations\PlanServiceImplementation.pas',
   PlaybackLogServiceImplementation in 'Services\Implementations\PlaybackLogServiceImplementation.pas',
   RoleServiceImplementation in 'Services\Implementations\RoleServiceImplementation.pas',
   SubscriptionServiceImplementation in 'Services\Implementations\SubscriptionServiceImplementation.pas',
-  UserServiceImplementation in 'Services\Implementations\UserServiceImplementation.pas';
+  UserServiceImplementation in 'Services\Implementations\UserServiceImplementation.pas',
+  Sparkle.HttpServer.Context,
+  Sparkle.Comp.Server,
+  Sparkle.Comp.HttpSysDispatcher;
 
 {$R *.res}
 

@@ -43,10 +43,14 @@ type
   end;
 
   [ServiceContract]
+  [Route('')]
   IAuthService = interface(IInvokable)
     ['{12345678-1234-1234-1234-123456789ABC}']
-
+    [HttpPost]
+    [Route('auth/register')]
     function Register(const Request: TRegisterRequest): TAuthResponse;
+    [HttpPost]
+    [Route('auth/login')]
     function Login(const Request: TLoginRequest): TAuthResponse;
   end;
 

@@ -9,6 +9,7 @@ uses
 
 type
   [ServiceContract]
+  [Route('')]
   IOrganizationService = interface(IInvokable)
     ['{2611F906-12DC-48A5-A982-9B3107B0166B}']
 

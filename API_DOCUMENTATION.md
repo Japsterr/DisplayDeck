@@ -17,7 +17,7 @@ DisplayDeck provides a comprehensive REST API for digital signage management, bu
 ### Register User
 Create a new user account and organization.
 
-**Endpoint:** `POST /AuthService/Register`
+**Endpoint:** `POST /auth/register`
 
 **Request Body:**
 ```json
@@ -58,7 +58,7 @@ Create a new user account and organization.
 ### Login User
 Authenticate existing user and receive JWT token.
 
-**Endpoint:** `POST /AuthService/Login`
+**Endpoint:** `POST /auth/login`
 
 **Request Body:**
 ```json
@@ -390,10 +390,10 @@ Authorization: Bearer <jwt_token>
 
 ## 🏢 OrganizationService - Organization Management
 
-### Get Organization Info
-Get current organization details.
+### List Organizations
+Get all organizations.
 
-**Endpoint:** `GET /OrganizationService/GetOrganization`
+**Endpoint:** `GET /organizations`
 
 **Headers:**
 ```
@@ -524,14 +524,9 @@ Authorization: Bearer <jwt_token>
 **Response:**
 ```json
 {
-  "Subscription": {
-    "Id": 1,
-    "PlanId": 2,
-    "Status": "Active",
-    "CurrentPeriodStart": "2025-10-01T00:00:00Z",
-    "CurrentPeriodEnd": "2025-11-01T00:00:00Z",
-    "TrialEndDate": null
-  }
+  "value": [
+    { "Id": 1, "Name": "Demo Org 1", "CreatedAt": "<ISO>", "UpdatedAt": "<ISO>" }
+  ]
 }
 ```
 

@@ -3,7 +3,8 @@ unit MediaFileService;
 interface
 
 uses
-  XData.Service.Common;
+  XData.Service.Common,
+  uEntities;
 
 type
   TUploadUrlRequest = class
@@ -46,10 +47,36 @@ type
   end;
 
   [ServiceContract]
+  [Route('')]
   IMediaFileService = interface(IInvokable)
     ['{C39FDE92-4B8B-4B5A-9C16-4FCBBB98192A}']
-
+    // List media files for organization
+    [HttpGet]
+    [Route('organizations/{OrganizationId}/media-files')]
+    function GetMediaFiles(OrganizationId: Integer): TArray<TMediaFile>;
+    // Get single media file
+    [HttpGet]
+    [Route('media-files/{Id}')]
+    function GetMediaFile(Id: Integer): TMediaFile;
+    // Create media file metadata directly (alternate to presign flow)
+    [HttpPost]
+    [Route('organizations/{OrganizationId}/media-files')]
+    function CreateMediaFile(OrganizationId: Integer; const FileName, FileType, StorageURL: string): TMediaFile;
+    // Update media file
+    [HttpPut]
+    [Route('media-files/{Id}')]
+    function UpdateMediaFile(Id: Integer; const FileName, FileType, StorageURL: string): TMediaFile;
+    // Delete media file
+    [HttpDelete]
+    [Route('media-files/{Id}')]
+    procedure DeleteMediaFile(Id: Integer);
+    // Get pre-signed upload URL
+    [HttpPost]
+    [Route('media-files/upload-url')]
     function GetUploadUrl(const Request: TUploadUrlRequest): TUploadUrlResponse;
+    // Get pre-signed download URL
+    [HttpGet]
+    [Route('media-files/{MediaFileId}/download-url')]
     function GetDownloadUrl(MediaFileId: Integer): TDownloadUrlResponse;
   end;
 
