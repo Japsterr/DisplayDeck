@@ -163,13 +163,9 @@ begin
   Result := TDeviceLogResponse.Create;
 
   try
-    // For now, just log to console. In production, you might want to store logs in database
-    WriteLn(Format('[%s] Device %d (%s): %s',
-      [FormatDateTime('yyyy-mm-dd hh:nn:ss', Request.Timestamp),
-       Request.DisplayId, Request.LogType, Request.Message]));
-
-    // Optionally store in database if needed
-    // You could create a DeviceLogs table for this
+    // Placeholder: In production, store logs in database (e.g., DeviceLogs table)
+    // Avoid writing to console here as services may not have a console attached
+    // and WriteLn can raise I/O error 105. Keeping method side-effect free for now.
 
     Result.Success := True;
     Result.Message := 'Log received successfully';
