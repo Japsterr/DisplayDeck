@@ -1,647 +1,149 @@
 # DisplayDeck REST API Documentation
 
-## Overview
+This document describes the verified friendly REST endpoints exposed by the DisplayDeck backend. These were exercised in live smoke tests and are ready for client integration.
 
-DisplayDeck provides a comprehensive REST API for digital signage management, built with TMS XData and Delphi. The API enables user authentication, media file management, device control, and campaign management for FireMonkey mobile applications.
+Base URL: http://localhost:2001/tms/xdata
 
-**Base URL:** `http://localhost:2001/tms/xdata`
+Content-Type: application/json
 
-**Authentication:** JWT Bearer tokens (obtained via AuthService)
+Authentication: Some endpoints may later require JWT; current smoke tests used open endpoints where available.
 
-**Content-Type:** `application/json`
-
----
-
-## 🔐 AuthService - User Authentication
-
-### Register User
-Create a new user account and organization.
-
-**Endpoint:** `POST /auth/register`
-
-**Request Body:**
-```json
-{
-  "Email": "user@example.com",
-  "Password": "securepassword123",
-  "OrganizationName": "My Company"
-}
-```
-
-**Response (Success):**
-```json
-{
-  "Success": true,
-  "Token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "User": {
-    "Id": 1,
-    "Email": "user@example.com",
-    "OrganizationId": 1
-  },
-  "Message": "User registered successfully"
-}
-```
-
-**Response (Error):**
-```json
-{
-  "Success": false,
-  "Message": "Email already exists"
-}
-```
-
-**Status Codes:**
-- `200` - Success
-- `400` - Validation error
-- `500` - Server error
-
-### Login User
-Authenticate existing user and receive JWT token.
-
-**Endpoint:** `POST /auth/login`
-
-**Request Body:**
-```json
-{
-  "Email": "user@example.com",
-  "Password": "securepassword123"
-}
-```
-
-**Response (Success):**
-```json
-{
-  "Success": true,
-  "Token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "User": {
-    "Id": 1,
-    "Email": "user@example.com",
-    "OrganizationId": 1
-  }
-}
-```
-
-**Response (Error):**
-```json
-{
-  "Success": false,
-  "Message": "Invalid email or password"
-}
-```
+Timestamp format: For any TDateTime fields in JSON requests, use "yyyy-MM-ddTHH:mm:ss" (no timezone suffix). Example: "2025-10-14T18:46:30".
 
 ---
 
-## 📁 MediaFileService - File Management
+## Health
 
-### Generate Upload URL
-Get pre-signed URL for secure file upload to MinIO.
-
-**Endpoint:** `POST /MediaFileService/GenerateUploadUrl`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Request Body:**
-```json
-{
-  "FileName": "campaign_video.mp4",
-  "ContentType": "video/mp4",
-  "FileSize": 10485760
-}
-```
-
-**Response:**
-```json
-{
-  "UploadUrl": "https://minio.example.com/displaydeck-bucket/...",
-  "FileId": "abc123",
-  "ExpiresAt": "2025-10-12T15:30:00Z"
-}
-```
-
-### Generate Download URL
-Get pre-signed URL for secure file download from MinIO.
-
-**Endpoint:** `POST /MediaFileService/GenerateDownloadUrl`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Request Body:**
-```json
-{
-  "FileId": "abc123"
-}
-```
-
-**Response:**
-```json
-{
-  "DownloadUrl": "https://minio.example.com/displaydeck-bucket/...",
-  "ExpiresAt": "2025-10-12T15:30:00Z"
-}
-```
-
-### Get Upload URL (Alternative)
-Alternative method for upload URL generation.
-
-**Endpoint:** `GET /MediaFileService/GetUploadUrl?fileName={name}&contentType={type}`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Url": "https://minio.example.com/displaydeck-bucket/...",
-  "Fields": {
-    "key": "uploads/file.mp4",
-    "policy": "...",
-    "signature": "..."
-  }
-}
-```
+- GET /health → { "value": "OK" }
 
 ---
 
-## 📱 DeviceService - Device Management
+## Auth
 
-### Get Device Configuration
-Retrieve configuration for a specific device.
+- POST /auth/register
+  - Request: { "Email", "Password", "OrganizationName" }
+  - Response: { "Success", "Token", "User", "Message" }
 
-**Endpoint:** `POST /DeviceService/GetConfig`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-X-Device-Token: <provisioning_token>
-```
-
-**Request Body:**
-```json
-{
-  "DeviceId": "device123"
-}
-```
-
-**Response:**
-```json
-{
-  "DeviceId": "device123",
-  "OrganizationId": 1,
-  "Config": {
-    "DisplayResolution": "1920x1080",
-    "RefreshInterval": 300,
-    "Timezone": "America/New_York"
-  },
-  "Campaigns": [
-    {
-      "Id": 1,
-      "Name": "Morning Announcements",
-      "Priority": 1
-    }
-  ]
-}
-```
-
-### Send Device Log
-Submit log entry from device.
-
-**Endpoint:** `POST /DeviceService/SendLog`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-X-Device-Token: <provisioning_token>
-```
-
-**Request Body:**
-```json
-{
-  "DeviceId": "device123",
-  "Level": "INFO",
-  "Message": "Campaign playback started",
-  "Timestamp": "2025-10-12T14:30:00Z",
-  "Metadata": {
-    "CampaignId": 1,
-    "FileId": "abc123"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "Success": true,
-  "LogId": 12345
-}
-```
+- POST /auth/login
+  - Request: { "Email", "Password" }
+  - Response: { "Success", "Token", "User" }
 
 ---
 
-## 📢 CampaignService - Campaign Management
+## Plans and Roles
 
-### Get Campaigns
-Retrieve all campaigns for organization.
-
-**Endpoint:** `GET /CampaignService/GetCampaigns`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Campaigns": [
-    {
-      "Id": 1,
-      "Name": "Welcome Message",
-      "Description": "Welcome visitors to our office",
-      "IsActive": true,
-      "CreatedAt": "2025-10-01T09:00:00Z",
-      "Items": [
-        {
-          "Id": 1,
-          "MediaFileId": "file123",
-          "Duration": 30,
-          "Order": 1
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Create Campaign
-Create a new campaign.
-
-**Endpoint:** `POST /CampaignService/CreateCampaign`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Request Body:**
-```json
-{
-  "Name": "New Campaign",
-  "Description": "Campaign description",
-  "Items": [
-    {
-      "MediaFileId": "file123",
-      "Duration": 30,
-      "Order": 1
-    }
-  ]
-}
-```
+- GET /plans → array of plans (Free, Starter, Business, ...)
+- GET /roles → ["Owner","ContentManager","Viewer"]
 
 ---
 
-## 🖥️ DisplayService - Display Management
+## Organizations
 
-### Get Displays
-Get all displays for organization.
+- GET /organizations → { "value": [ TOrganization, ... ] }
+- POST /organizations → TOrganization
+- GET /organizations/{id} → TOrganization
+- GET /organizations/{OrganizationId}/subscription → subscription details
 
-**Endpoint:** `GET /DisplayService/GetDisplays`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Displays": [
-    {
-      "Id": 1,
-      "Name": "Lobby Display",
-      "Location": "Main Lobby",
-      "Resolution": "1920x1080",
-      "IsActive": true,
-      "LastSeen": "2025-10-12T14:25:00Z"
-    }
-  ]
-}
-```
-
-### Register Display
-Register a new display device.
-
-**Endpoint:** `POST /DisplayService/RegisterDisplay`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Request Body:**
-```json
-{
-  "Name": "New Display",
-  "Location": "Conference Room A",
-  "Resolution": "3840x2160",
-  "DeviceToken": "prov_token_123"
-}
-```
+TOrganization shape (key fields): { Id, Name, CreatedAt, UpdatedAt }
 
 ---
 
-## 📊 PlaybackLogService - Analytics
+## Displays
 
-### Get Playback Logs
-Retrieve playback analytics data.
+- GET /organizations/{OrganizationId}/displays → { "value": [ TDisplay, ... ] }
+- POST /organizations/{OrganizationId}/displays → TDisplay
+  - Required: OrganizationId, Name, Orientation, CurrentStatus, ProvisioningToken
+- GET /displays/{Id} → TDisplay
+- PUT /displays/{Id} → TDisplay
+  - Required fields for update: Id, Name, Orientation, CurrentStatus
+- DELETE /displays/{Id} → 204 No Content
 
-**Endpoint:** `GET /PlaybackLogService/GetPlaybackLogs?startDate={date}&endDate={date}`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Logs": [
-    {
-      "Id": 1,
-      "DisplayId": 1,
-      "CampaignId": 1,
-      "MediaFileId": "file123",
-      "PlayedAt": "2025-10-12T14:30:00Z",
-      "Duration": 30,
-      "CompletionRate": 100
-    }
-  ]
-}
-```
+TDisplay shape (key fields): { Id, OrganizationId, Name, Orientation, LastSeen, CurrentStatus, ProvisioningToken, CreatedAt, UpdatedAt }
 
 ---
 
-## 🏢 OrganizationService - Organization Management
+## Campaigns
 
-### List Organizations
-Get all organizations.
+- GET /organizations/{OrganizationId}/campaigns → { "value": [ TCampaign, ... ] }
+- POST /organizations/{OrganizationId}/campaigns → TCampaign
+  - Required: OrganizationId, Name, Orientation
+- GET /campaigns/{Id} → TCampaign
+- PUT /campaigns/{Id} → TCampaign (Id, Name, Orientation)
+- DELETE /campaigns/{Id} → 204 No Content
 
-**Endpoint:** `GET /organizations`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Id": 1,
-  "Name": "My Company",
-  "CreatedAt": "2025-10-01T09:00:00Z",
-  "Subscription": {
-    "PlanId": 2,
-    "Status": "Active",
-    "CurrentPeriodEnd": "2025-11-01T00:00:00Z"
-  }
-}
-```
+TCampaign: { Id, OrganizationId, Name, Orientation, CreatedAt, UpdatedAt }
 
 ---
 
-## 💳 PlanService - Subscription Plans
+## Campaign Items
 
-### Get Available Plans
-List all available subscription plans.
+- GET /campaigns/{CampaignId}/items → { "value": [ TCampaignItem, ... ] }
+- POST /campaigns/{CampaignId}/items → TCampaignItem (CampaignId, MediaFileId, DisplayOrder, Duration)
+- GET /campaign-items/{Id} → TCampaignItem
+- PUT /campaign-items/{Id} → TCampaignItem (Id, MediaFileId, DisplayOrder, Duration)
+- DELETE /campaign-items/{Id} → 204 No Content
 
-**Endpoint:** `GET /PlanService/GetPlans`
-
-**Response:**
-```json
-{
-  "Plans": [
-    {
-      "Id": 1,
-      "Name": "Free",
-      "Price": 0.00,
-      "MaxDisplays": 1,
-      "MaxCampaigns": 2,
-      "MaxMediaStorageGB": 1
-    },
-    {
-      "Id": 2,
-      "Name": "Starter",
-      "Price": 9.99,
-      "MaxDisplays": 5,
-      "MaxCampaigns": 10,
-      "MaxMediaStorageGB": 10
-    }
-  ]
-}
-```
+TCampaignItem: { Id, CampaignId, MediaFileId, DisplayOrder, Duration }
 
 ---
 
-## 👥 UserService - User Management
+## Display Assignments (Display-Campaigns)
 
-### Get Users
-Get all users in organization.
+- GET /displays/{DisplayId}/campaign-assignments → { "value": [ TDisplayCampaign, ... ] }
+- POST /displays/{DisplayId}/campaign-assignments → TDisplayCampaign (DisplayId, CampaignId, IsPrimary)
+- PUT /campaign-assignments/{Id} → TDisplayCampaign (Id, IsPrimary)
+- DELETE /campaign-assignments/{Id} → 204 No Content
 
-**Endpoint:** `GET /UserService/GetUsers`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Users": [
-    {
-      "Id": 1,
-      "Email": "admin@company.com",
-      "Role": "Owner",
-      "CreatedAt": "2025-10-01T09:00:00Z"
-    }
-  ]
-}
-```
+TDisplayCampaign: { Id, DisplayId, CampaignId, IsPrimary }
 
 ---
 
-## 🔑 RoleService - Role Management
+## Media Files
 
-### Get Roles
-Get available user roles.
+- POST /media-files/upload-url → { MediaFileId, UploadUrl, StorageKey, Success, Message }
+- GET /media-files/{MediaFileId}/download-url → { DownloadUrl, Success, Message }
 
-**Endpoint:** `GET /RoleService/GetRoles`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Roles": [
-    {
-      "Id": 1,
-      "Name": "Owner",
-      "Permissions": ["read", "write", "admin"]
-    },
-    {
-      "Id": 2,
-      "Name": "ContentManager",
-      "Permissions": ["read", "write"]
-    }
-  ]
-}
-```
+Note: Upload directly to MinIO using UploadUrl; server records MediaFileId and StorageKey.
 
 ---
 
-## 💰 SubscriptionService - Billing
+## Device
 
-### Get Subscription
-Get current subscription details.
+- POST /device/config
+  - Request: { "ProvisioningToken": "PROV-12345" }
+  - Response: { "Success", "Device": TDisplay, "Campaigns": [ TCampaign, ... ], "Message" }
 
-**Endpoint:** `GET /SubscriptionService/GetSubscription`
+- POST /device/logs
+  - Request: { "DisplayId": number, "LogType": string, "Message": string, "Timestamp": "yyyy-MM-ddTHH:mm:ss" }
+  - Response: { "Success": true, "Message": "Log received successfully" }
 
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "value": [
-    { "Id": 1, "Name": "Demo Org 1", "CreatedAt": "<ISO>", "UpdatedAt": "<ISO>" }
-  ]
-}
-```
+Timestamp guidance: Use "yyyy-MM-ddTHH:mm:ss". Other forms like Z-suffixed ISO or /Date(ms)/ are not accepted by the current TDateTime JSON parser.
 
 ---
 
-## 📋 CampaignItemService - Campaign Items
+## Playback Logs
 
-### Get Campaign Items
-Get items within a campaign.
-
-**Endpoint:** `GET /CampaignItemService/GetCampaignItems?campaignId={id}`
-
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Items": [
-    {
-      "Id": 1,
-      "CampaignId": 1,
-      "MediaFileId": "file123",
-      "Duration": 30,
-      "Order": 1,
-      "Transition": "fade"
-    }
-  ]
-}
-```
+- POST /playback-logs → 204 No Content
+  - Request: { "DisplayId": number, "MediaFileId": number, "CampaignId": number, "PlaybackTimestamp": "yyyy-MM-ddTHH:mm:ss" }
 
 ---
 
-## 📺 DisplayCampaignService - Display Assignments
+## Error format
 
-### Get Display Campaigns
-Get campaigns assigned to a display.
+Errors use this envelope:
 
-**Endpoint:** `GET /DisplayCampaignService/GetDisplayCampaigns?displayId={id}`
+{ "error": { "code": "...", "message": "..." } }
 
-**Headers:**
-```
-Authorization: Bearer <jwt_token>
-```
-
-**Response:**
-```json
-{
-  "Assignments": [
-    {
-      "Id": 1,
-      "DisplayId": 1,
-      "CampaignId": 1,
-      "Priority": 1,
-      "Schedule": {
-        "StartTime": "09:00",
-        "EndTime": "17:00",
-        "DaysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"]
-      }
-    }
-  ]
-}
-```
+Common errors: Unauthorized, Forbidden, NotFound, ValidationError, ServerError.
 
 ---
 
-## Error Handling
+## Data model references (from schema)
 
-All endpoints return errors in the following format:
+- Plans: { PlanID, Name, Price, MaxDisplays, MaxCampaigns, MaxMediaStorageGB, IsActive }
+- Subscriptions: { SubscriptionID, OrganizationID, PlanID, Status, CurrentPeriodEnd, TrialEndDate, ... }
+- MediaFiles: { MediaFileID, OrganizationID, FileName, FileType, StorageURL, ... }
+- Displays: { DisplayID, OrganizationID, Name, Orientation, LastSeen, CurrentStatus, ProvisioningToken, ... }
+- Campaigns, CampaignItems, DisplayCampaigns, PlaybackLogs as described above.
 
-```json
-{
-  "error": {
-    "code": "ErrorCode",
-    "message": "Human-readable error message"
-  }
-}
-```
-
-**Common Error Codes:**
-- `Unauthorized` - Invalid or missing JWT token
-- `Forbidden` - Insufficient permissions
-- `NotFound` - Resource not found
-- `ValidationError` - Invalid request data
-- `ServerError` - Internal server error
-
----
-
-## Authentication Flow
-
-1. **Register/Login** → Receive JWT token
-2. **Include token** in `Authorization: Bearer <token>` header
-3. **Access protected endpoints** with valid token
-4. **Token expires** → Login again to get new token
-
----
-
-## File Upload Flow
-
-1. **Get upload URL** from MediaFileService
-2. **Upload file directly** to MinIO using pre-signed URL
-3. **File stored securely** in organization's bucket
-4. **Use download URL** to retrieve file when needed
-
----
-
-## Device Registration Flow
-
-1. **Generate provisioning token** (admin function)
-2. **Device receives token** during setup
-3. **Device calls GetConfig** with token to get configuration
-4. **Device sends logs** using SendLog endpoint
-5. **Device plays campaigns** based on configuration
-
-This API provides complete backend functionality for digital signage management and is ready for FireMonkey mobile app integration.</content>
-<parameter name="filePath">C:\DisplayDeck\API_DOCUMENTATION.md
+See `schema.sql` for full table definitions.
