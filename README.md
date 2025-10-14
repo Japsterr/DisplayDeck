@@ -52,3 +52,24 @@ FireDAC requires the native PostgreSQL client (`libpq.dll` and its companion DLL
 *   **Win64:** PostgreSQL 15 client libraries from official binaries (7 DLLs)
 
 The server automatically detects the architecture and loads the appropriate vendor libraries at runtime.
+
+## API Documentation
+
+- Friendly REST endpoints and request/response shapes are documented in `API_DOCUMENTATION.md`.
+- An OpenAPI 2.0 (Swagger) spec reflecting the friendly routes is available in `openapi.json` and uses base URL `http://localhost:2001/tms/xdata`.
+
+### Notes on endpoints
+
+- Health: `GET /health`
+- Auth: `POST /auth/register`, `POST /auth/login`
+- Organizations: `GET/POST /organizations`, `GET /organizations/{id}`, `GET /organizations/{OrganizationId}/subscription`
+- Displays: `GET/POST /organizations/{OrganizationId}/displays`, `GET/PUT/DELETE /displays/{Id}`
+- Campaigns: `GET/POST /organizations/{OrganizationId}/campaigns`, `GET/PUT/DELETE /campaigns/{Id}`
+- Campaign Items: `GET/POST /campaigns/{CampaignId}/items`, `GET/PUT/DELETE /campaign-items/{Id}`
+- Display Assignments: `GET/POST /displays/{DisplayId}/campaign-assignments`, `PUT/DELETE /campaign-assignments/{Id}`
+- Media: `POST /media-files/upload-url`, `GET /media-files/{MediaFileId}/download-url`
+- Device: `POST /device/config`, `POST /device/logs`
+- Plans & Roles: `GET /plans`, `GET /roles`
+- Playback Logs: `POST /playback-logs`
+
+Timestamp format: For all TDateTime JSON inputs, use `yyyy-MM-ddTHH:mm:ss` (no timezone suffix).
