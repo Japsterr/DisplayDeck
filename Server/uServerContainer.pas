@@ -90,11 +90,24 @@ begin
   FDConnection.Params.Clear;
   FDConnection.Params.Add('DriverID=PG');
   // Use docker host mapping; 127.0.0.1 is fine but pg_hba is trust; provide password as fallback
-  FDConnection.Params.Add('Server=127.0.0.1');
-  FDConnection.Params.Add('Port=5433');
-  FDConnection.Params.Add('Database=displaydeck');
-  FDConnection.Params.Add('User_Name=api_user');
-  FDConnection.Params.Add('Password=api123');
+  // Read from environment variables if present (for Docker/Linux), else default for local Windows dev
+  var DB_HOST := GetEnvironmentVariable('DB_HOST');
+  var DB_PORT := GetEnvironmentVariable('DB_PORT');
+  var DB_NAME := GetEnvironmentVariable('DB_NAME');
+  var DB_USER := GetEnvironmentVariable('DB_USER');
+  var DB_PASSWORD := GetEnvironmentVariable('DB_PASSWORD');
+
+  if DB_HOST = '' then DB_HOST := '127.0.0.1';
+  if DB_PORT = '' then DB_PORT := '5433';
+  if DB_NAME = '' then DB_NAME := 'displaydeck';
+  if DB_USER = '' then DB_USER := 'displaydeck_user';
+  if DB_PASSWORD = '' then DB_PASSWORD := 'verysecretpassword';
+
+  FDConnection.Params.Add('Server=' + DB_HOST);
+  FDConnection.Params.Add('Port=' + DB_PORT);
+  FDConnection.Params.Add('Database=' + DB_NAME);
+  FDConnection.Params.Add('User_Name=' + DB_USER);
+  FDConnection.Params.Add('Password=' + DB_PASSWORD);
   FDConnection.Params.Add('CharacterSet=UTF8');
   FDConnection.Params.Add('SSLMode=disable');
   FDConnection.Params.Add('LoginTimeout=5');

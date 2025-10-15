@@ -73,3 +73,31 @@ The server automatically detects the architecture and loads the appropriate vend
 - Playback Logs: `POST /playback-logs`
 
 Timestamp format: For all TDateTime JSON inputs, use `yyyy-MM-ddTHH:mm:ss` (no timezone suffix).
+
+## Swagger UI (Docker)
+
+You can browse the API using Swagger UI served from Docker:
+
+1. Ensure `docs/openapi.friendly.json` exists (already committed).
+2. Start services:
+
+```powershell
+docker-compose up -d swagger-ui
+```
+
+Then open: http://localhost:8080
+
+## Run the API in Docker (Linux)
+
+This repository now includes a containerized Linux build target for the API. Windows development remains unchanged.
+
+- Pre-requisite: Build the Linux server binary via RAD Studio to `Server/Linux/Release/DisplayDeck`.
+- Then run:
+
+```powershell
+docker-compose up -d server postgres minio
+```
+
+The server will be available on http://localhost:2001/tms/xdata
+
+Environment variables for DB/MinIO can be overridden in `docker-compose.yml`. Defaults match the compose services.

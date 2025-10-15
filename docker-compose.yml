@@ -40,6 +40,45 @@ services:
       # This persists the uploaded files on your local machine
       - minio_data:/data
 
+  # Swagger UI for API documentation
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: displaydeck-swagger
+    restart: unless-stopped
+    environment:
+      # Point Swagger UI to our friendly OpenAPI spec
+      SWAGGER_JSON: /docs/openapi.friendly.json
+    volumes:
+      - ./docs:/docs:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - minio
+
+  # DisplayDeck API server (Linux container)
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: displaydeck-server
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: displaydeck
+      DB_USER: displaydeck_user
+      DB_PASSWORD: verysecretpassword
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_REGION: us-east-1
+    ports:
+      - "2001:2001"
+    depends_on:
+      - postgres
+      - minio
+
 volumes:
   postgres_data:
   minio_data:
