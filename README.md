@@ -101,3 +101,37 @@ docker-compose up -d server postgres minio
 The server will be available on http://localhost:2001/tms/xdata
 
 Environment variables for DB/MinIO can be overridden in `docker-compose.yml`. Defaults match the compose services.
+
+## Compile for Linux without WSL/VM (Dockerized PAServer)
+
+If your IDE supports Linux (Enterprise/Architect) you can avoid WSL/VM by running PAServer inside Docker:
+
+1) Copy the Linux PAServer bundle from your RAD Studio install into the repo:
+
+- Place `PAServer-Linux-64.tar.gz` at `paserver/PAServer-Linux-64.tar.gz`.
+
+2) Start PAServer in Docker:
+
+```powershell
+docker-compose up -d paserver
+```
+
+This exposes PAServer on `localhost:64211` with password `displaydeck`.
+
+3) In Delphi:
+
+- Tools > Options > Deployment > SDK Manager
+- Add… > Linux 64-bit
+- Host: `localhost`, Port: `64211`, Password: `displaydeck`
+- Import SDK (it will use the Docker PAServer container)
+
+4) Add Linux 64-bit to your project:
+
+- Project Manager > Target Platforms > Add Platform… > Linux 64-bit
+- Set Linux 64-bit active and build
+
+Notes:
+
+- Your project must be cross-platform (no HttpSys/Winapi.Windows). Use Sparkle TSparkleHttpServer for Linux.
+- FireDAC on Linux uses system `libpq.so.5` (already included in our server Docker image). Do not reference `libpq.dll`.
+- If you need GDB for debugging, the PAServer image already includes it.

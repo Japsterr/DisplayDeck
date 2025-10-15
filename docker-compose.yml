@@ -79,6 +79,21 @@ services:
       - postgres
       - minio
 
+  # Delphi PAServer (Linux) to enable Linux 64-bit SDK and remote compilation
+  paserver:
+    build:
+      context: ./paserver
+    container_name: displaydeck-paserver
+    restart: unless-stopped
+    environment:
+      PASERVER_PASSWORD: displaydeck
+      PASERVER_PORT: 64211
+    volumes:
+      # Place PAServer-Linux-64.tar.gz here from your RAD Studio install
+      - ./paserver:/paserver
+    ports:
+      - "64211:64211"
+
 volumes:
   postgres_data:
   minio_data:
