@@ -46,20 +46,24 @@ begin
       if SameText(Request.Method, 'POST') then
       begin
         // Create organization from JSON body { "Name": "..." }
-        var LJSON := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+        var LJSONObj: TJSONObject;
+        var NameStr: string;
+        var Org: TOrganization;
+        var Obj: TJSONObject;
+        LJSONObj := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
         try
-          if (LJSON = nil) or (not LJSON.TryGetValue<string>('Name', var NameStr)) then
+          if (LJSONObj = nil) or (not LJSONObj.TryGetValue<string>('Name', NameStr)) then
           begin
             Response.StatusCode := 400;
             Response.ContentType := 'application/json';
             Response.Content := '{"message":"Invalid payload"}';
             Exit;
           end;
-          var Org := TOrganization.Create;
+          Org := TOrganization.Create;
           try
             Org.Name := NameStr;
             Org := TOrganizationRepository.CreateOrganization(Org);
-            var Obj := TJSONObject.Create;
+            Obj := TJSONObject.Create;
             try
               Obj.AddPair('Id', TJSONNumber.Create(Org.Id));
               Obj.AddPair('Name', Org.Name);
@@ -73,7 +77,7 @@ begin
             Org.Free;
           end;
         finally
-          LJSON.Free;
+          LJSONObj.Free;
         end;
         Exit;
       end;
