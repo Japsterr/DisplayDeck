@@ -1,0 +1,752 @@
+openapi: 3.0.3
+info:
+  title: DisplayDeck API
+  version: "1.0.0"
+servers:
+  - url: http://localhost:2001
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: string
+                    example: OK
+
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLoginRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /auth/register:
+    post:
+      summary: Register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRegisterRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /plans:
+    get:
+      summary: List plans
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plan'
+
+  /roles:
+    get:
+      summary: List roles
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /organizations:
+    get:
+      summary: List organizations
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Organization'
+    post:
+      summary: Create organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationCreate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+
+  /organizations/{id}:
+    get:
+      summary: Get organization by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '404':
+          description: Not found
+
+  /organizations/{OrganizationId}/subscription:
+    get:
+      summary: Get subscription for organization
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+
+  /organizations/{OrganizationId}/displays:
+    get:
+      summary: List displays for organization
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Display'
+    post:
+      summary: Create display for organization
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisplayCreate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Display'
+
+  /displays/{Id}:
+    get:
+      summary: Get display by id
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Display'
+    put:
+      summary: Update display
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Display'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Display'
+    delete:
+      summary: Delete display
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+
+  /organizations/{OrganizationId}/campaigns:
+    get:
+      summary: List campaigns for organization
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Campaign'
+    post:
+      summary: Create campaign for organization
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCreate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+
+  /campaigns/{Id}:
+    get:
+      summary: Get campaign by id
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+    put:
+      summary: Update campaign
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Campaign'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+    delete:
+      summary: Delete campaign
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+
+  /campaigns/{CampaignId}/items:
+    get:
+      summary: List items for campaign
+      parameters:
+        - name: CampaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CampaignItem'
+    post:
+      summary: Create item for campaign
+      parameters:
+        - name: CampaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignItemCreate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignItem'
+
+  /campaign-items/{Id}:
+    get:
+      summary: Get campaign item by id
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignItem'
+    put:
+      summary: Update campaign item
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignItem'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignItem'
+    delete:
+      summary: Delete campaign item
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+
+  /displays/{DisplayId}/campaign-assignments:
+    get:
+      summary: List campaign assignments for display
+      parameters:
+        - name: DisplayId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DisplayCampaign'
+    post:
+      summary: Create campaign assignment for display
+      parameters:
+        - name: DisplayId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisplayCampaign'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisplayCampaign'
+
+  /campaign-assignments/{Id}:
+    put:
+      summary: Update campaign assignment
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisplayCampaign'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisplayCampaign'
+    delete:
+      summary: Delete campaign assignment
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+
+  /media-files/upload-url:
+    post:
+      summary: Get presigned upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+
+  /media-files/{MediaFileId}/download-url:
+    get:
+      summary: Get presigned download URL
+      parameters:
+        - name: MediaFileId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrlResponse'
+
+  /device/config:
+    post:
+      summary: Get device configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceConfigRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceConfigResponse'
+
+  /device/logs:
+    post:
+      summary: Submit device log entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceLogRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceLogResponse'
+
+  /playback-logs:
+    post:
+      summary: Submit playback log
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaybackLogRequest'
+      responses:
+        '204':
+          description: No Content
+
+components:
+  schemas:
+    Organization:
+      type: object
+      properties:
+        Id: { type: integer }
+        Name: { type: string }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+    OrganizationCreate:
+      type: object
+      properties:
+        Name: { type: string }
+      required: [Name]
+    Display:
+      type: object
+      properties:
+        Id: { type: integer }
+        OrganizationId: { type: integer }
+        Name: { type: string }
+        Orientation: { type: string }
+        LastSeen: { type: string, format: date-time }
+        CurrentStatus: { type: string }
+        ProvisioningToken: { type: string }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+    DisplayCreate:
+      type: object
+      properties:
+        Name: { type: string }
+        Orientation: { type: string }
+      required: [Name]
+    DisplayCampaign:
+      type: object
+      properties:
+        Id: { type: integer }
+        DisplayId: { type: integer }
+        CampaignId: { type: integer }
+        IsPrimary: { type: boolean }
+    Campaign:
+      type: object
+      properties:
+        Id: { type: integer }
+        OrganizationId: { type: integer }
+        Name: { type: string }
+        Orientation: { type: string }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+    CampaignCreate:
+      type: object
+      properties:
+        Name: { type: string }
+        Orientation: { type: string }
+      required: [Name]
+    CampaignItem:
+      type: object
+      properties:
+        Id: { type: integer }
+        CampaignId: { type: integer }
+        MediaFileId: { type: integer }
+        DisplayOrder: { type: integer }
+        Duration: { type: integer }
+    CampaignItemCreate:
+      type: object
+      properties:
+        MediaFileId: { type: integer }
+        DisplayOrder: { type: integer }
+        Duration: { type: integer }
+      required: [MediaFileId]
+    Subscription:
+      type: object
+      properties:
+        SubscriptionID: { type: integer }
+        OrganizationID: { type: integer }
+        PlanID: { type: integer }
+        Status: { type: string }
+        CurrentPeriodEnd: { type: string, format: date-time }
+    Plan:
+      type: object
+      properties:
+        PlanID: { type: integer }
+        Name: { type: string }
+        Price: { type: number }
+        MaxDisplays: { type: integer }
+        MaxCampaigns: { type: integer }
+        MaxMediaStorageGB: { type: integer }
+        IsActive: { type: boolean }
+    AuthLoginRequest:
+      type: object
+      properties:
+        Email: { type: string }
+        Password: { type: string }
+    AuthRegisterRequest:
+      type: object
+      properties:
+        Email: { type: string }
+        Password: { type: string }
+        OrganizationName: { type: string }
+    User:
+      type: object
+      properties:
+        Id: { type: integer }
+        OrganizationId: { type: integer }
+        Email: { type: string }
+        PasswordHash: { type: string }
+        Role: { type: string }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+    AuthResponse:
+      type: object
+      properties:
+        Token: { type: string }
+        User: { $ref: '#/components/schemas/User' }
+        Success: { type: boolean }
+        Message: { type: string }
+    UploadUrlRequest:
+      type: object
+      properties:
+        OrganizationId: { type: integer }
+        FileName: { type: string }
+        FileType: { type: string }
+        ContentLength: { type: integer }
+    UploadUrlResponse:
+      type: object
+      properties:
+        MediaFileId: { type: integer }
+        UploadUrl: { type: string }
+        StorageKey: { type: string }
+        Success: { type: boolean }
+        Message: { type: string }
+    DownloadUrlResponse:
+      type: object
+      properties:
+        DownloadUrl: { type: string }
+        Success: { type: boolean }
+        Message: { type: string }
+    DeviceConfigRequest:
+      type: object
+      properties:
+        ProvisioningToken: { type: string }
+    DeviceConfigResponse:
+      type: object
+      properties:
+        Device: { $ref: '#/components/schemas/Display' }
+        Campaigns:
+          type: array
+          items: { $ref: '#/components/schemas/Campaign' }
+        Success: { type: boolean }
+        Message: { type: string }
+    DeviceLogRequest:
+      type: object
+      properties:
+        DisplayId: { type: integer }
+        LogType: { type: string }
+        Message: { type: string }
+        Timestamp: { type: string, format: date-time }
+    DeviceLogResponse:
+      type: object
+      properties:
+        Success: { type: boolean }
+        Message: { type: string }
+    PlaybackLogRequest:
+      type: object
+      properties:
+        DisplayId: { type: integer }
+        MediaFileId: { type: integer }
+        CampaignId: { type: integer }
+        PlaybackTimestamp: { type: string, format: date-time }
+      required: [DisplayId, MediaFileId, CampaignId, PlaybackTimestamp]

@@ -1,137 +1,144 @@
 # DisplayDeck API
 
-This is the backend API for DisplayDeck, a digital signage SaaS platform.
+Backend API for DisplayDeck, a digital signage SaaS. Linux-first, Dockerized stack: PostgreSQL + MinIO + Delphi WebBroker server, with Swagger UI.
 
-## Overview
+## Stack
 
-DisplayDeck is a platform for managing and displaying digital content on various screens, such as TVs and customer-facing POS displays. This repository contains the source code for the backend API that powers the entire system.
+- Language: Delphi (Object Pascal)
+- Server: Delphi WebBroker + Indy (Linux console app)
+- DB: PostgreSQL (Docker)
+- Object storage: MinIO (S3-compatible, Docker)
+- Auth: JWT (HS256)
+- Docs: OpenAPI 3.0 at `docs/openapi.yaml` served by Swagger UI container
 
-## Technology Stack
+## Quick start (local)
 
-*   **Language:** Delphi (Object Pascal)
-*   **API Framework:** TMS XData
-*   **Data Access:** FireDAC with PostgreSQL
-*   **Database:** PostgreSQL (running in Docker)
-*   **Object Storage:** MinIO (S3-compatible, running in Docker)
-*   **Deployment Target:** Linux via Docker (as an Apache Module)
+Prereqs: Docker Desktop, Git. For building the server binary, Delphi with Linux toolchain.
 
-## Getting Started
-
-The project is now successfully set up. The Delphi server can connect to the PostgreSQL database running in Docker.
-
-### Prerequisites
-
-*   Embarcadero Delphi (Architect Edition recommended for Linux deployment)
-*   Docker Desktop
-*   Git for version control
-
-### Development Workflow
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/Japsterr/DisplayDeck.git
-    ```
-2.  **Navigate to the project directory:**
-    ```bash
-    cd DisplayDeck
-    ```
-3.  **Start Backend Services:**
-    Use Docker Compose to start the PostgreSQL database.
-    ```bash
-    docker-compose up -d
-    ```
-
-4.  **Run the API Server:**
-    The Delphi XData server project is located in the `Server/` directory. Open `Server/DisplayDeck.dproj` in the Delphi IDE, compile, and run the *Win32* Debug build. The server will start and connect to the database on first API request.
-
-### PostgreSQL client libraries
-
-FireDAC requires the native PostgreSQL client (`libpq.dll` and its companion DLLs). The repository includes vendor libraries under `Server/Vendor/PostgreSQL/<arch>/lib/`:
-
-*   **Win32:** Complete PostgreSQL 16.1 client libraries from MSYS2 (11 DLLs including dependencies)
-*   **Win64:** PostgreSQL 15 client libraries from official binaries (7 DLLs)
-
-The server automatically detects the architecture and loads the appropriate vendor libraries at runtime.
-
-## API Documentation
-
-- Friendly REST endpoints and request/response shapes are documented in `API_DOCUMENTATION.md`.
-- An OpenAPI 2.0 (Swagger) spec reflecting the friendly routes is available in `openapi.json` and uses base URL `http://localhost:2001/tms/xdata`.
-
-### Notes on endpoints
-
-- Health: `GET /health`
-- Auth: `POST /auth/register`, `POST /auth/login`
-- Organizations: `GET/POST /organizations`, `GET /organizations/{id}`, `GET /organizations/{OrganizationId}/subscription`
-- Displays: `GET/POST /organizations/{OrganizationId}/displays`, `GET/PUT/DELETE /displays/{Id}`
-- Campaigns: `GET/POST /organizations/{OrganizationId}/campaigns`, `GET/PUT/DELETE /campaigns/{Id}`
-- Campaign Items: `GET/POST /campaigns/{CampaignId}/items`, `GET/PUT/DELETE /campaign-items/{Id}`
-- Display Assignments: `GET/POST /displays/{DisplayId}/campaign-assignments`, `PUT/DELETE /campaign-assignments/{Id}`
-- Media: `POST /media-files/upload-url`, `GET /media-files/{MediaFileId}/download-url`
-- Device: `POST /device/config`, `POST /device/logs`
-- Plans & Roles: `GET /plans`, `GET /roles`
-- Playback Logs: `POST /playback-logs`
-
-Timestamp format: For all TDateTime JSON inputs, use `yyyy-MM-ddTHH:mm:ss` (no timezone suffix).
-
-## Swagger UI (Docker)
-
-You can browse the API using Swagger UI served from Docker:
-
-1. Ensure `docs/openapi.friendly.json` exists (already committed).
-2. Start services:
+1) Clone and enter
 
 ```powershell
-docker-compose up -d swagger-ui
+git clone https://github.com/Japsterr/DisplayDeck.git
+cd DisplayDeck
 ```
 
-Then open: http://localhost:8080
-
-## Run the API in Docker (Linux)
-
-This repository now includes a containerized Linux build target for the API. Windows development remains unchanged.
-
-- Pre-requisite: Build the Linux server binary via RAD Studio to `Server/Linux/Release/DisplayDeck`.
-- Then run:
+2) Build the Linux server binary (from Windows IDE or the provided script)
 
 ```powershell
-docker-compose up -d server postgres minio
+c:\DisplayDeck\build_linux.bat
 ```
 
-The server will be available on http://localhost:2001/tms/xdata
-
-Environment variables for DB/MinIO can be overridden in `docker-compose.yml`. Defaults match the compose services.
-
-## Compile for Linux without WSL/VM (Dockerized PAServer)
-
-If your IDE supports Linux (Enterprise/Architect) you can avoid WSL/VM by running PAServer inside Docker:
-
-1) Copy the Linux PAServer bundle from your RAD Studio install into the repo:
-
-- Place `PAServer-Linux-64.tar.gz` at `paserver/PAServer-Linux-64.tar.gz`.
-
-2) Start PAServer in Docker:
+3) Bring up the stack (DB, MinIO, server, Swagger UI)
 
 ```powershell
-docker-compose up -d paserver
+docker compose up -d postgres minio server swagger-ui
 ```
 
-This exposes PAServer on `localhost:64211` with password `displaydeck`.
+- API base: http://localhost:2001
+- Swagger UI: http://localhost:8080
 
-3) In Delphi:
+Run tests (optional):
 
-- Tools > Options > Deployment > SDK Manager
-- Add… > Linux 64-bit
-- Host: `localhost`, Port: `64211`, Password: `displaydeck`
-- Import SDK (it will use the Docker PAServer container)
+```powershell
+.\n+tests\smoke-tests.ps1
+tests\pairing-tests.ps1
+```
 
-4) Add Linux 64-bit to your project:
+## Environment
 
-- Project Manager > Target Platforms > Add Platform… > Linux 64-bit
-- Set Linux 64-bit active and build
+Server reads configuration from env vars (see `.env.example`):
 
-Notes:
+- DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+- MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_REGION
+- JWT_SECRET (required)
+- SERVER_DEBUG (default "false"; gates debug endpoints)
 
-- Your project must be cross-platform (no HttpSys/Winapi.Windows). Use Sparkle TSparkleHttpServer for Linux.
-- FireDAC on Linux uses system `libpq.so.5` (already included in our server Docker image). Do not reference `libpq.dll`.
-- If you need GDB for debugging, the PAServer image already includes it.
+The compose file `docker-compose.yml` sets sane defaults. Override via environment or an `.env` file.
+
+## API overview
+
+Key routes (full spec in `docs/openapi.yaml`):
+
+- Health: GET `/health`
+- Auth: POST `/auth/register`, POST `/auth/login`
+- Orgs: GET/POST `/organizations`, GET `/organizations/{id}`, GET `/organizations/{OrganizationId}/subscription`
+- Displays: GET/POST `/organizations/{OrganizationId}/displays`, GET/PUT/DELETE `/displays/{Id}`
+- Campaigns: GET/POST `/organizations/{OrganizationId}/campaigns`, GET/PUT/DELETE `/campaigns/{Id}`
+- Campaign Items: GET/POST `/campaigns/{CampaignId}/items`, GET/PUT/DELETE `/campaign-items/{Id}`
+- Assignments: GET/POST `/displays/{DisplayId}/campaign-assignments`, PUT/DELETE `/campaign-assignments/{Id}`
+- Media: POST `/media-files/upload-url`, GET `/media-files/{MediaFileId}/download-url`
+- Device: POST `/device/provisioning/token`, POST `/device/config`, POST `/device/logs`
+- Plans & Roles: GET `/plans`, GET `/roles`
+- Playback Logs: POST `/playback-logs`
+
+Timestamps: use `yyyy-MM-ddTHH:mm:ss` (ISO-8601 local) for inputs.
+
+## Swagger UI
+
+Swagger UI is served from the `swagger-ui` container and points to `docs/openapi.yaml`:
+
+- Start it: `docker compose up -d swagger-ui`
+- Open: http://localhost:8080
+
+## Out-of-the-box deployment
+
+If you prefer to run without building locally, use the production compose override and a prebuilt image:
+
+1) Copy `.env.example` to `.env` and set a strong `JWT_SECRET`.
+2) Use `docker-compose.prod.yml` (references a prebuilt image):
+
+```powershell
+docker compose --env-file .env -f docker-compose.prod.yml up -d
+```
+
+Note: Until you publish the image to a registry, you can still run locally by building it:
+
+```powershell
+docker compose build server
+docker compose up -d server
+```
+
+## Publishing the container image
+
+Because the server binary is compiled with Delphi, the simplest approach is to build and push the image from your dev machine.
+
+### Push to GitHub Container Registry (GHCR)
+
+1) Create a GitHub Personal Access Token with `write:packages`.
+2) Login:
+
+```powershell
+echo $Env:GITHUB_TOKEN | docker login ghcr.io -u <YOUR_GH_USERNAME> --password-stdin
+```
+
+3) Build and tag:
+
+```powershell
+docker compose build server
+docker tag displaydeck-server:latest ghcr.io/<YOUR_GH_USERNAME>/displaydeck-server:latest
+```
+
+4) Push:
+
+```powershell
+docker push ghcr.io/<YOUR_GH_USERNAME>/displaydeck-server:latest
+```
+
+Update `docker-compose.prod.yml` to point to your image (owner and tag), then deploy with the prod compose file.
+
+### Push to Docker Hub (alternative)
+
+```powershell
+docker login
+docker tag displaydeck-server:latest <your-dockerhub-username>/displaydeck-server:latest
+docker push <your-dockerhub-username>/displaydeck-server:latest
+```
+
+## Notes for Delphi/Linux builds
+
+- This project targets Linux. Ensure your Linux SDK is installed in RAD Studio and `build_linux.bat` works on your machine.
+- The server image is Debian-based and already includes required runtime libs (libpq, SSL, krb5, etc.).
+
+---
+
+Made with Delphi. Contributions welcome via PR.

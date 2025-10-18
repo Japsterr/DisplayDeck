@@ -45,3 +45,13 @@ OSXARM64/
 !Server/Vendor/
 !Server/Vendor/**/
 !Server/Vendor/**/*.dll
+
+# Environment secrets
+.env
+
+# Build outputs and binaries
+Server/Linux/Release/
+Server/Linux/DisplayDeck.WebBroker
+Server/Linux/*.o
+Server/Linux/*.res
+Server/**/.DS_Store

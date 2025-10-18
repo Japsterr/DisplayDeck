@@ -11,8 +11,8 @@ uses
   FireDAC.Stan.Param,
   Data.DB,
   uEntities,
-  AuthService,
-  Winapi.Windows;
+  AuthService
+  {$IFDEF MSWINDOWS}, Winapi.Windows{$ENDIF};
 
 type
   [ServiceImplementation]
@@ -44,8 +44,10 @@ function TAuthService.GetConnection: TFDConnection;
 begin
   // Get the shared connection from the server container
   Result := ServerContainer.FDConnection;
+  {$IFDEF MSWINDOWS}
   OutputDebugString(PChar('AuthService.GetConnection: Connection object = ' + IntToHex(IntPtr(Result), 8)));
   OutputDebugString(PChar('AuthService.GetConnection: Connection connected = ' + BoolToStr(Result.Connected, True)));
+  {$ENDIF}
 end;
 
 function TAuthService.HashPassword(const Password: string): string;
@@ -115,7 +117,9 @@ var
   ExistingUser: TUser;
   NewOrgId, NewUserId: Integer;
 begin
+  {$IFDEF MSWINDOWS}
   OutputDebugString(PChar('AuthService.Register: Starting registration for ' + Request.Email));
+  {$ENDIF}
   Result := TAuthResponse.Create;
 
   // Check if user already exists
@@ -238,8 +242,8 @@ begin
 end;
 
 initialization
-  OutputDebugString(PChar('Registering AuthService...'));
+  {$IFDEF MSWINDOWS} OutputDebugString(PChar('Registering AuthService...')); {$ENDIF}
   RegisterServiceType(TAuthService);
-  OutputDebugString(PChar('AuthService registered successfully'));
+  {$IFDEF MSWINDOWS} OutputDebugString(PChar('AuthService registered successfully')); {$ENDIF}
 
 end.

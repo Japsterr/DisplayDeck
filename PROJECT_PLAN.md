@@ -1,5 +1,29 @@
 # DisplayDeck Project Plan
 
+> Status update — 2025-10-16
+>
+> We pivoted from TMS XData/Sparkle to vanilla Delphi WebBroker + Indy for Linux container deployment. The current Linux server implements a minimal set of endpoints and stubs the rest with HTTP 501 to expose the full API surface early. Swagger/OpenAPI reflects the complete design, but not all routes are implemented yet.
+>
+> Implemented now (WebBroker/Indy + FireDAC):
+> - GET /health
+> - /organizations: GET (list), POST (create)
+> - /organizations/{id}: GET (by id)
+>
+> Stubbed (return 501 Not Implemented):
+> - Auth: /auth/login, /auth/register
+> - Plans and Roles: /plans, /roles
+> - Displays: /organizations/{id}/displays (GET/POST), /displays/{id} (GET/PUT/DELETE), /displays/{id}/campaign-assignments (GET/POST)
+> - Campaigns & Items: /campaigns/{id} (GET/PUT/DELETE), /campaigns/{id}/items (GET/POST), /campaign-items/{id} (GET/PUT/DELETE), /campaign-assignments/{id} (PUT/DELETE)
+> - Media (MinIO presign): /media-files/upload-url (POST), /media-files/{id}/download-url (GET)
+> - Device: /device/config (POST), /device/logs (POST)
+> - Playback logs: /playback-logs (POST)
+>
+> Containerization status:
+> - Dockerized services: Postgres, MinIO, Swagger UI, and the server are up; OpenAPI YAML is served by Swagger UI.
+> - Linux build compiles from CLI; server image builds and runs. Remaining endpoints will be implemented iteratively.
+>
+> Note: The original Task 4 checkboxes below refer to an earlier XData-based approach. That scope is superseded by the WebBroker implementation plan above. We will re-track progress per endpoint as they are implemented.
+
 ## 1. Project Vision
 
 To create a modern, flexible, and multi-tenant SaaS platform for digital signage. The system will allow users to manage and schedule media content for display on various screens, with robust analytics and support for multiple client types.

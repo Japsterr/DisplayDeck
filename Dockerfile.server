@@ -5,15 +5,19 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install PostgreSQL client libs and timezone data
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       libpq5 ca-certificates tzdata \
-    && rm -rf /var/lib/apt/lists/*
+     && apt-get install -y --no-install-recommends \
+         libpq5 libssl3 libkrb5-3 libgssapi-krb5-2 zlib1g libldap-2.5-0 \
+         ca-certificates tzdata \
+     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy server binary and any required runtime files
 # Note: You'll need to produce a Linux binary (e.g., DisplayDeck) into Server/Linux/Release before building.
-COPY Server/Linux/Release/DisplayDeck /app/DisplayDeck
+# Copy the built Linux binary (produced by DisplayDeck.WebBroker.dproj)
+# We build DisplayDeck.WebBroker.dproj which outputs Server/Linux/DisplayDeck.WebBroker
+COPY Server/Linux/DisplayDeck.WebBroker /app/DisplayDeck
+RUN chmod +x /app/DisplayDeck
 
 # Default environment variables (can be overridden by compose)
 ENV DB_HOST=postgres \

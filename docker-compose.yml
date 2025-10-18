@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   # PostgreSQL Database Service
@@ -46,8 +45,8 @@ services:
     container_name: displaydeck-swagger
     restart: unless-stopped
     environment:
-      # Point Swagger UI to our friendly OpenAPI spec
-      SWAGGER_JSON: /docs/openapi.friendly.json
+      # Point Swagger UI to our OpenAPI v3 spec (YAML)
+      SWAGGER_JSON: /docs/openapi.yaml
     volumes:
       - ./docs:/docs:ro
     ports:
@@ -73,6 +72,10 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_REGION: us-east-1
+      # Strong JWT secret for production
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-prod-9b1d5c4e7f2a47b9a3c1d8e0f5b6c2a1}
+      # Toggle server debug logs and endpoints
+      SERVER_DEBUG: "false"
     ports:
       - "2001:2001"
     depends_on:
