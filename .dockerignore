@@ -1,0 +1,35 @@
+# Exclude everything except the files needed for building the runtime image
+
+# Ignore VCS
+.git
+.gitignore
+
+# Ignore IDE and OS noise
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Ignore build outputs and large artifacts
+__history/
+Win32/
+Win64/
+Server/Linux/Release/
+Server/Linux/*.o
+Server/Linux/*.res
+Server/Linux/*.dproj
+Server/Linux/*.deployproj
+Server/Linux/*.identcache
+Server/Linux/*.local
+
+# IMPORTANT: We only need the prebuilt Linux binary and runtime files for Dockerfile.server
+# If you want CI to build/push, ensure this file exists in the repo (or switch to a release-asset download pattern)
+!Server/Linux/DisplayDeck.WebBroker
+!Dockerfile.server
+!docker-compose.yml
+!docker-compose.prod.yml
+!README.md
+!docs/
+!docs/**
+!schema.sql
+!init-user.sql
