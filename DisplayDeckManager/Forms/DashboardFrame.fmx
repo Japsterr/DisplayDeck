@@ -1,0 +1,353 @@
+object Frame3: TFrame3
+  Size.Width = 1244.000000000000000000
+  Size.Height = 839.000000000000000000
+  Size.PlatformDefault = False
+  object LayoutBackground: TLayout
+    Align = Client
+    Size.Width = 1244.000000000000000000
+    Size.Height = 839.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object RectBackground: TRectangle
+      Align = Client
+      Fill.Color = xFFF5F7FA
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      Stroke.Kind = None
+    end
+    object LayoutMain: TLayout
+      Align = Client
+      Padding.Left = 24.000000000000000000
+      Padding.Top = 24.000000000000000000
+      Padding.Right = 24.000000000000000000
+      Padding.Bottom = 24.000000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      object VertScrollBox1: TVertScrollBox
+        Align = Client
+        Size.Width = 1196.000000000000000000
+        Size.Height = 791.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        Viewport.Width = 1196.000000000000000000
+        Viewport.Height = 791.000000000000000000
+        object LayoutHeader: TLayout
+          Align = Top
+          Size.Width = 1196.000000000000000000
+          Size.Height = 80.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+          object lblWelcome: TLabel
+            Align = Client
+            StyledSettings = [Family, Style]
+            Size.Width = 1196.000000000000000000
+            Size.Height = 80.000000000000000000
+            Size.PlatformDefault = False
+            TextSettings.Font.Size = 32.000000000000000000
+            TextSettings.FontColor = xFF2C3E50
+            Text = 'Welcome back!'
+            TabOrder = 0
+          end
+        end
+        object LayoutSpacer1: TLayout
+          Align = Top
+          Position.Y = 80.000000000000000000
+          Size.Width = 1196.000000000000000000
+          Size.Height = 20.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+        end
+        object LayoutStatsRow: TLayout
+          Align = Top
+          Padding.Top = 16.000000000000000000
+          Position.Y = 100.000000000000000000
+          Size.Width = 1196.000000000000000000
+          Size.Height = 160.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 2
+          object RectCardDisplays: TRectangle
+            Align = Left
+            Fill.Color = claWhite
+            Margins.Right = 16.000000000000000000
+            Position.Y = 16.000000000000000000
+            Size.Width = 280.000000000000000000
+            Size.Height = 144.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutCardContent1: TLayout
+              Align = Client
+              Padding.Left = 20.000000000000000000
+              Padding.Top = 20.000000000000000000
+              Padding.Right = 20.000000000000000000
+              Padding.Bottom = 20.000000000000000000
+              Size.Width = 280.000000000000000000
+              Size.Height = 144.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblDisplaysTitle: TLabel
+                Align = Top
+                StyledSettings = [Family, Size, Style]
+                Position.X = 20.000000000000000000
+                Position.Y = 20.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 13.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Total Display'
+                TabOrder = 0
+              end
+              object lblDisplaysCount: TLabel
+                Align = Top
+                StyledSettings = [Family, FontColor]
+                Position.X = 20.000000000000000000
+                Position.Y = 50.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 50.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 36.000000000000000000
+                TextSettings.Font.StyleExt = {00070000000000000004000000}
+                Text = '0'
+                TabOrder = 1
+              end
+              object lblDisplaysStatus: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Position.X = 20.000000000000000000
+                Position.Y = 100.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 24.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF95A5A6
+                Text = '0 Online '#8226' 0 Offline'
+                TabOrder = 2
+              end
+            end
+          end
+          object RectCardCampaigns: TRectangle
+            Align = Left
+            Fill.Color = claWhite
+            Margins.Right = 16.000000000000000000
+            Position.X = 296.000000000000000000
+            Position.Y = 16.000000000000000000
+            Size.Width = 280.000000000000000000
+            Size.Height = 144.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutCardContent2: TLayout
+              Align = Client
+              Padding.Left = 20.000000000000000000
+              Padding.Top = 20.000000000000000000
+              Padding.Right = 20.000000000000000000
+              Padding.Bottom = 20.000000000000000000
+              Size.Width = 280.000000000000000000
+              Size.Height = 144.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblCampaignsTitle: TLabel
+                Align = Top
+                StyledSettings = [Family, Size, Style]
+                Position.X = 20.000000000000000000
+                Position.Y = 20.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 13.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Active Campaigns'
+                TabOrder = 0
+              end
+              object lblCampaignsCount: TLabel
+                Align = Top
+                StyledSettings = [Family, FontColor]
+                Position.X = 20.000000000000000000
+                Position.Y = 50.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 50.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 36.000000000000000000
+                TextSettings.Font.StyleExt = {00070000000000000004000000}
+                Text = '0'
+                TabOrder = 1
+              end
+              object lblCampaignsStatus: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Position.X = 20.000000000000000000
+                Position.Y = 100.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 24.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF95A5A6
+                Text = 'Total campaigns'
+                TabOrder = 2
+              end
+            end
+          end
+          object RectCardMedia: TRectangle
+            Align = Left
+            Fill.Color = claWhite
+            Margins.Right = 16.000000000000000000
+            Position.X = 592.000000000000000000
+            Position.Y = 16.000000000000000000
+            Size.Width = 280.000000000000000000
+            Size.Height = 144.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutCardContent3: TLayout
+              Align = Client
+              Padding.Left = 20.000000000000000000
+              Padding.Top = 20.000000000000000000
+              Padding.Right = 20.000000000000000000
+              Padding.Bottom = 20.000000000000000000
+              Size.Width = 280.000000000000000000
+              Size.Height = 144.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblMediaTitle: TLabel
+                Align = Top
+                StyledSettings = [Family, Size, Style]
+                Position.X = 20.000000000000000000
+                Position.Y = 20.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 13.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Media Files'
+                TabOrder = 0
+              end
+              object lblMediaCount: TLabel
+                Align = Top
+                StyledSettings = [Family, FontColor]
+                Position.X = 20.000000000000000000
+                Position.Y = 50.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 50.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 36.000000000000000000
+                TextSettings.Font.StyleExt = {00070000000000000004000000}
+                Text = '0'
+                TabOrder = 1
+              end
+              object lblMediaStatus: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Position.X = 20.000000000000000000
+                Position.Y = 100.000000000000000000
+                Size.Width = 240.000000000000000000
+                Size.Height = 24.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF95A5A6
+                Text = '0 MB used'
+                TabOrder = 2
+              end
+            end
+          end
+        end
+        object LayoutSpacer2: TLayout
+          Align = Top
+          Position.Y = 260.000000000000000000
+          Size.Width = 1196.000000000000000000
+          Size.Height = 24.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 3
+        end
+        object LayoutQuickActions: TLayout
+          Align = Top
+          Position.Y = 284.000000000000000000
+          Size.Width = 1196.000000000000000000
+          Size.Height = 200.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 4
+          object RectQuickActions: TRectangle
+            Align = Client
+            Fill.Color = claWhite
+            Size.Width = 1196.000000000000000000
+            Size.Height = 200.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutActionsContent: TLayout
+              Align = Client
+              Padding.Left = 20.000000000000000000
+              Padding.Top = 20.000000000000000000
+              Padding.Right = 20.000000000000000000
+              Padding.Bottom = 20.000000000000000000
+              Size.Width = 1196.000000000000000000
+              Size.Height = 200.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblQuickActions: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Position.X = 20.000000000000000000
+                Position.Y = 20.000000000000000000
+                Size.Width = 1156.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 18.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'Quick Actions'
+                TabOrder = 0
+              end
+              object LayoutButtons: TLayout
+                Align = Client
+                Size.Width = 1156.000000000000000000
+                Size.Height = 120.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 1
+                object btnAddDisplay: TButton
+                  Align = Left
+                  Size.Width = 150.000000000000000000
+                  Size.Height = 120.000000000000000000
+                  Size.PlatformDefault = False
+                  TabOrder = 0
+                  Text = '+ Add Display'
+                  TextSettings.Trimming = None
+                end
+                object btnCreateCampaign: TButton
+                  Align = Left
+                  Position.X = 150.000000000000000000
+                  Size.Width = 150.000000000000000000
+                  Size.Height = 120.000000000000000000
+                  Size.PlatformDefault = False
+                  TabOrder = 1
+                  Text = '+ Create Campaign'
+                  TextSettings.Trimming = None
+                end
+                object btnUploadMedia: TButton
+                  Align = Left
+                  Position.X = 300.000000000000000000
+                  Size.Width = 150.000000000000000000
+                  Size.Height = 120.000000000000000000
+                  Size.PlatformDefault = False
+                  TabOrder = 2
+                  Text = '+ Upload Media'
+                  TextSettings.Trimming = None
+                end
+              end
+            end
+          end
+        end
+        object LayoutBottom: TLayout
+          Align = Client
+          Size.Width = 1196.000000000000000000
+          Size.Height = 307.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 5
+        end
+      end
+    end
+  end
+end

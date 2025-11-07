@@ -1,0 +1,222 @@
+object Frame2: TFrame2
+  Size.Width = 908.000000000000000000
+  Size.Height = 800.000000000000000000
+  Size.PlatformDefault = False
+  object LayoutBackground: TLayout
+    Align = Client
+    Size.Width = 908.000000000000000000
+    Size.Height = 800.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object RectBackground: TRectangle
+      Align = Client
+      Fill.Kind = Gradient
+      Fill.Gradient.Points = <
+        item
+          Color = xFF3440DB
+          Offset = 0.000000000000000000
+        end
+        item
+          Color = xFF2980B9
+          Offset = 1.000000000000000000
+        end>
+      Fill.Gradient.StartPosition.X = 0.500000000000000000
+      Fill.Gradient.StartPosition.Y = 1.000000000000000000
+      Fill.Gradient.StopPosition.X = 0.499999970197677600
+      Fill.Gradient.StopPosition.Y = 0.000000000000000000
+      Size.Width = 908.000000000000000000
+      Size.Height = 800.000000000000000000
+      Size.PlatformDefault = False
+      object LayoutCenter: TLayout
+        Align = Center
+        Size.Width = 450.000000000000000000
+        Size.Height = 580.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        object RectCard: TRectangle
+          Align = Client
+          Fill.Color = claWhite
+          Size.Width = 450.000000000000000000
+          Size.Height = 580.000000000000000000
+          Size.PlatformDefault = False
+          Stroke.Kind = None
+          XRadius = 12.000000000000000000
+          YRadius = 12.000000000000000000
+          object LayoutContent: TLayout
+            Align = Client
+            Padding.Left = 40.000000000000000000
+            Padding.Top = 40.000000000000000000
+            Padding.Right = 40.000000000000000000
+            Padding.Bottom = 40.000000000000000000
+            Size.Width = 450.000000000000000000
+            Size.Height = 580.000000000000000000
+            Size.PlatformDefault = False
+            TabOrder = 0
+            object lblTitle: TLabel
+              Align = Top
+              StyledSettings = [Family, Style]
+              Position.X = 40.000000000000000000
+              Position.Y = 40.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 60.000000000000000000
+              Size.PlatformDefault = False
+              TextSettings.Font.Size = 24.000000000000000000
+              TextSettings.FontColor = xFF2C3E50
+              TextSettings.HorzAlign = Center
+              Text = 'Create Account'
+              TabOrder = 0
+            end
+            object LayoutSpacer1: TLayout
+              Align = Top
+              Position.X = 40.000000000000000000
+              Position.Y = 100.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 30.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 1
+            end
+            object edOrganizationName: TEdit
+              Touch.InteractiveGestures = [LongTap, DoubleTap]
+              Align = Top
+              TabOrder = 2
+              TextSettings.Font.Size = 14.000000000000000000
+              Position.X = 40.000000000000000000
+              Position.Y = 130.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 44.000000000000000000
+              Size.PlatformDefault = False
+              TextPrompt = 'Organization Name'
+              StyledSettings = [Family, Style, FontColor]
+              KillFocusByReturn = True
+            end
+            object LayoutSpacer2: TLayout
+              Align = Top
+              Position.X = 40.000000000000000000
+              Position.Y = 174.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 16.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 3
+            end
+            object edEmail: TEdit
+              Touch.InteractiveGestures = [LongTap, DoubleTap]
+              Align = Top
+              TabOrder = 4
+              TextSettings.Font.Size = 14.000000000000000000
+              Position.X = 40.000000000000000000
+              Position.Y = 190.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 44.000000000000000000
+              Size.PlatformDefault = False
+              TextPrompt = 'Email address'
+              StyledSettings = [Family, Style, FontColor]
+              KillFocusByReturn = True
+            end
+            object LayoutSpacer3: TLayout
+              Align = Top
+              Position.X = 40.000000000000000000
+              Position.Y = 234.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 16.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 5
+            end
+            object edPassword: TEdit
+              Touch.InteractiveGestures = [LongTap, DoubleTap]
+              Align = Top
+              TabOrder = 6
+              Password = True
+              TextSettings.Font.Size = 14.000000000000000000
+              Position.X = 40.000000000000000000
+              Position.Y = 250.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 44.000000000000000000
+              Size.PlatformDefault = False
+              TextPrompt = 'Password (min 6 characters)'
+              StyledSettings = [Family, Style, FontColor]
+              KillFocusByReturn = True
+            end
+            object LayoutSpacer4: TLayout
+              Align = Top
+              Position.X = 40.000000000000000000
+              Position.Y = 294.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 16.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 7
+            end
+            object edPasswordConfirm: TEdit
+              Touch.InteractiveGestures = [LongTap, DoubleTap]
+              Align = Top
+              TabOrder = 8
+              Password = True
+              TextSettings.Font.Size = 14.000000000000000000
+              Position.X = 40.000000000000000000
+              Position.Y = 310.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 44.000000000000000000
+              Size.PlatformDefault = False
+              TextPrompt = 'Confirm Password'
+              StyledSettings = [Family, Style, FontColor]
+              KillFocusByReturn = True
+            end
+            object LayoutSpacer5: TLayout
+              Align = Top
+              Position.X = 40.000000000000000000
+              Position.Y = 354.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 24.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 9
+            end
+            object btnRegister: TButton
+              Align = Top
+              StyledSettings = [Family, Style, FontColor]
+              Position.X = 40.000000000000000000
+              Position.Y = 378.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 44.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 10
+              Text = 'Create Account'
+              TextSettings.Font.Size = 16.000000000000000000
+              TextSettings.Trimming = None
+            end
+            object LayoutSpacer6: TLayout
+              Align = Top
+              Position.X = 40.000000000000000000
+              Position.Y = 422.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 20.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 11
+            end
+            object lblLogin: TLabel
+              Align = Top
+              Cursor = crHandPoint
+              StyledSettings = [Family, Size, Style]
+              HitTest = True
+              Position.X = 40.000000000000000000
+              Position.Y = 442.000000000000000000
+              Size.Width = 370.000000000000000000
+              Size.Height = 30.000000000000000000
+              Size.PlatformDefault = False
+              TextSettings.FontColor = xFF3498DB
+              TextSettings.HorzAlign = Center
+              Text = 'Already have an account? Login here'
+              TabOrder = 12
+              OnClick = lblLoginClick
+            end
+            object LayoutBottom: TLayout
+              Align = Client
+              Size.Width = 370.000000000000000000
+              Size.Height = 68.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 13
+            end
+          end
+        end
+      end
+    end
+  end
+end

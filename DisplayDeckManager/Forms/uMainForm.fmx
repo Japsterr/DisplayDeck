@@ -1,0 +1,183 @@
+object Form1: TForm1
+  Left = 0
+  Top = 0
+  Caption = 'DisplayDeck Manager'
+  ClientHeight = 700
+  ClientWidth = 1200
+  Position = DesktopCenter
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  OnCreate = FormCreate
+  DesignerMasterStyle = 0
+  object LayoutNavigation: TLayout
+    Align = Left
+    Size.Width = 240.000000000000000000
+    Size.Height = 700.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 1
+    object Rectangle1: TRectangle
+      Align = Client
+      Fill.Color = xFF2C3E50
+      Size.Width = 240.000000000000000000
+      Size.Height = 700.000000000000000000
+      Size.PlatformDefault = False
+      Stroke.Kind = None
+      object Layout1: TLayout
+        Align = Top
+        Padding.Left = 20.000000000000000000
+        Padding.Top = 10.000000000000000000
+        Padding.Right = 20.000000000000000000
+        Padding.Bottom = 20.000000000000000000
+        Size.Width = 240.000000000000000000
+        Size.Height = 80.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        object Label1: TLabel
+          Align = Client
+          StyledSettings = [Family]
+          Size.Width = 200.000000000000000000
+          Size.Height = 50.000000000000000000
+          Size.PlatformDefault = False
+          TextSettings.Font.Size = 18.000000000000000000
+          TextSettings.Font.StyleExt = {00070000000000000004000000}
+          TextSettings.FontColor = claWhite
+          TextSettings.HorzAlign = Center
+          Text = 'DisplayDeck Manager'
+          TabOrder = 0
+        end
+      end
+      object LayoutSpacer: TLayout
+        Align = Top
+        Position.Y = 80.000000000000000000
+        Size.Width = 240.000000000000000000
+        Size.Height = 20.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 1
+      end
+      object lstMenu: TListBox
+        Align = Client
+        Margins.Right = 8.000000000000000000
+        Margins.Bottom = 8.000000000000000000
+        Size.Width = 232.000000000000000000
+        Size.Height = 592.000000000000000000
+        Size.PlatformDefault = False
+        StyleLookup = 'transparentlistboxstyle'
+        TabOrder = 2
+        ShowScrollBars = False
+        DisableFocusEffect = True
+        ItemHeight = 48.000000000000000000
+        DefaultItemStyles.ItemStyle = ''
+        DefaultItemStyles.GroupHeaderStyle = ''
+        DefaultItemStyles.GroupFooterStyle = ''
+        OnItemClick = lstMenuItemClick
+        Viewport.Width = 232.000000000000000000
+        Viewport.Height = 592.000000000000000000
+        object ListBoxItem1: TListBoxItem
+          Tag = 1
+          TextSettings.Font.Size = 14.000000000000000000
+          TextSettings.FontColor = xFFECF0F1
+          StyledSettings = [Family, Style, Other]
+          Size.Width = 232.000000000000000000
+          Size.Height = 48.000000000000000000
+          Size.PlatformDefault = False
+          StyleLookup = 'listboxitemnodetail'
+          TabOrder = 0
+          Text = 'Dashboard'
+        end
+        object ListBoxItem2: TListBoxItem
+          Tag = 2
+          TextSettings.Font.Size = 14.000000000000000000
+          TextSettings.FontColor = xFFECF0F1
+          StyledSettings = [Family, Style, Other]
+          Position.Y = 48.000000000000000000
+          Size.Width = 232.000000000000000000
+          Size.Height = 48.000000000000000000
+          Size.PlatformDefault = False
+          StyleLookup = 'listboxitemnodetail'
+          TabOrder = 1
+          Text = 'Profile'
+        end
+        object ListBoxItem3: TListBoxItem
+          Tag = 3
+          TextSettings.Font.Size = 14.000000000000000000
+          TextSettings.FontColor = xFFECF0F1
+          StyledSettings = [Family, Style, Other]
+          Position.Y = 96.000000000000000000
+          Size.Width = 232.000000000000000000
+          Size.Height = 48.000000000000000000
+          Size.PlatformDefault = False
+          StyleLookup = 'listboxitemnodetail'
+          TabOrder = 2
+          Text = 'Displays'
+        end
+        object ListBoxItem4: TListBoxItem
+          Tag = 4
+          TextSettings.Font.Size = 14.000000000000000000
+          TextSettings.FontColor = xFFECF0F1
+          StyledSettings = [Family, Style, Other]
+          Position.Y = 144.000000000000000000
+          Size.Width = 232.000000000000000000
+          Size.Height = 48.000000000000000000
+          Size.PlatformDefault = False
+          StyleLookup = 'listboxitemnodetail'
+          TabOrder = 3
+          Text = 'Campaigns'
+        end
+        object ListBoxItem5: TListBoxItem
+          Tag = 5
+          TextSettings.Font.Size = 14.000000000000000000
+          TextSettings.FontColor = xFFECF0F1
+          StyledSettings = [Family, Style, Other]
+          Position.Y = 192.000000000000000000
+          Size.Width = 232.000000000000000000
+          Size.Height = 48.000000000000000000
+          Size.PlatformDefault = False
+          StyleLookup = 'listboxitemnodetail'
+          TabOrder = 4
+          Text = 'Media Library'
+        end
+        object ListBoxItem6: TListBoxItem
+          Tag = 6
+          TextSettings.Font.Size = 14.000000000000000000
+          TextSettings.FontColor = xFFECF0F1
+          StyledSettings = [Family, Style, Other]
+          Position.Y = 240.000000000000000000
+          Size.Width = 232.000000000000000000
+          Size.Height = 48.000000000000000000
+          Size.PlatformDefault = False
+          StyleLookup = 'listboxitemnodetail'
+          TabOrder = 5
+          Text = 'Analytics'
+        end
+        object ListBoxItem7: TListBoxItem
+          Tag = 7
+          TextSettings.Font.Size = 14.000000000000000000
+          TextSettings.FontColor = xFFECF0F1
+          StyledSettings = [Family, Style, Other]
+          Position.Y = 288.000000000000000000
+          Size.Width = 232.000000000000000000
+          Size.Height = 48.000000000000000000
+          Size.PlatformDefault = False
+          StyleLookup = 'listboxitemnodetail'
+          TabOrder = 6
+          Text = 'Settings'
+        end
+      end
+    end
+  end
+  object LayoutContent: TLayout
+    Align = Client
+    Size.Width = 960.000000000000000000
+    Size.Height = 700.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 2
+  end
+  object StyleBook1: TStyleBook
+    Styles = <
+      item
+      end>
+    Left = 840
+    Top = 80
+  end
+end

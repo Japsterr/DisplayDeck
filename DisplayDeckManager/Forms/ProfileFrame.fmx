@@ -1,0 +1,5 @@
+object Frame4: TFrame4
+  Size.Width = 571.000000000000000000
+  Size.Height = 447.000000000000000000
+  Size.PlatformDefault = False
+end
