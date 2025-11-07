@@ -1,5 +1,380 @@
 object Frame5: TFrame5
-  Size.Width = 320.000000000000000000
-  Size.Height = 240.000000000000000000
+  Size.Width = 1244.000000000000000000
+  Size.Height = 839.000000000000000000
   Size.PlatformDefault = False
+  object LayoutBackground: TLayout
+    Align = Client
+    Size.Width = 1244.000000000000000000
+    Size.Height = 839.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object RectBackground: TRectangle
+      Align = Client
+      Fill.Kind = Gradient
+      Fill.Gradient.Points = <
+        item
+          Color = xFF3498DB
+          Offset = 0.000000000000000000
+        end
+        item
+          Color = xFF2980B9
+          Offset = 1.000000000000000000
+        end>
+      Fill.Gradient.StartPosition.X = 0.500000000000000000
+      Fill.Gradient.StopPosition.X = 0.500000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      Stroke.Kind = None
+    end
+    object LayoutMain: TLayout
+      Align = Client
+      Padding.Left = 24.000000000000000000
+      Padding.Top = 24.000000000000000000
+      Padding.Right = 24.000000000000000000
+      Padding.Bottom = 24.000000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      object LayoutHeader: TLayout
+        Align = Top
+        Position.X = 24.000000000000000000
+        Position.Y = 24.000000000000000000
+        Size.Width = 1196.000000000000000000
+        Size.Height = 60.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        object lblTitle: TLabel
+          Align = Left
+          StyledSettings = [Family, Style]
+          Size.Width = 300.000000000000000000
+          Size.Height = 60.000000000000000000
+          Size.PlatformDefault = False
+          TextSettings.Font.Size = 24.000000000000000000
+          TextSettings.FontColor = xFF2C3E50
+          Text = 'Display Management'
+          TabOrder = 0
+        end
+        object btnAddDisplay: TButton
+          Align = Right
+          StyledSettings = [Family, Style]
+          Position.X = 1046.000000000000000000
+          Size.Width = 150.000000000000000000
+          Size.Height = 60.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+          Text = '+ Add Display'
+          TextSettings.Font.Size = 14.000000000000000000
+          TextSettings.FontColor = xFF2C3E50
+          TextSettings.Trimming = None
+          OnClick = btnAddDisplayClick
+        end
+      end
+      object LayoutContent: TLayout
+        Align = Client
+        Margins.Top = 16.000000000000000000
+        Size.Width = 1196.000000000000000000
+        Size.Height = 715.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 1
+        object LayoutListView: TLayout
+          Align = Left
+          Size.Width = 400.000000000000000000
+          Size.Height = 715.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+          object RectListCard: TRectangle
+            Align = Client
+            Fill.Color = claWhite
+            Size.Width = 400.000000000000000000
+            Size.Height = 715.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object ListView1: TListView
+              ItemAppearanceClassName = 'TListItemAppearance'
+              ItemEditAppearanceClassName = 'TListItemShowCheckAppearance'
+              HeaderAppearanceClassName = 'TListHeaderObjects'
+              FooterAppearanceClassName = 'TListHeaderObjects'
+              Align = Client
+              Margins.Left = 16.000000000000000000
+              Margins.Top = 16.000000000000000000
+              Margins.Right = 16.000000000000000000
+              Margins.Bottom = 16.000000000000000000
+              Size.Width = 368.000000000000000000
+              Size.Height = 683.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              ItemAppearance.ItemHeight = 80
+              OnItemClick = ListView1ItemClick
+            end
+          end
+        end
+        object LayoutDetailPanel: TLayout
+          Align = Client
+          Margins.Left = 16.000000000000000000
+          Size.Width = 780.000000000000000000
+          Size.Height = 715.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+          object RectDetailCard: TRectangle
+            Align = Client
+            Fill.Color = claWhite
+            Size.Width = 780.000000000000000000
+            Size.Height = 715.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutDetailContent: TLayout
+              Align = Client
+              Padding.Left = 20.000000000000000000
+              Padding.Top = 20.000000000000000000
+              Padding.Right = 20.000000000000000000
+              Padding.Bottom = 20.000000000000000000
+              Size.Width = 780.000000000000000000
+              Size.Height = 715.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblDetailTitle: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Position.X = 20.000000000000000000
+                Position.Y = 20.000000000000000000
+                Size.Width = 740.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 20.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'Display Details'
+                TabOrder = 0
+              end
+              object LayoutFormFields: TLayout
+                Align = Client
+                Margins.Top = 16.000000000000000000
+                Size.Width = 740.000000000000000000
+                Size.Height = 619.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 1
+                object VertScrollBox1: TVertScrollBox
+                  Align = Client
+                  Size.Width = 440.000000000000000000
+                  Size.Height = 619.000000000000000000
+                  Size.PlatformDefault = False
+                  TabOrder = 0
+                  Viewport.Width = 440.000000000000000000
+                  Viewport.Height = 619.000000000000000000
+                  object LayoutFormContent: TLayout
+                    Align = Top
+                    Size.Width = 440.000000000000000000
+                    Size.Height = 520.000000000000000000
+                    Size.PlatformDefault = False
+                    TabOrder = 0
+                    object lblNameLabel: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 13.000000000000000000
+                      TextSettings.FontColor = xFF7F8C8D
+                      Text = 'Display Name'
+                      TabOrder = 0
+                    end
+                    object edtName: TEdit
+                      Touch.InteractiveGestures = [LongTap, DoubleTap]
+                      Align = Top
+                      TabOrder = 1
+                      Position.Y = 30.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 40.000000000000000000
+                      Size.PlatformDefault = False
+                    end
+                    object LayoutSpacer1: TLayout
+                      Align = Top
+                      Position.Y = 70.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 16.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 2
+                    end
+                    object lblOrientationLabel: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Position.Y = 86.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 13.000000000000000000
+                      TextSettings.FontColor = xFF7F8C8D
+                      Text = 'Orientation'
+                      TabOrder = 3
+                    end
+                    object cboOrientation: TComboBox
+                      Align = Top
+                      Position.Y = 116.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 40.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 4
+                      OnChange = cboOrientationChange
+                    end
+                    object LayoutSpacer2: TLayout
+                      Align = Top
+                      Position.Y = 156.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 16.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 5
+                    end
+                    object lblStatusLabel: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Position.Y = 172.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 13.000000000000000000
+                      TextSettings.FontColor = xFF7F8C8D
+                      Text = 'Current Status'
+                      TabOrder = 6
+                    end
+                    object lblStatusValue: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Position.Y = 202.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 16.000000000000000000
+                      TextSettings.FontColor = xFF2C3E50
+                      Text = 'Offline'
+                      TabOrder = 7
+                    end
+                    object LayoutSpacer3: TLayout
+                      Align = Top
+                      Position.Y = 232.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 16.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 8
+                    end
+                    object lblLastSeenLabel: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Position.Y = 248.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 13.000000000000000000
+                      TextSettings.FontColor = xFF7F8C8D
+                      Text = 'Last Seen'
+                      TabOrder = 9
+                    end
+                    object lblLastSeenValue: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Position.Y = 278.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 16.000000000000000000
+                      TextSettings.FontColor = xFF2C3E50
+                      Text = 'Never'
+                      TabOrder = 10
+                    end
+                    object LayoutSpacer4: TLayout
+                      Align = Top
+                      Position.Y = 308.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 16.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 11
+                    end
+                    object lblProvisioningLabel: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Position.Y = 324.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 13.000000000000000000
+                      TextSettings.FontColor = xFF7F8C8D
+                      Text = 'Provisioning Token'
+                      TabOrder = 12
+                    end
+                    object lblProvisioningValue: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Position.Y = 354.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 14.000000000000000000
+                      TextSettings.FontColor = xFF95A5A6
+                      Text = 'Not generated'
+                      TabOrder = 13
+                    end
+                    object LayoutSpacer5: TLayout
+                      Align = Top
+                      Position.Y = 384.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 32.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 14
+                    end
+                    object LayoutButtons: TLayout
+                      Align = Top
+                      Position.Y = 416.000000000000000000
+                      Size.Width = 440.000000000000000000
+                      Size.Height = 104.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 15
+                      object btnSave: TButton
+                        Align = Top
+                        StyledSettings = [Family, Style]
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 44.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 0
+                        Text = 'Save Changes'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnSaveClick
+                      end
+                      object LayoutSpacer6: TLayout
+                        Align = Top
+                        Position.Y = 44.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 16.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 1
+                      end
+                      object btnDelete: TButton
+                        Align = Top
+                        StyledSettings = [Family, Style]
+                        Position.Y = 60.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 44.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 2
+                        Text = 'Delete Display'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnDeleteClick
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
 end

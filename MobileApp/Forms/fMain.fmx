@@ -1,0 +1,137 @@
+object MainForm: TMainForm
+  Left = 0
+  Top = 0
+  Caption = 'DisplayDeck Manager'
+  ClientHeight = 640
+  ClientWidth = 360
+  OnCreate = FormCreate
+  object Tabs: TTabControl
+    Align = Client
+    TabHeight = 48
+    TabPosition = Bottom
+    object TabHome: TTabItem
+      Text = 'Home'
+      object RectHomeBg: TRectangle
+        Align = Client
+        Stroke.Kind = None
+      end
+      object LabelHome: TLabel
+        Position.X = 12
+        Position.Y = 12
+        Text = 'Welcome to DisplayDeck'
+        TextSettings.FontColor = $FFF5F5F5
+        StyledSettings = [Family, Size]
+      end
+    end
+    object TabCampaigns: TTabItem
+      Text = 'Campaigns'
+      object RectCampBg: TRectangle
+        Align = Client
+        Stroke.Kind = None
+      end
+      object BtnRefreshCampaigns: TButton
+        Position.X = 8
+        Position.Y = 8
+        Text = 'Refresh'
+        OnClick = BtnRefreshCampaignsClick
+      end
+      object BtnAssignCampaign: TButton
+        Position.X = 96
+        Position.Y = 8
+        Width = 140
+        Text = 'Assign Selected'
+        OnClick = BtnAssignCampaignClick
+      end
+      object ListCampaigns: TListBox
+        Position.Y = 56
+        Align = Bottom
+        Height = 560
+      end
+    end
+    object TabMedia: TTabItem
+      Text = 'Media'
+      object RectMediaBg: TRectangle
+        Align = Client
+        Stroke.Kind = None
+      end
+      object LabelMedia: TLabel
+        Position.X = 12
+        Position.Y = 12
+        Text = 'Media Library (placeholder)'
+        TextSettings.FontColor = $FFF5F5F5
+        StyledSettings = [Family, Size]
+      end
+    end
+    object TabDisplays: TTabItem
+      Text = 'Devices'
+      object RectDevBg: TRectangle
+        Align = Client
+        Stroke.Kind = None
+      end
+      object BtnRefreshDisplays: TButton
+        Position.X = 8
+        Position.Y = 8
+        Text = 'Refresh'
+        OnClick = BtnRefreshDisplaysClick
+      end
+      object EditProvisioningToken: TEdit
+        Position.X = 96
+        Position.Y = 8
+        Width = 140
+        TextPrompt = 'Provisioning Token'
+      end
+      object BtnScanQR: TButton
+        Position.X = 240
+        Position.Y = 8
+        Width = 48
+        Text = 'QR'
+        OnClick = BtnScanQRClick
+      end
+      object BtnClaimDisplay: TButton
+        Position.X = 292
+        Position.Y = 8
+        Width = 60
+        Text = 'Claim'
+        OnClick = BtnClaimDisplayClick
+      end
+      object ListDisplays: TListBox
+        Position.Y = 56
+        Align = Bottom
+        Height = 560
+      end
+    end
+    object TabAccount: TTabItem
+      Text = 'Account'
+      object RectAccBg: TRectangle
+        Align = Client
+        Stroke.Kind = None
+      end
+      object Label1: TLabel
+        Position.X = 8
+        Position.Y = 8
+        Text = 'Settings'
+        TextSettings.FontColor = $FFF5F5F5
+      end
+      object EditBaseUrl: TEdit
+        Position.X = 8
+        Position.Y = 48
+        Width = 260
+        TextPrompt = 'Base URL'
+      end
+      object BtnSaveBaseUrl: TButton
+        Position.X = 276
+        Position.Y = 48
+        Width = 76
+        Text = 'Save'
+        OnClick = BtnSaveBaseUrlClick
+      end
+      object BtnLogout: TButton
+        Position.X = 8
+        Position.Y = 96
+        Width = 120
+        Text = 'Logout'
+        OnClick = BtnLogoutClick
+      end
+    end
+  end
+end

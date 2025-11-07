@@ -315,6 +315,7 @@ object Frame3: TFrame3
                   TabOrder = 0
                   Text = '+ Add Display'
                   TextSettings.Trimming = None
+                  OnClick = btnAddDisplayClick
                 end
                 object btnCreateCampaign: TButton
                   Align = Left
@@ -325,6 +326,7 @@ object Frame3: TFrame3
                   TabOrder = 1
                   Text = '+ Create Campaign'
                   TextSettings.Trimming = None
+                  OnClick = btnCreateCampaignClick
                 end
                 object btnUploadMedia: TButton
                   Align = Left
@@ -335,6 +337,7 @@ object Frame3: TFrame3
                   TabOrder = 2
                   Text = '+ Upload Media'
                   TextSettings.Trimming = None
+                  OnClick = btnUploadMediaClick
                 end
               end
             end

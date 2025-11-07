@@ -1,5 +1,284 @@
 object Frame9: TFrame9
-  Size.Width = 320.000000000000000000
-  Size.Height = 240.000000000000000000
+  Size.Width = 1244.000000000000000000
+  Size.Height = 839.000000000000000000
   Size.PlatformDefault = False
+  object LayoutBackground: TLayout
+    Align = Client
+    Size.Width = 1244.000000000000000000
+    Size.Height = 839.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object RectBackground: TRectangle
+      Align = Client
+      Fill.Kind = Gradient
+      Fill.Gradient.Points = <
+        item
+          Color = xFF95A5A6
+          Offset = 0.000000000000000000
+        end
+        item
+          Color = xFF7F8C8D
+          Offset = 1.000000000000000000
+        end>
+      Fill.Gradient.StartPosition.X = 0.500000000000000000
+      Fill.Gradient.StartPosition.Y = 1.000000000000000000
+      Fill.Gradient.StopPosition.X = 0.500000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      Stroke.Kind = None
+    end
+    object LayoutMain: TLayout
+      Align = Client
+      Padding.Left = 24.000000000000000000
+      Padding.Top = 24.000000000000000000
+      Padding.Right = 24.000000000000000000
+      Padding.Bottom = 24.000000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      object RectCard: TRectangle
+        Align = Center
+        Fill.Color = claWhite
+        Size.Width = 800.000000000000000000
+        Size.Height = 650.000000000000000000
+        Size.PlatformDefault = False
+        Stroke.Kind = None
+        XRadius = 12.000000000000000000
+        YRadius = 12.000000000000000000
+        object LayoutCardContent: TLayout
+          Align = Client
+          Padding.Left = 40.000000000000000000
+          Padding.Top = 40.000000000000000000
+          Padding.Right = 40.000000000000000000
+          Padding.Bottom = 40.000000000000000000
+          Size.Width = 800.000000000000000000
+          Size.Height = 650.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+          object lblTitle: TLabel
+            Align = Top
+            StyledSettings = [Family, Style]
+            Position.X = 40.000000000000000000
+            Position.Y = 40.000000000000000000
+            Size.Width = 720.000000000000000000
+            Size.Height = 40.000000000000000000
+            Size.PlatformDefault = False
+            TextSettings.Font.Size = 24.000000000000000000
+            TextSettings.FontColor = xFF2C3E50
+            Text = 'Application Settings'
+            TabOrder = 0
+          end
+          object ScrollBoxSettings: TVertScrollBox
+            Align = Client
+            Margins.Top = 16.000000000000000000
+            Size.Width = 720.000000000000000000
+            Size.Height = 446.000000000000000000
+            Size.PlatformDefault = False
+            TabOrder = 1
+            Viewport.Width = 720.000000000000000000
+            Viewport.Height = 502.000000000000000000
+            object LayoutForm: TLayout
+              Align = Top
+              Size.Width = 720.000000000000000000
+              Size.Height = 500.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblSectionGeneral: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 8.000000000000000000
+                Position.Y = 8.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'General Settings'
+                TabOrder = 0
+              end
+              object lblLanguage: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 54.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Language'
+                TabOrder = 1
+              end
+              object cmbLanguage: TComboBox
+                Align = Top
+                Items.Strings = (
+                  'English'
+                  'Spanish'
+                  'French'
+                  'German')
+                ItemIndex = 0
+                Margins.Top = 4.000000000000000000
+                Position.Y = 78.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 2
+              end
+              object lblRefreshInterval: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 134.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Auto Refresh Interval (seconds)'
+                TabOrder = 3
+              end
+              object edtRefreshInterval: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 4
+                KeyboardType = NumberPad
+                Text = '30'
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 158.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+              end
+              object lblSectionNotifications: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 32.000000000000000000
+                Position.Y = 230.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'Notifications'
+                TabOrder = 5
+              end
+              object chkEmailNotifications: TCheckBox
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 276.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 32.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 6
+                Text = 'Enable email notifications'
+                TextSettings.Font.Size = 14.000000000000000000
+              end
+              object chkDisplayOfflineAlerts: TCheckBox
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 8.000000000000000000
+                Position.Y = 316.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 32.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 7
+                Text = 'Alert when displays go offline'
+                TextSettings.Font.Size = 14.000000000000000000
+              end
+              object chkCampaignEndAlerts: TCheckBox
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 8.000000000000000000
+                Position.Y = 356.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 32.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 8
+                Text = 'Alert when campaigns are ending'
+                TextSettings.Font.Size = 14.000000000000000000
+              end
+              object lblSectionAPI: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 32.000000000000000000
+                Position.Y = 420.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'API Configuration'
+                TabOrder = 9
+              end
+              object lblAPIEndpoint: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 466.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'API Endpoint URL'
+                TabOrder = 10
+              end
+              object edtAPIEndpoint: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 11
+                Text = 'http://localhost:2001/tms/xdata'
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 490.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+              end
+            end
+          end
+          object LayoutButtons: TLayout
+            Align = Bottom
+            Margins.Top = 16.000000000000000000
+            Position.X = 40.000000000000000000
+            Position.Y = 558.000000000000000000
+            Size.Width = 720.000000000000000000
+            Size.Height = 52.000000000000000000
+            Size.PlatformDefault = False
+            TabOrder = 2
+            object btnSaveSettings: TButton
+              Align = Right
+              StyledSettings = [Family, Style]
+              Position.X = 612.000000000000000000
+              Size.Width = 108.000000000000000000
+              Size.Height = 52.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              Text = 'Save Settings'
+              TextSettings.Font.Size = 14.000000000000000000
+              TextSettings.FontColor = xFF2C3E50
+              TextSettings.Trimming = None
+              OnClick = btnSaveSettingsClick
+            end
+            object btnResetDefaults: TButton
+              Align = Left
+              StyledSettings = [Family, Style]
+              Size.Width = 140.000000000000000000
+              Size.Height = 52.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 1
+              Text = 'Reset to Defaults'
+              TextSettings.Font.Size = 14.000000000000000000
+              TextSettings.FontColor = xFF95A5A6
+              TextSettings.Trimming = None
+              OnClick = btnResetDefaultsClick
+            end
+          end
+        end
+      end
+    end
+  end
 end

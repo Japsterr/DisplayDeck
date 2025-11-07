@@ -1,5 +1,268 @@
 object Frame8: TFrame8
-  Size.Width = 320.000000000000000000
-  Size.Height = 240.000000000000000000
+  Size.Width = 1244.000000000000000000
+  Size.Height = 839.000000000000000000
   Size.PlatformDefault = False
+  object LayoutBackground: TLayout
+    Align = Client
+    Size.Width = 1244.000000000000000000
+    Size.Height = 839.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object RectBackground: TRectangle
+      Align = Client
+      Fill.Kind = Gradient
+      Fill.Gradient.Points = <
+        item
+          Color = xFF34495E
+          Offset = 0.000000000000000000
+        end
+        item
+          Color = xFF2C3E50
+          Offset = 1.000000000000000000
+        end>
+      Fill.Gradient.StartPosition.X = 0.500000000000000000
+      Fill.Gradient.StartPosition.Y = 1.000000000000000000
+      Fill.Gradient.StopPosition.X = 0.500000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      Stroke.Kind = None
+    end
+    object LayoutMain: TLayout
+      Align = Client
+      Padding.Left = 24.000000000000000000
+      Padding.Top = 24.000000000000000000
+      Padding.Right = 24.000000000000000000
+      Padding.Bottom = 24.000000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      object LayoutHeader: TLayout
+        Align = Top
+        Position.X = 24.000000000000000000
+        Position.Y = 24.000000000000000000
+        Size.Width = 1196.000000000000000000
+        Size.Height = 60.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        object lblTitle: TLabel
+          Align = Left
+          StyledSettings = [Family, Style]
+          Size.Width = 300.000000000000000000
+          Size.Height = 60.000000000000000000
+          Size.PlatformDefault = False
+          TextSettings.Font.Size = 24.000000000000000000
+          TextSettings.FontColor = claWhite
+          Text = 'Analytics'
+          TabOrder = 0
+        end
+      end
+      object LayoutContent: TLayout
+        Align = Client
+        Margins.Top = 16.000000000000000000
+        Size.Width = 1196.000000000000000000
+        Size.Height = 715.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 1
+        object LayoutStats: TLayout
+          Align = Top
+          Size.Width = 1196.000000000000000000
+          Size.Height = 160.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+          object RectStatCard1: TRectangle
+            Align = Left
+            Fill.Color = xFFFFFFFF
+            Margins.Right = 12.000000000000000000
+            Size.Width = 380.000000000000000000
+            Size.Height = 160.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutStatContent1: TLayout
+              Align = Client
+              Padding.Left = 24.000000000000000000
+              Padding.Top = 24.000000000000000000
+              Padding.Right = 24.000000000000000000
+              Padding.Bottom = 24.000000000000000000
+              Size.Width = 380.000000000000000000
+              Size.Height = 160.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblStat1Title: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Size.Width = 332.000000000000000000
+                Size.Height = 24.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Total Impressions'
+                TabOrder = 0
+              end
+              object lblStat1Value: TLabel
+                Align = Client
+                StyledSettings = [Family, Style]
+                Margins.Top = 8.000000000000000000
+                Size.Width = 332.000000000000000000
+                Size.Height = 80.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 32.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = '125,430'
+                TabOrder = 1
+              end
+            end
+          end
+          object RectStatCard2: TRectangle
+            Align = Left
+            Fill.Color = xFFFFFFFF
+            Margins.Right = 12.000000000000000000
+            Position.X = 392.000000000000000000
+            Size.Width = 380.000000000000000000
+            Size.Height = 160.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutStatContent2: TLayout
+              Align = Client
+              Padding.Left = 24.000000000000000000
+              Padding.Top = 24.000000000000000000
+              Padding.Right = 24.000000000000000000
+              Padding.Bottom = 24.000000000000000000
+              Size.Width = 380.000000000000000000
+              Size.Height = 160.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblStat2Title: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Size.Width = 332.000000000000000000
+                Size.Height = 24.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Active Campaigns'
+                TabOrder = 0
+              end
+              object lblStat2Value: TLabel
+                Align = Client
+                StyledSettings = [Family, Style]
+                Margins.Top = 8.000000000000000000
+                Size.Width = 332.000000000000000000
+                Size.Height = 80.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 32.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = '24'
+                TabOrder = 1
+              end
+            end
+          end
+          object RectStatCard3: TRectangle
+            Align = Left
+            Fill.Color = xFFFFFFFF
+            Position.X = 784.000000000000000000
+            Size.Width = 380.000000000000000000
+            Size.Height = 160.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutStatContent3: TLayout
+              Align = Client
+              Padding.Left = 24.000000000000000000
+              Padding.Top = 24.000000000000000000
+              Padding.Right = 24.000000000000000000
+              Padding.Bottom = 24.000000000000000000
+              Size.Width = 380.000000000000000000
+              Size.Height = 160.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblStat3Title: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Size.Width = 332.000000000000000000
+                Size.Height = 24.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Average Play Time'
+                TabOrder = 0
+              end
+              object lblStat3Value: TLabel
+                Align = Client
+                StyledSettings = [Family, Style]
+                Margins.Top = 8.000000000000000000
+                Size.Width = 332.000000000000000000
+                Size.Height = 80.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 32.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = '45s'
+                TabOrder = 1
+              end
+            end
+          end
+        end
+        object LayoutCharts: TLayout
+          Align = Client
+          Margins.Top = 16.000000000000000000
+          Size.Width = 1196.000000000000000000
+          Size.Height = 539.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+          object RectChartCard: TRectangle
+            Align = Client
+            Fill.Color = xFFFFFFFF
+            Size.Width = 1196.000000000000000000
+            Size.Height = 539.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            XRadius = 12.000000000000000000
+            YRadius = 12.000000000000000000
+            object LayoutChartContent: TLayout
+              Align = Client
+              Padding.Left = 24.000000000000000000
+              Padding.Top = 24.000000000000000000
+              Padding.Right = 24.000000000000000000
+              Padding.Bottom = 24.000000000000000000
+              Size.Width = 1196.000000000000000000
+              Size.Height = 539.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblChartTitle: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Size.Width = 1148.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 18.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'Campaign Performance (Last 30 Days)'
+                TabOrder = 0
+              end
+              object lblChartPlaceholder: TLabel
+                Align = Client
+                Margins.Top = 16.000000000000000000
+                StyledSettings = [Family, Style]
+                Size.Width = 1148.000000000000000000
+                Size.Height = 445.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 14.000000000000000000
+                TextSettings.FontColor = xFF95A5A6
+                TextSettings.HorzAlign = Center
+                TextSettings.VertAlign = Center
+                Text = 'Chart component will be implemented here'#13#10'(Line charts, bar charts, pie charts for campaign analytics)'
+                TabOrder = 1
+              end
+            end
+          end
+        end
+      end
+    end
+  end
 end

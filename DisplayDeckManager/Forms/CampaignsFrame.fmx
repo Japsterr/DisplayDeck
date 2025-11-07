@@ -1,5 +1,317 @@
 object Frame6: TFrame6
-  Size.Width = 320.000000000000000000
-  Size.Height = 240.000000000000000000
+  Size.Width = 1244.000000000000000000
+  Size.Height = 839.000000000000000000
   Size.PlatformDefault = False
+  object LayoutBackground: TLayout
+    Align = Client
+    Size.Width = 1244.000000000000000000
+    Size.Height = 839.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object RectBackground: TRectangle
+      Align = Client
+      Fill.Kind = Gradient
+      Fill.Gradient.Points = <
+        item
+          Color = xFFFF6B6B
+          Offset = 0.000000000000000000
+        end
+        item
+          Color = xFFEE5A24
+          Offset = 1.000000000000000000
+        end>
+      Fill.Gradient.StartPosition.X = 0.500000000000000000
+      Fill.Gradient.StartPosition.Y = 1.000000000000000000
+      Fill.Gradient.StopPosition.X = 0.499999970197677600
+      Fill.Gradient.StopPosition.Y = 0.000000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      object LayoutMain: TLayout
+        Align = Client
+        Padding.Left = 24.000000000000000000
+        Padding.Top = 24.000000000000000000
+        Padding.Right = 24.000000000000000000
+        Padding.Bottom = 24.000000000000000000
+        Size.Width = 1244.000000000000000000
+        Size.Height = 839.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        object LayoutHeader: TLayout
+          Align = Top
+          Size.Width = 1196.000000000000000000
+          Size.Height = 60.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+          object lblTitle: TLabel
+            Align = Left
+            StyledSettings = [Family, Style]
+            Size.Width = 300.000000000000000000
+            Size.Height = 60.000000000000000000
+            Size.PlatformDefault = False
+            TextSettings.Font.Size = 24.000000000000000000
+            TextSettings.FontColor = claWhite
+            Text = 'Campaign Management'
+            TabOrder = 0
+          end
+          object btnAddCampaign: TButton
+            Align = Right
+            StyledSettings = [Family, Style]
+            Position.X = 1046.000000000000000000
+            Size.Width = 150.000000000000000000
+            Size.Height = 44.000000000000000000
+            Size.PlatformDefault = False
+            TabOrder = 1
+            Text = '+ New Campaign'
+            TextSettings.Font.Size = 14.000000000000000000
+            TextSettings.FontColor = xFF2C3E50
+            TextSettings.Trimming = None
+            OnClick = btnAddCampaignClick
+          end
+        end
+        object LayoutContent: TLayout
+          Align = Client
+          Margins.Top = 16.000000000000000000
+          Size.Width = 1196.000000000000000000
+          Size.Height = 715.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+          object LayoutListView: TLayout
+            Align = Left
+            Size.Width = 400.000000000000000000
+            Size.Height = 715.000000000000000000
+            Size.PlatformDefault = False
+            TabOrder = 0
+            object RectListCard: TRectangle
+              Align = Client
+              Fill.Color = claWhite
+              Size.Width = 400.000000000000000000
+              Size.Height = 715.000000000000000000
+              Size.PlatformDefault = False
+              Stroke.Kind = None
+              XRadius = 12.000000000000000000
+              YRadius = 12.000000000000000000
+              object ListView1: TListView
+                ItemAppearanceClassName = 'TListItemAppearance'
+                ItemEditAppearanceClassName = 'TListItemShowCheckAppearance'
+                HeaderAppearanceClassName = 'TListHeaderObjects'
+                FooterAppearanceClassName = 'TListHeaderObjects'
+                Align = Client
+                Margins.Left = 16.000000000000000000
+                Margins.Top = 16.000000000000000000
+                Margins.Right = 16.000000000000000000
+                Margins.Bottom = 16.000000000000000000
+                Size.Width = 368.000000000000000000
+                Size.Height = 683.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 0
+                ItemAppearance.ItemHeight = 80
+                OnItemClick = ListView1ItemClick
+              end
+            end
+          end
+          object LayoutDetailPanel: TLayout
+            Align = Client
+            Margins.Left = 16.000000000000000000
+            Size.Width = 780.000000000000000000
+            Size.Height = 715.000000000000000000
+            Size.PlatformDefault = False
+            TabOrder = 1
+            object RectDetailCard: TRectangle
+              Align = Client
+              Fill.Color = claWhite
+              Size.Width = 780.000000000000000000
+              Size.Height = 715.000000000000000000
+              Size.PlatformDefault = False
+              Stroke.Kind = None
+              XRadius = 12.000000000000000000
+              YRadius = 12.000000000000000000
+              object LayoutDetailContent: TLayout
+                Align = Client
+                Padding.Left = 20.000000000000000000
+                Padding.Top = 20.000000000000000000
+                Padding.Right = 20.000000000000000000
+                Padding.Bottom = 20.000000000000000000
+                Size.Width = 780.000000000000000000
+                Size.Height = 715.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 0
+                object lblDetailTitle: TLabel
+                  Align = Top
+                  StyledSettings = [Family, Style]
+                  Size.Width = 740.000000000000000000
+                  Size.Height = 40.000000000000000000
+                  Size.PlatformDefault = False
+                  TextSettings.Font.Size = 20.000000000000000000
+                  TextSettings.FontColor = xFF2C3E50
+                  Text = 'Campaign Details'
+                  TabOrder = 0
+                end
+                object VertScrollBox1: TVertScrollBox
+                  Align = Client
+                  Margins.Top = 16.000000000000000000
+                  Size.Width = 740.000000000000000000
+                  Size.Height = 619.000000000000000000
+                  Size.PlatformDefault = False
+                  TabOrder = 1
+                  Viewport.Width = 740.000000000000000000
+                  Viewport.Height = 619.000000000000000000
+                  object LayoutFormContent: TLayout
+                    Align = Top
+                    Size.Width = 740.000000000000000000
+                    Size.Height = 380.000000000000000000
+                    Size.PlatformDefault = False
+                    TabOrder = 0
+                    object lblNameLabel: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Size.Width = 740.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 13.000000000000000000
+                      TextSettings.FontColor = xFF7F8C8D
+                      Text = 'Campaign Name'
+                      TabOrder = 0
+                    end
+                    object edtName: TEdit
+                      Touch.InteractiveGestures = [LongTap, DoubleTap]
+                      Align = Top
+                      TabOrder = 1
+                      Position.Y = 30.000000000000000000
+                      Size.Width = 740.000000000000000000
+                      Size.Height = 40.000000000000000000
+                      Size.PlatformDefault = False
+                    end
+                    object LayoutSpacer1: TLayout
+                      Align = Top
+                      Position.Y = 70.000000000000000000
+                      Size.Width = 740.000000000000000000
+                      Size.Height = 16.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 2
+                    end
+                    object lblOrientationLabel: TLabel
+                      Align = Top
+                      StyledSettings = [Family, Style]
+                      Position.Y = 86.000000000000000000
+                      Size.Width = 740.000000000000000000
+                      Size.Height = 30.000000000000000000
+                      Size.PlatformDefault = False
+                      TextSettings.Font.Size = 13.000000000000000000
+                      TextSettings.FontColor = xFF7F8C8D
+                      Text = 'Orientation (displays must match to use this campaign)'
+                      TabOrder = 3
+                    end
+                    object cboOrientation: TComboBox
+                      Align = Top
+                      Position.Y = 116.000000000000000000
+                      Size.Width = 740.000000000000000000
+                      Size.Height = 40.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 4
+                    end
+                    object LayoutSpacer2: TLayout
+                      Align = Top
+                      Position.Y = 156.000000000000000000
+                      Size.Width = 740.000000000000000000
+                      Size.Height = 32.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 5
+                    end
+                    object LayoutButtons: TLayout
+                      Align = Top
+                      Position.Y = 188.000000000000000000
+                      Size.Width = 740.000000000000000000
+                      Size.Height = 192.000000000000000000
+                      Size.PlatformDefault = False
+                      TabOrder = 6
+                      object btnSave: TButton
+                        Align = Top
+                        Size.Width = 740.000000000000000000
+                        Size.Height = 44.000000000000000000
+                        Size.PlatformDefault = False
+                        StyledSettings = [Family, Style]
+                        TabOrder = 0
+                        Text = 'Save Campaign'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnSaveClick
+                      end
+                      object LayoutSpacer3: TLayout
+                        Align = Top
+                        Position.Y = 44.000000000000000000
+                        Size.Width = 740.000000000000000000
+                        Size.Height = 16.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 1
+                      end
+                      object btnManageMedia: TButton
+                        Align = Top
+                        Position.Y = 60.000000000000000000
+                        Size.Width = 740.000000000000000000
+                        Size.Height = 44.000000000000000000
+                        Size.PlatformDefault = False
+                        StyledSettings = [Family, Style]
+                        TabOrder = 2
+                        Text = 'Manage Media Items'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnManageMediaClick
+                      end
+                      object LayoutSpacer4: TLayout
+                        Align = Top
+                        Position.Y = 104.000000000000000000
+                        Size.Width = 740.000000000000000000
+                        Size.Height = 16.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 3
+                      end
+                      object btnAssignDisplays: TButton
+                        Align = Top
+                        Position.Y = 120.000000000000000000
+                        Size.Width = 740.000000000000000000
+                        Size.Height = 44.000000000000000000
+                        Size.PlatformDefault = False
+                        StyledSettings = [Family, Style]
+                        TabOrder = 4
+                        Text = 'Assign to Displays'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnAssignDisplaysClick
+                      end
+                      object LayoutSpacer5: TLayout
+                        Align = Top
+                        Position.Y = 164.000000000000000000
+                        Size.Width = 740.000000000000000000
+                        Size.Height = 16.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 5
+                      end
+                      object btnDelete: TButton
+                        Align = Top
+                        Position.Y = 180.000000000000000000
+                        Size.Width = 740.000000000000000000
+                        Size.Height = 44.000000000000000000
+                        Size.PlatformDefault = False
+                        StyledSettings = [Family, Style]
+                        TabOrder = 6
+                        Text = 'Delete Campaign'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnDeleteClick
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
 end

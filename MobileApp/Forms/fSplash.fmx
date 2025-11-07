@@ -1,0 +1,16 @@
+object SplashForm: TSplashForm
+  Left = 1451
+  Top = 430
+  Caption = 'DisplayDeck'
+  ClientHeight = 640
+  ClientWidth = 360
+  Position = Designed
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop, iPhone, iPad]
+  OnCreate = FormCreate
+  OnShow = FormShow
+  Left = 1451
+  Top = 430
+  DesignerMasterStyle = 0
+end

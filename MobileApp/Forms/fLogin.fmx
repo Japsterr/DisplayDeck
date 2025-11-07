@@ -1,0 +1,81 @@
+object LoginForm: TLoginForm
+  Left = 0
+  Top = 0
+  Caption = 'DisplayDeck Login'
+  ClientHeight = 600
+  ClientWidth = 360
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop, iPhone, iPad]
+  OnCreate = FormCreate
+  Visible = True
+  DesignerMasterStyle = 0
+  object RectBackground: TRectangle
+    Align = Client
+    Stroke.Kind = None
+  end
+  object LayoutRoot: TLayout
+    Align = Client
+    object RectCard: TRectangle
+      Position.X = 20.000000000000000000
+      Position.Y = 100.000000000000000000
+      Size.Width = 320.000000000000000000
+      Size.Height = 360.000000000000000000
+      Size.PlatformDefault = False
+      XRadius = 12.000000000000000000
+      YRadius = 12.000000000000000000
+      Stroke.Kind = None
+      object LabelTitle: TLabel
+        Position.X = 16.000000000000000000
+        Position.Y = 16.000000000000000000
+        Text = 'DisplayDeck'
+        TextSettings.Font.Size = 24.000000000000000000
+        TextSettings.FontColor = $FFF5F5F5
+      end
+      object EditEmail: TEdit
+        Position.X = 16.000000000000000000
+        Position.Y = 72.000000000000000000
+        Size.Width = 288.000000000000000000
+        Size.Height = 32.000000000000000000
+        Size.PlatformDefault = False
+        TextPrompt = 'Email'
+        KeyboardType = EmailAddress
+      end
+      object EditPassword: TEdit
+        Position.X = 16.000000000000000000
+        Position.Y = 120.000000000000000000
+        Size.Width = 288.000000000000000000
+        Size.Height = 32.000000000000000000
+        Size.PlatformDefault = False
+        TextPrompt = 'Password'
+        Password = True
+      end
+      object BtnLogin: TButton
+        Position.X = 16.000000000000000000
+        Position.Y = 180.000000000000000000
+        Size.Width = 288.000000000000000000
+        Size.Height = 36.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Login'
+        OnClick = BtnLoginClick
+      end
+      object BtnRegister: TButton
+        Position.X = 16.000000000000000000
+        Position.Y = 228.000000000000000000
+        Size.Width = 288.000000000000000000
+        Size.Height = 36.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Register'
+        OnClick = BtnRegisterClick
+      end
+      object LabelMessage: TLabel
+        Position.X = 16.000000000000000000
+        Position.Y = 280.000000000000000000
+        Size.Width = 288.000000000000000000
+        Size.Height = 17.000000000000000000
+        Size.PlatformDefault = False
+        TextSettings.FontColor = $FFFF453A
+      end
+    end
+  end
+end

@@ -1,0 +1,16 @@
+UPInternet=1
+IncludeSplash=1
+IncludeNotificationAccentColor=1
+Debuggable=1
+ProjectName=DisplayDeckMobile
+CompanyName=
+FileDescription=
+FileVersion=1.0.0.0
+InternalName=
+LegalCopyright=
+LegalTrademarks=
+OriginalFilename=
+ProductName=
+ProductVersion=1.0.0.0
+Comments=
+CFBundleName=

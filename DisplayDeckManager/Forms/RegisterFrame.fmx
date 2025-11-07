@@ -181,6 +181,7 @@ object Frame2: TFrame2
               Text = 'Create Account'
               TextSettings.Font.Size = 16.000000000000000000
               TextSettings.Trimming = None
+              OnClick = btnRegisterClick
             end
             object LayoutSpacer6: TLayout
               Align = Top

@@ -1,5 +1,307 @@
 object Frame4: TFrame4
-  Size.Width = 571.000000000000000000
-  Size.Height = 447.000000000000000000
+  Size.Width = 1244.000000000000000000
+  Size.Height = 839.000000000000000000
   Size.PlatformDefault = False
+  object LayoutBackground: TLayout
+    Align = Client
+    Size.Width = 1244.000000000000000000
+    Size.Height = 839.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object RectBackground: TRectangle
+      Align = Client
+      Fill.Kind = Gradient
+      Fill.Gradient.Points = <
+        item
+          Color = xFF1DD1A5
+          Offset = 0.000000000000000000
+        end
+        item
+          Color = xFF10A881
+          Offset = 1.000000000000000000
+        end>
+      Fill.Gradient.StartPosition.X = 0.500000000000000000
+      Fill.Gradient.StartPosition.Y = 1.000000000000000000
+      Fill.Gradient.StopPosition.X = 0.500000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      Stroke.Kind = None
+    end
+    object LayoutMain: TLayout
+      Align = Client
+      Padding.Left = 24.000000000000000000
+      Padding.Top = 24.000000000000000000
+      Padding.Right = 24.000000000000000000
+      Padding.Bottom = 24.000000000000000000
+      Size.Width = 1244.000000000000000000
+      Size.Height = 839.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      object RectCard: TRectangle
+        Align = Center
+        Fill.Color = xFFFFFFFF
+        Size.Width = 800.000000000000000000
+        Size.Height = 650.000000000000000000
+        Size.PlatformDefault = False
+        Stroke.Kind = None
+        XRadius = 12.000000000000000000
+        YRadius = 12.000000000000000000
+        object LayoutCardContent: TLayout
+          Align = Client
+          Padding.Left = 40.000000000000000000
+          Padding.Top = 40.000000000000000000
+          Padding.Right = 40.000000000000000000
+          Padding.Bottom = 40.000000000000000000
+          Size.Width = 800.000000000000000000
+          Size.Height = 650.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+          object lblTitle: TLabel
+            Align = Top
+            StyledSettings = [Family, Style]
+            Size.Width = 720.000000000000000000
+            Size.Height = 40.000000000000000000
+            Size.PlatformDefault = False
+            TextSettings.Font.Size = 24.000000000000000000
+            TextSettings.FontColor = xFF2C3E50
+            Text = 'Profile & Settings'
+            TabOrder = 0
+          end
+          object ScrollBoxProfile: TVertScrollBox
+            Align = Client
+            Margins.Top = 16.000000000000000000
+            Size.Width = 720.000000000000000000
+            Size.Height = 502.000000000000000000
+            Size.PlatformDefault = False
+            TabOrder = 1
+            Viewport.Width = 720.000000000000000000
+            Viewport.Height = 502.000000000000000000
+            object LayoutForm: TLayout
+              Align = Top
+              Size.Width = 720.000000000000000000
+              Size.Height = 600.000000000000000000
+              Size.PlatformDefault = False
+              TabOrder = 0
+              object lblSectionUser: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 8.000000000000000000
+                Position.Y = 8.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'User Information'
+                TabOrder = 0
+              end
+              object lblFullName: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 54.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Full Name'
+                TabOrder = 1
+              end
+              object edtFullName: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 2
+                Position.Y = 74.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+                TextSettings.Font.Size = 14.000000000000000000
+              end
+              object lblEmail: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 130.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Email'
+                TabOrder = 3
+              end
+              object edtEmail: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 4
+                Position.Y = 150.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+                TextSettings.Font.Size = 14.000000000000000000
+                ReadOnly = True
+              end
+              object lblSectionOrganization: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 32.000000000000000000
+                Position.Y = 222.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'Organization'
+                TabOrder = 5
+              end
+              object lblOrgName: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 268.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Organization Name'
+                TabOrder = 6
+              end
+              object edtOrgName: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 7
+                Position.Y = 288.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+                TextSettings.Font.Size = 14.000000000000000000
+              end
+              object lblSubscription: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 344.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Subscription Tier'
+                TabOrder = 8
+              end
+              object edtSubscription: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 9
+                Position.Y = 364.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+                TextSettings.Font.Size = 14.000000000000000000
+                ReadOnly = True
+              end
+              object lblSectionSecurity: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 32.000000000000000000
+                Position.Y = 436.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'Change Password'
+                TabOrder = 10
+              end
+              object lblNewPassword: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 482.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'New Password'
+                TabOrder = 11
+              end
+              object edtNewPassword: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 12
+                Password = True
+                Position.Y = 502.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+                TextSettings.Font.Size = 14.000000000000000000
+              end
+              object lblConfirmPassword: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 558.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 12.000000000000000000
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Confirm Password'
+                TabOrder = 13
+              end
+              object edtConfirmPassword: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 14
+                Password = True
+                Position.Y = 578.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+                TextSettings.Font.Size = 14.000000000000000000
+              end
+            end
+          end
+          object LayoutButtons: TLayout
+            Align = Bottom
+            Margins.Top = 16.000000000000000000
+            Position.Y = 558.000000000000000000
+            Size.Width = 720.000000000000000000
+            Size.Height = 52.000000000000000000
+            Size.PlatformDefault = False
+            TabOrder = 2
+            object btnSaveProfile: TButton
+              Align = Right
+              Position.X = 612.000000000000000000
+              Size.Width = 108.000000000000000000
+              Size.Height = 52.000000000000000000
+              Size.PlatformDefault = False
+              StyledSettings = [Family, Style]
+              TabOrder = 0
+              Text = 'Save Changes'
+              TextSettings.Font.Size = 14.000000000000000000
+              TextSettings.FontColor = xFF2C3E50
+              OnClick = btnSaveProfileClick
+            end
+          end
+        end
+      end
+    end
+  end
 end

@@ -5,11 +5,12 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
-  FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts;
+  FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, uApiClient;
 
 type
   // Event types
-  TRegisterSuccessEvent = procedure(Sender: TObject) of object;
+  TRegisterSuccessEvent = procedure(Sender: TObject; const AToken: string; 
+    AUserId, AOrganizationId: Integer; const AUserName, AEmail, AOrgName: string) of object;
   TLoginRequestEvent = procedure(Sender: TObject) of object;
 
   TFrame2 = class(TFrame)
@@ -51,39 +52,53 @@ implementation
 {$R *.fmx}
 
 procedure TFrame2.btnRegisterClick(Sender: TObject);
+var
+  RegisterResult: TRegisterResponse;
 begin
   // Validate input
   if not ValidateInput then
     Exit;
 
-  // TODO: Call API client to register
-  // For now, just show what we'd do:
-  
   // Disable button to prevent double-clicks
   btnRegister.Enabled := False;
   btnRegister.Text := 'Creating account...';
   
-  // This is where we'll call the API
-  // Example:
-  // var Response := TApiClient.Instance.PostJson('/auth/register', 
-  //   '{"Email":"' + edEmail.Text + 
-  //   '","Password":"' + edPassword.Text + 
-  //   '","OrganizationName":"' + edOrganizationName.Text + '"}');
-  
-  // For now, simulate success (REMOVE THIS LATER)
-  ShowMessage('Registration would happen here with:' + #13#10 + 
-              'Organization: ' + edOrganizationName.Text + #13#10 +
-              'Email: ' + edEmail.Text + #13#10 +
-              'Password: ' + edPassword.Text);
-  
-  // Reset button state BEFORE triggering event (which may destroy this frame)
-  btnRegister.Enabled := True;
-  btnRegister.Text := 'Create Account';
-  
-  // On success, trigger the event
-  // This may destroy the frame, so nothing should execute after this
-  if Assigned(FOnRegisterSuccess) then
-    FOnRegisterSuccess(Self);
+  try
+    // Call API to register
+    RegisterResult := TApiClient.Instance.Register(edEmail.Text, edPassword.Text, 
+      edOrganizationName.Text);
+    
+    if RegisterResult.Success then
+    begin
+      // Show success confirmation to user
+      ShowMessage('Account created successfully! Logging you in...');
+      
+      // Clear password fields for security
+      edPassword.Text := '';
+      edPasswordConfirm.Text := '';
+      
+      // Note: Backend auto-creates organization and returns user data
+      // We use the token and userId from response
+      // Trigger success event with registration data
+      if Assigned(FOnRegisterSuccess) then
+        FOnRegisterSuccess(Self, RegisterResult.Token, RegisterResult.UserId, 
+          RegisterResult.OrganizationId, edEmail.Text, edEmail.Text, edOrganizationName.Text);
+    end
+    else
+    begin
+      // Show error message
+      ShowError(RegisterResult.Message);
+      btnRegister.Enabled := True;
+      btnRegister.Text := 'Create Account';
+    end;
+  except
+    on E: Exception do
+    begin
+      ShowError('Registration failed: ' + E.Message);
+      btnRegister.Enabled := True;
+      btnRegister.Text := 'Create Account';
+    end;
+  end;
 end;
 
 procedure TFrame2.lblLoginClick(Sender: TObject);

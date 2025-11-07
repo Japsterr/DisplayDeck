@@ -7,7 +7,7 @@ uses
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Objects,
   FMX.Layouts, LoginFrame, RegisterFrame, DashboardFrame, FMX.ListBox,
   FMX.Controls.Presentation, FMX.StdCtrls, ProfileFrame, DisplaysFrame,
-  CampaignsFrame, MediaLibraryFrame, AnalyticsFrame, SettingsFrame;
+  CampaignsFrame, MediaLibraryFrame, AnalyticsFrame, SettingsFrame, uApiClient;
 
 type
   TMenuSection = (msNone, msDashboard, msProfile, msDisplays, 
@@ -36,6 +36,12 @@ type
     { Private declarations }
     FCurrentFrame: TFrame;
     FCurrentSection: TMenuSection;
+    FCurrentUserName: string;
+    FCurrentUserEmail: string;
+    FCurrentUserId: Integer;
+    FCurrentOrgId: Integer;
+    FCurrentOrgName: string;
+    FAuthToken: string;
     procedure LoadLoginFrame;
     procedure LoadRegisterFrame;
     procedure LoadDashboardFrame;
@@ -45,10 +51,13 @@ type
     procedure LoadMediaLibraryFrame;
     procedure LoadAnalyticsFrame;
     procedure LoadSettingsFrame;
-    procedure HandleLoginSuccess(Sender: TObject);
+    procedure HandleLoginSuccess(Sender: TObject; const AToken: string; 
+      AUserId, AOrganizationId: Integer; const AUserName, AEmail, AOrgName: string);
     procedure HandleRegisterRequest(Sender: TObject);
-    procedure HandleRegisterSuccess(Sender: TObject);
+    procedure HandleRegisterSuccess(Sender: TObject; const AToken: string; 
+      AUserId, AOrganizationId: Integer; const AUserName, AEmail, AOrgName: string);
     procedure HandleLoginRequest(Sender: TObject);
+    procedure HandleNavigateToSection(const SectionTag: Integer);
     procedure ClearCurrentFrame;
     procedure LoadSection(ASection: TMenuSection);
   public
@@ -64,6 +73,14 @@ implementation
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
+  // Initialize fields to prevent garbage values
+  FCurrentUserId := 0;
+  FCurrentOrgId := 0;
+  FAuthToken := '';
+  FCurrentUserName := '';
+  FCurrentUserEmail := '';
+  FCurrentOrgName := '';
+  
   // Hide navigation panel initially (show after login)
   LayoutNavigation.Visible := False;
   
@@ -136,6 +153,10 @@ begin
   DashboardFrm.Parent := LayoutContent;
   DashboardFrm.Align := TAlignLayout.Client;
   
+  // Initialize with user name and wire up navigation event
+  DashboardFrm.Initialize(FCurrentUserName);
+  DashboardFrm.OnNavigateToSection := HandleNavigateToSection;
+  
   FCurrentFrame := DashboardFrm;
   FCurrentSection := msDashboard;
   
@@ -155,6 +176,7 @@ begin
   ProfileFrm := TFrame4.Create(Self);
   ProfileFrm.Parent := LayoutContent;
   ProfileFrm.Align := TAlignLayout.Client;
+  ProfileFrm.Initialize(FCurrentUserId, FCurrentOrgId, FCurrentUserName, FCurrentUserEmail);
   FCurrentFrame := ProfileFrm;
   FCurrentSection := msProfile;
 end;
@@ -167,6 +189,7 @@ begin
   DisplaysFrm := TFrame5.Create(Self);
   DisplaysFrm.Parent := LayoutContent;
   DisplaysFrm.Align := TAlignLayout.Client;
+  DisplaysFrm.Initialize(FCurrentOrgId);
   FCurrentFrame := DisplaysFrm;
   FCurrentSection := msDisplays;
 end;
@@ -179,6 +202,7 @@ begin
   CampaignsFrm := TFrame6.Create(Self);
   CampaignsFrm.Parent := LayoutContent;
   CampaignsFrm.Align := TAlignLayout.Client;
+  CampaignsFrm.Initialize(FCurrentOrgId);
   FCurrentFrame := CampaignsFrm;
   FCurrentSection := msCampaigns;
 end;
@@ -191,6 +215,7 @@ begin
   MediaFrm := TFrame7.Create(Self);
   MediaFrm.Parent := LayoutContent;
   MediaFrm.Align := TAlignLayout.Client;
+  MediaFrm.Initialize(FCurrentOrgId);
   FCurrentFrame := MediaFrm;
   FCurrentSection := msMedia;
 end;
@@ -203,6 +228,7 @@ begin
   AnalyticsFrm := TFrame8.Create(Self);
   AnalyticsFrm.Parent := LayoutContent;
   AnalyticsFrm.Align := TAlignLayout.Client;
+  AnalyticsFrm.Initialize(FCurrentOrgId);
   FCurrentFrame := AnalyticsFrm;
   FCurrentSection := msAnalytics;
 end;
@@ -215,6 +241,7 @@ begin
   SettingsFrm := TFrame9.Create(Self);
   SettingsFrm.Parent := LayoutContent;
   SettingsFrm.Align := TAlignLayout.Client;
+  SettingsFrm.Initialize;
   FCurrentFrame := SettingsFrm;
   FCurrentSection := msSettings;
 end;
@@ -256,8 +283,20 @@ begin
   LoadSection(Section);
 end;
 
-procedure TForm1.HandleLoginSuccess(Sender: TObject);
+procedure TForm1.HandleLoginSuccess(Sender: TObject; const AToken: string; 
+  AUserId, AOrganizationId: Integer; const AUserName, AEmail, AOrgName: string);
 begin
+  // Store user data from login response
+  FAuthToken := AToken;
+  FCurrentUserId := AUserId;
+  FCurrentOrgId := AOrganizationId;
+  FCurrentUserName := AUserName;
+  FCurrentUserEmail := AEmail;
+  FCurrentOrgName := AOrgName;
+  
+  // Set token in API client for subsequent requests
+  TApiClient.Instance.SetAuthToken(AToken);
+  
   // Switch to dashboard after successful login
   LoadDashboardFrame;
 end;
@@ -265,14 +304,24 @@ end;
 procedure TForm1.HandleRegisterRequest(Sender: TObject);
 begin
   // User clicked "Register here" on login frame
-  ShowMessage('Register clicked - about to load register frame');
   LoadRegisterFrame;
 end;
 
-procedure TForm1.HandleRegisterSuccess(Sender: TObject);
+procedure TForm1.HandleRegisterSuccess(Sender: TObject; const AToken: string; 
+  AUserId, AOrganizationId: Integer; const AUserName, AEmail, AOrgName: string);
 begin
+  // Store user data from registration response
+  FAuthToken := AToken;
+  FCurrentUserId := AUserId;
+  FCurrentOrgId := AOrganizationId;
+  FCurrentUserName := AUserName;
+  FCurrentUserEmail := AEmail;
+  FCurrentOrgName := AOrgName;
+  
+  // Set token in API client for subsequent requests
+  TApiClient.Instance.SetAuthToken(AToken);
+  
   // After successful registration, auto-login to dashboard
-  // (In real implementation, the register API returns a token)
   LoadDashboardFrame;
 end;
 
@@ -280,6 +329,31 @@ procedure TForm1.HandleLoginRequest(Sender: TObject);
 begin
   // User clicked "Login here" on register frame
   LoadLoginFrame;
+end;
+
+procedure TForm1.HandleNavigateToSection(const SectionTag: Integer);
+var
+  Section: TMenuSection;
+begin
+  // Map tag to section
+  case SectionTag of
+    1: Section := msDashboard;
+    2: Section := msProfile;
+    3: Section := msDisplays;
+    4: Section := msCampaigns;
+    5: Section := msMedia;
+    6: Section := msAnalytics;
+    7: Section := msSettings;
+  else
+    Exit;
+  end;
+  
+  // Load the selected section
+  LoadSection(Section);
+  
+  // Update menu selection
+  if (SectionTag >= 1) and (SectionTag <= lstMenu.Items.Count) then
+    lstMenu.ItemIndex := SectionTag - 1;
 end;
 
 end.
