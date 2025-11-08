@@ -86,7 +86,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.DateUtils;
+  System.DateUtils, FMX.DialogService, FMX.DialogService.Sync;
 
 { TFrame5 }
 
@@ -157,7 +157,7 @@ begin
     end;
   except
     on E: Exception do
-      ShowMessage('Error loading displays: ' + E.Message);
+      TDialogService.ShowMessage('Error loading displays: ' + E.Message);
   end;
 end;
 
@@ -260,14 +260,14 @@ begin
   
   if Trim(edtName.Text) = '' then
   begin
-    ShowMessage('Please enter a display name.');
+    TDialogService.ShowMessage('Please enter a display name.');
     edtName.SetFocus;
     Exit;
   end;
   
   if cboOrientation.ItemIndex < 0 then
   begin
-    ShowMessage('Please select an orientation.');
+    TDialogService.ShowMessage('Please select an orientation.');
     Exit;
   end;
   
@@ -329,7 +329,7 @@ begin
         DisplayData.Orientation
       );
       
-      ShowMessage('Display "' + DisplayData.Name + '" created successfully');
+      TDialogService.ShowMessage('Display "' + DisplayData.Name + '" created successfully');
       LoadDisplays;
       EnableDetailPanel(False);
       ClearDisplayDetails;
@@ -346,14 +346,14 @@ begin
       
       ResultDisplay := TApiClient.Instance.UpdateDisplay(ApiDisplay);
       
-      ShowMessage('Display "' + DisplayData.Name + '" updated successfully');
+      TDialogService.ShowMessage('Display "' + DisplayData.Name + '" updated successfully');
       LoadDisplays;
       EnableDetailPanel(False);
       ClearDisplayDetails;
     end;
   except
     on E: Exception do
-      ShowMessage('Error saving display: ' + E.Message);
+      TDialogService.ShowMessage('Error saving display: ' + E.Message);
   end;
 end;
 
@@ -361,9 +361,9 @@ procedure TFrame5.btnDeleteClick(Sender: TObject);
 begin
   if FIsNewDisplay then Exit;
   
-  if MessageDlg('Are you sure you want to delete this display?', 
+  if TDialogServiceSync.MessageDialog('Are you sure you want to delete this display?', 
                 TMsgDlgType.mtConfirmation, 
-                [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], 0) = mrYes then
+                [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], TMsgDlgBtn.mbNo, 0) = mrYes then
   begin
     DeleteDisplay;
   end;
@@ -382,16 +382,16 @@ begin
     
     if Success then
     begin
-      ShowMessage('Display "' + FDisplays[Index].Name + '" deleted successfully');
+      TDialogService.ShowMessage('Display "' + FDisplays[Index].Name + '" deleted successfully');
       LoadDisplays;
       EnableDetailPanel(False);
       ClearDisplayDetails;
     end
     else
-      ShowMessage('Failed to delete display');
+      TDialogService.ShowMessage('Failed to delete display');
   except
     on E: Exception do
-      ShowMessage('Error deleting display: ' + E.Message);
+      TDialogService.ShowMessage('Error deleting display: ' + E.Message);
   end;
 end;
 

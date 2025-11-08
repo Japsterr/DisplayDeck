@@ -82,7 +82,7 @@ object Frame9: TFrame9
             object LayoutForm: TLayout
               Align = Top
               Size.Width = 720.000000000000000000
-              Size.Height = 500.000000000000000000
+              Size.Height = 860.000000000000000000
               Size.PlatformDefault = False
               TabOrder = 0
               object lblSectionGeneral: TLabel
@@ -237,6 +237,106 @@ object Frame9: TFrame9
                 Size.Height = 40.000000000000000000
                 Size.PlatformDefault = False
                 StyledSettings = [Family, Style]
+              end
+              object lblSectionDebug: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 32.000000000000000000
+                Position.Y = 534.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'Network Debug'
+                TabOrder = 12
+              end
+              object lblLastRequestUrl: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 580.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Last Request URL'
+                TabOrder = 13
+              end
+              object edtLastRequestUrl: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 14
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 604.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+              end
+              object lblLastStatus: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 648.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Last Status Code'
+                TabOrder = 15
+              end
+              object edtLastStatus: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 16
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 672.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+              end
+              object lblLastBody: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Position.Y = 716.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Last Response Body (truncated)'
+                TabOrder = 17
+              end
+              object edtLastBody: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 18
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 740.000000000000000000
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                StyledSettings = [Family, Style]
+              end
+              object btnRefreshDebug: TButton
+                Align = Top
+                StyledSettings = [Family, Style]
+                Position.Y = 784.000000000000000000
+                Margins.Top = 12.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 40.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 19
+                Text = 'Refresh Debug Info'
+                TextSettings.Font.Size = 14.000000000000000000
+                TextSettings.FontColor = xFF2C3E50
+                TextSettings.Trimming = None
+                OnClick = btnRefreshDebugClick
               end
             end
           end

@@ -64,7 +64,7 @@ implementation
 {$R *.fmx}
 
 uses
-  FMX.DialogService;
+  FMX.DialogService, FMX.DialogService.Sync, System.IOUtils;
 
 // API Base: http://localhost:2001/tms/xdata
 // Endpoints:
@@ -107,7 +107,12 @@ begin
       end;
     except
       on E: Exception do
-        ShowMessage('Error loading media files: ' + E.Message);
+        TDialogService.ShowMessage(
+          'Error loading media files: ' + E.Message + sLineBreak +
+          'URL: ' + TApiClient.Instance.LastURL + sLineBreak +
+          'Status: ' + TApiClient.Instance.LastResponseCode.ToString + sLineBreak +
+          'Body: ' + TApiClient.Instance.LastResponseBody
+        );
     end;
   finally
     lvMediaFiles.EndUpdate;
@@ -124,43 +129,35 @@ begin
 end;
 
 procedure TFrame7.LoadMediaDetails(AMediaId: Integer);
+var
+  M: uApiClient.TMediaFileData;
+  SizeText: string;
 begin
-  // TODO: API call to GET /media-files/{AMediaId}
-  // For now, populate with sample data
-  case AMediaId of
-    1: begin
-      edtFileName.Text := 'promo_video.mp4';
-      edtFileType.Text := 'video/mp4';
-      edtFileSize.Text := '2.4 MB';
-      edtDuration.Text := '30';
-      edtTags.Text := 'promo, video, advertisement';
+  try
+    M := TApiClient.Instance.GetMediaFile(AMediaId);
+    if M.Id = 0 then
+    begin
+      TDialogService.ShowMessage('Failed to load media details');
+      Exit;
     end;
-    2: begin
-      edtFileName.Text := 'banner_ad.jpg';
-      edtFileType.Text := 'image/jpeg';
-      edtFileSize.Text := '512 KB';
-      edtDuration.Text := '10';
-      edtTags.Text := 'banner, image, static';
-    end;
-    3: begin
-      edtFileName.Text := 'product_showcase.mp4';
-      edtFileType.Text := 'video/mp4';
-      edtFileSize.Text := '5.1 MB';
-      edtDuration.Text := '60';
-      edtTags.Text := 'product, showcase, video';
-    end;
+    edtFileName.Text := M.FileName;
+    edtFileType.Text := M.FileType;
+    if M.FileSize > 1024*1024 then
+      SizeText := Format('%.1f MB',[M.FileSize/1024/1024])
+    else if M.FileSize > 1024 then
+      SizeText := Format('%.1f KB',[M.FileSize/1024])
+    else
+      SizeText := IntToStr(M.FileSize) + ' B';
+    edtFileSize.Text := SizeText;
+    if M.Duration > 0 then
+      edtDuration.Text := IntToStr(M.Duration)
+    else
+      edtDuration.Text := '';
+    edtTags.Text := M.Tags;
+  except
+    on E: Exception do
+      TDialogService.ShowMessage('Error loading details: ' + E.Message);
   end;
-end;
-
-procedure TFrame7.ClearForm;
-begin
-  FSelectedMediaId := -1;
-  edtFileName.Text := '';
-  edtFileType.Text := '';
-  edtFileSize.Text := '';
-  edtDuration.Text := '';
-  edtTags.Text := '';
-  imgPreview.Bitmap := nil;
 end;
 
 procedure TFrame7.btnUploadMediaClick(Sender: TObject);
@@ -169,39 +166,52 @@ var
   UploadResult: uApiClient.TMediaUploadResponse;
   Success: Boolean;
   FileName: string;
+  FileType: string;
+  ContentLen: Int64;
 begin
   OpenDialog := TOpenDialog.Create(nil);
   try
     OpenDialog.Filter := 'Media Files|*.jpg;*.jpeg;*.png;*.gif;*.mp4;*.avi;*.mov;*.wmv|All Files|*.*';
     OpenDialog.Options := [TOpenOption.ofFileMustExist];
-    
+
     if OpenDialog.Execute then
     begin
       FileName := ExtractFileName(OpenDialog.FileName);
-      
       try
-        // Step 1: Request upload URL from API
-        UploadResult := TApiClient.Instance.RequestMediaUpload;
-        
+        if SameText(ExtractFileExt(OpenDialog.FileName), '.png') then FileType := 'image/png'
+        else if SameText(ExtractFileExt(OpenDialog.FileName), '.jpg') or SameText(ExtractFileExt(OpenDialog.FileName), '.jpeg') then FileType := 'image/jpeg'
+        else if SameText(ExtractFileExt(OpenDialog.FileName), '.gif') then FileType := 'image/gif'
+        else if SameText(ExtractFileExt(OpenDialog.FileName), '.mp4') then FileType := 'video/mp4'
+        else FileType := 'application/octet-stream';
+        ContentLen := TFile.GetSize(OpenDialog.FileName);
+
+        UploadResult := TApiClient.Instance.RequestMediaUpload(FOrganizationId, FileName, FileType, ContentLen);
         if not UploadResult.Success then
         begin
-          ShowMessage('Failed to request upload URL: ' + UploadResult.Message);
+          TDialogService.ShowMessage(
+            'Failed to request upload URL: ' + UploadResult.Message + sLineBreak +
+            'URL: ' + TApiClient.Instance.LastURL + sLineBreak +
+            'Status: ' + TApiClient.Instance.LastResponseCode.ToString + sLineBreak +
+            'Body: ' + TApiClient.Instance.LastResponseBody
+          );
           Exit;
         end;
-        
-        // Step 2: Upload file to the signed URL
         Success := TApiClient.Instance.UploadMediaFile(UploadResult.UploadUrl, OpenDialog.FileName);
-        
         if Success then
         begin
-          ShowMessage('File "' + FileName + '" uploaded successfully');
-          LoadMediaFiles; // Refresh the list
+          TDialogService.ShowMessage('File "' + FileName + '" uploaded successfully');
+          LoadMediaFiles;
         end
         else
-          ShowMessage('Failed to upload file');
+          TDialogService.ShowMessage(
+            'Failed to upload file' + sLineBreak +
+            'PUT URL: ' + UploadResult.UploadUrl + sLineBreak +
+            'Status: ' + TApiClient.Instance.LastResponseCode.ToString + sLineBreak +
+            'Body: ' + TApiClient.Instance.LastResponseBody
+          );
       except
         on E: Exception do
-          ShowMessage('Error uploading file: ' + E.Message);
+          TDialogService.ShowMessage('Error uploading file: ' + E.Message);
       end;
     end;
   finally
@@ -224,20 +234,30 @@ begin
   if FSelectedMediaId = -1 then
     Exit;
   
-  if MessageDlg('Are you sure you want to delete this media file?', 
+  if TDialogServiceSync.MessageDialog('Are you sure you want to delete this media file?',
                 TMsgDlgType.mtConfirmation, 
-                [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], 0) = mrYes then
+                [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], TMsgDlgBtn.mbNo, 0) = mrYes then
   begin
     // TODO: API call to DELETE /media-files/{FSelectedMediaId}
     ClearForm;
     LoadMediaFiles;
-    ShowMessage('Media file deleted successfully');
+    TDialogService.ShowMessage('Media file deleted successfully');
   end;
 end;
 
 procedure TFrame7.btnClearMediaClick(Sender: TObject);
 begin
   ClearForm;
+end;
+
+procedure TFrame7.ClearForm;
+begin
+  FSelectedMediaId := -1;
+  edtFileName.Text := '';
+  edtFileType.Text := '';
+  edtFileSize.Text := '';
+  edtDuration.Text := '';
+  edtTags.Text := '';
 end;
 
 end.

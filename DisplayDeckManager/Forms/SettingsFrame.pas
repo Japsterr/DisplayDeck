@@ -6,7 +6,7 @@ uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
   FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, FMX.Edit, FMX.ListBox,
-  System.IOUtils;
+  System.IOUtils, uApiClient;
 
 type
   TFrame9 = class(TFrame)
@@ -31,12 +31,22 @@ type
     lblAPIEndpoint: TLabel;
     edtAPIEndpoint: TEdit;
     LayoutButtons: TLayout;
+    lblSectionDebug: TLabel;
+    lblLastRequestUrl: TLabel;
+    edtLastRequestUrl: TEdit;
+    lblLastStatus: TLabel;
+    edtLastStatus: TEdit;
+    lblLastBody: TLabel;
+    edtLastBody: TEdit;
+    btnRefreshDebug: TButton;
     procedure btnSaveSettingsClick(Sender: TObject);
     procedure btnResetDefaultsClick(Sender: TObject);
+    procedure btnRefreshDebugClick(Sender: TObject);
   private
     procedure LoadSettings;
     procedure SaveSettings;
     procedure ResetToDefaults;
+    procedure PopulateDebugInfo;
   public
     procedure Initialize;
   end;
@@ -46,7 +56,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.JSON, FMX.DialogService, System.IniFiles;
+  System.JSON, FMX.DialogService, FMX.DialogService.Sync, System.IniFiles;
 
 // Settings are stored locally in an INI file
 // Future: Could sync to API for user preferences
@@ -54,6 +64,7 @@ uses
 procedure TFrame9.Initialize;
 begin
   LoadSettings;
+  PopulateDebugInfo;
 end;
 
 procedure TFrame9.LoadSettings;
@@ -120,12 +131,27 @@ end;
 
 procedure TFrame9.btnResetDefaultsClick(Sender: TObject);
 begin
-  if MessageDlg('Are you sure you want to reset all settings to defaults?', TMsgDlgType.mtConfirmation, 
-     [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], 0) = mrYes then
+  if TDialogServiceSync.MessageDialog('Are you sure you want to reset all settings to defaults?',
+     TMsgDlgType.mtConfirmation, [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], TMsgDlgBtn.mbNo, 0) = mrYes then
   begin
     ResetToDefaults;
     ShowMessage('Settings reset to defaults');
   end;
+end;
+
+procedure TFrame9.PopulateDebugInfo;
+begin
+  if TApiClient.Instance <> nil then
+  begin
+    edtLastRequestUrl.Text := TApiClient.Instance.LastURL;
+    edtLastStatus.Text := IntToStr(TApiClient.Instance.LastResponseCode);
+    edtLastBody.Text := Copy(TApiClient.Instance.LastResponseBody, 1, 4000); // truncate for UI
+  end;
+end;
+
+procedure TFrame9.btnRefreshDebugClick(Sender: TObject);
+begin
+  PopulateDebugInfo;
 end;
 
 end.

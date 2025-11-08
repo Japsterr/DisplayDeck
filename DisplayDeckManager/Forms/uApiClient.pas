@@ -3,8 +3,8 @@ unit uApiClient;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.JSON, System.Net.HttpClient,
-  System.Net.URLClient, FMX.Dialogs;
+  System.SysUtils, System.Classes, System.JSON, FMX.Dialogs,
+  IdHTTP, IdSSLOpenSSL, IdGlobal;
 
 type
   // Response wrapper types
@@ -81,7 +81,7 @@ type
   // Singleton API Client
   TApiClient = class
   private
-    FHttpClient: THTTPClient;
+    FHttpClient: TIdHTTP;
     FBaseURL: string;
     FAuthToken: string;
     FLastURL: string;
@@ -90,7 +90,9 @@ type
     class var FInstance: TApiClient;
     constructor Create;
     function DoRequest(const AMethod, APath: string; ABody: TJSONObject = nil): TApiResponse;
-    function ParseError(const AResponse: IHTTPResponse): string;
+    // Case-insensitive JSON value fetch helper
+    function GetJsonValueCI(AObj: TJSONObject; const AName: string): TJSONValue;
+    function RewriteMinioHost(const AUrl: string): string;
   public
     destructor Destroy; override;
     class function Instance: TApiClient;
@@ -126,7 +128,8 @@ type
 
     // Media endpoints
     function GetMediaFiles(AOrganizationId: Integer): TArray<TMediaFileData>;
-    function RequestMediaUpload: TMediaUploadResponse;
+    function GetMediaFile(AMediaFileId: Integer): TMediaFileData;
+    function RequestMediaUpload(AOrganizationId: Integer; const AFileName, AFileType: string; AContentLength: Int64): TMediaUploadResponse;
     function UploadMediaFile(const AUploadUrl, AFilePath: string): Boolean;
     function GetMediaDownloadUrl(AMediaFileId: Integer): string;
   end;
@@ -141,9 +144,14 @@ uses
 constructor TApiClient.Create;
 begin
   inherited;
-  FHttpClient := THTTPClient.Create;
-  FBaseURL := 'http://localhost:2001';
+  FHttpClient := TIdHTTP.Create(nil);
+  FHttpClient.Request.ContentType := 'application/json';
+  FHttpClient.Request.Accept := 'application/json';
+  // All API endpoints are now rooted at /api
+  FBaseURL := 'http://localhost:2001/api';
   FAuthToken := '';
+  // Avoid header folding issues for long JWT values
+  FHttpClient.Request.CustomHeaders.FoldLines := False;
 end;
 
 destructor TApiClient.Destroy;
@@ -183,34 +191,12 @@ begin
   Result := FAuthToken;
 end;
 
-function TApiClient.ParseError(const AResponse: IHTTPResponse): string;
-var
-  JsonObj: TJSONObject;
-  ErrorObj: TJSONObject;
-begin
-  Result := 'Unknown error';
-  try
-    JsonObj := TJSONObject.ParseJSONValue(AResponse.ContentAsString) as TJSONObject;
-    if Assigned(JsonObj) then
-    try
-      if JsonObj.TryGetValue<TJSONObject>('error', ErrorObj) then
-        Result := ErrorObj.GetValue<string>('message', 'Unknown error')
-      else
-        Result := AResponse.ContentAsString;
-    finally
-      JsonObj.Free;
-    end;
-  except
-    Result := AResponse.ContentAsString;
-  end;
-end;
-
 function TApiClient.DoRequest(const AMethod, APath: string; ABody: TJSONObject = nil): TApiResponse;
 var
-  Response: IHTTPResponse;
   URL: string;
   RequestStream: TStringStream;
-  OwnsBody: Boolean;
+  ResponseStream: TStringStream;
+  ResponseStr: string;
 begin
   Result.Success := False;
   Result.Data := nil;
@@ -219,74 +205,79 @@ begin
   
   URL := FBaseURL + APath;
   
-  // Add token as query parameter if present (fallback for THTTPClient CustomHeaders issues)
+  // Token handling (header + query) as per server behavior
   if FAuthToken <> '' then
   begin
-    // Don't URL encode - JWT tokens are already URL-safe (base64url encoding)
+    FHttpClient.Request.CustomHeaders.Values['X-Auth-Token'] := FAuthToken.Trim;
     if Pos('?', URL) > 0 then
-      URL := URL + '&access_token=' + FAuthToken
+      URL := URL + '&access_token=' + FAuthToken.Trim
     else
-      URL := URL + '?access_token=' + FAuthToken;
+      URL := URL + '?access_token=' + FAuthToken.Trim;
   end;
   
   FLastURL := URL;
   RequestStream := nil;
-  OwnsBody := False;
+  ResponseStream := nil;
   
   try
-    // Set content type first
-    FHttpClient.ContentType := 'application/json';
-    
-    // Also try setting headers (may not work in all cases)
-    if FAuthToken <> '' then
-    begin
-      FHttpClient.CustomHeaders['X-Auth-Token'] := FAuthToken;
-      FHttpClient.CustomHeaders['Authorization'] := 'Bearer ' + FAuthToken;
-    end;
-    
     // Prepare request body
     if Assigned(ABody) then
-    begin
       RequestStream := TStringStream.Create(ABody.ToJSON, TEncoding.UTF8);
-    end;
     
-    // Execute request
-    if AMethod = 'GET' then
-      Response := FHttpClient.Get(URL)
-    else if AMethod = 'POST' then
-      Response := FHttpClient.Post(URL, RequestStream)
-    else if AMethod = 'PUT' then
-      Response := FHttpClient.Put(URL, RequestStream)
-    else if AMethod = 'DELETE' then
-      Response := FHttpClient.Delete(URL)
-    else
-      raise Exception.Create('Unsupported HTTP method: ' + AMethod);
+    ResponseStream := TStringStream.Create('', TEncoding.UTF8);
     
-    Result.StatusCode := Response.StatusCode;
-    FLastResponseCode := Response.StatusCode;
-    FLastResponseBody := Response.ContentAsString;
-    
-    // Handle response
-    if (Response.StatusCode >= 200) and (Response.StatusCode < 300) then
-    begin
-      Result.Success := True;
-      if Response.ContentAsString <> '' then
+    // Execute request with TIdHTTP
+    try
+      if AMethod = 'GET' then
+        ResponseStr := FHttpClient.Get(URL)
+      else if AMethod = 'POST' then
+        ResponseStr := FHttpClient.Post(URL, RequestStream)
+      else if AMethod = 'PUT' then
+        ResponseStr := FHttpClient.Put(URL, RequestStream)
+      else if AMethod = 'DELETE' then
       begin
-        try
-          Result.Data := TJSONObject.ParseJSONValue(Response.ContentAsString);
-        except
-          on E: Exception do
-          begin
-            Result.Success := False;
-            Result.ErrorMessage := 'JSON parse error: ' + E.Message;
+        FHttpClient.Delete(URL);
+        ResponseStr := '';
+      end
+      else
+        raise Exception.Create('Unsupported HTTP method: ' + AMethod);
+      
+      Result.StatusCode := FHttpClient.ResponseCode;
+      FLastResponseCode := FHttpClient.ResponseCode;
+      FLastResponseBody := ResponseStr;
+      
+      // Handle response
+      if (FHttpClient.ResponseCode >= 200) and (FHttpClient.ResponseCode < 300) then
+      begin
+        Result.Success := True;
+        if ResponseStr <> '' then
+        begin
+          try
+            Result.Data := TJSONObject.ParseJSONValue(ResponseStr);
+          except
+            on E: Exception do
+            begin
+              Result.Success := False;
+              Result.ErrorMessage := 'JSON parse error: ' + E.Message;
+            end;
           end;
         end;
+      end
+      else
+      begin
+        Result.Success := False;
+        Result.ErrorMessage := Format('HTTP %d: %s', [FHttpClient.ResponseCode, FHttpClient.ResponseText]);
       end;
-    end
-    else
-    begin
-      Result.Success := False;
-      Result.ErrorMessage := ParseError(Response);
+      
+    except
+      on E: EIdHTTPProtocolException do
+      begin
+        Result.StatusCode := E.ErrorCode;
+        FLastResponseCode := E.ErrorCode;
+        FLastResponseBody := E.ErrorMessage;
+        Result.Success := False;
+        Result.ErrorMessage := Format('HTTP %d: %s', [E.ErrorCode, E.Message]);
+      end;
     end;
     
   except
@@ -294,15 +285,32 @@ begin
     begin
       Result.Success := False;
       Result.ErrorMessage := E.Message;
-      // DEBUG: Show exception that's being swallowed
-      ShowMessage('HTTP Request Exception: ' + E.Message + #13#10 + 
-        'Class: ' + E.ClassName + #13#10 +
-        'URL: ' + URL);
     end;
   end;
   
   if Assigned(RequestStream) then
     RequestStream.Free;
+  if Assigned(ResponseStream) then
+    ResponseStream.Free;
+end;
+
+function TApiClient.GetJsonValueCI(AObj: TJSONObject; const AName: string): TJSONValue;
+var
+  Pair: TJSONPair;
+begin
+  Result := nil;
+  if AObj = nil then Exit;
+  for Pair in AObj do
+    if SameText(Pair.JsonString.Value, AName) then
+      Exit(Pair.JsonValue);
+end;
+
+function TApiClient.RewriteMinioHost(const AUrl: string): string;
+begin
+  Result := AUrl;
+  // When running Docker, server presigns with host 'minio' which isn't resolvable from Windows.
+  // Rewrite to localhost so the client can reach the exposed port 9000.
+  Result := StringReplace(Result, 'http://minio:9000', 'http://localhost:9000', [rfIgnoreCase, rfReplaceAll]);
 end;
 
 function TApiClient.Login(const AEmail, APassword: string): TLoginResponse;
@@ -311,6 +319,7 @@ var
   Response: TApiResponse;
   UserObj: TJSONObject;
   OrgObj: TJSONObject;
+  SV, TV, OrgVal, MV: TJSONValue;
 begin
   Result.Success := False;
   Result.Token := '';
@@ -331,25 +340,42 @@ begin
     if Response.Success and Assigned(Response.Data) then
     begin
       try
-        Result.Success := (Response.Data as TJSONObject).GetValue<Boolean>('Success');
+        // Case-insensitive fetch of Success flag
+        SV := GetJsonValueCI(Response.Data as TJSONObject, 'Success');
+        if Assigned(SV) then
+          Result.Success := SameText(SV.Value, 'true') or (SV is TJSONBool) and TJSONBool(SV).AsBoolean
+        else
+          Result.Success := (Response.Data as TJSONObject).GetValue<Boolean>('Success', False);
         if Result.Success then
         begin
-          Result.Token := (Response.Data as TJSONObject).GetValue<string>('Token');
+          TV := GetJsonValueCI(Response.Data as TJSONObject, 'Token');
+          if Assigned(TV) then
+            Result.Token := TV.Value.Replace(#13,'').Replace(#10,'').Trim
+          else
+            Result.Token := (Response.Data as TJSONObject).GetValue<string>('Token','').Replace(#13,'').Replace(#10,'').Trim;
           
           if (Response.Data as TJSONObject).TryGetValue<TJSONObject>('User', UserObj) then
           begin
             Result.UserId := UserObj.GetValue<Integer>('Id');
-            Result.OrganizationId := UserObj.GetValue<Integer>('OrganizationId', 0);
+            // Accept either OrganizationId or OrganizationID casing
+            OrgVal := GetJsonValueCI(UserObj,'OrganizationId');
+            if not Assigned(OrgVal) then OrgVal := GetJsonValueCI(UserObj,'OrganizationID');
+            if Assigned(OrgVal) then
+              Result.OrganizationId := StrToIntDef(OrgVal.Value,0)
+            else
+              Result.OrganizationId := UserObj.GetValue<Integer>('OrganizationId',0);
             Result.UserEmail := UserObj.GetValue<string>('Email');
             Result.UserName := UserObj.GetValue<string>('Name', '');
             // Note: OrganizationName is not in the User object from login response
             Result.OrganizationName := '';
           end;
           
-          FAuthToken := Result.Token;
+          FAuthToken := Result.Token; // store trimmed token
         end
         else
-          Result.Message := (Response.Data as TJSONObject).GetValue<string>('Message', 'Login failed');
+          MV := GetJsonValueCI(Response.Data as TJSONObject,'Message');
+          if Assigned(MV) then Result.Message := MV.Value
+          else Result.Message := (Response.Data as TJSONObject).GetValue<string>('Message','Login failed');
       finally
         Response.Data.Free;
       end;
@@ -436,15 +462,18 @@ begin
         for I := 0 to JsonArray.Count - 1 do
         begin
           JsonObj := JsonArray.Items[I] as TJSONObject;
-          Result[I].Id := JsonObj.GetValue<Integer>('Id');
-          Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationId');
-          Result[I].Name := JsonObj.GetValue<string>('Name');
-          Result[I].Orientation := JsonObj.GetValue<string>('Orientation');
-          Result[I].LastSeen := JsonObj.GetValue<string>('LastSeen', '');
-          Result[I].CurrentStatus := JsonObj.GetValue<string>('CurrentStatus');
-          Result[I].ProvisioningToken := JsonObj.GetValue<string>('ProvisioningToken', '');
-          Result[I].CreatedAt := JsonObj.GetValue<string>('CreatedAt', '');
-          Result[I].UpdatedAt := JsonObj.GetValue<string>('UpdatedAt', '');
+          // Case-insensitive extraction to avoid JSON casing issues
+          var V: TJSONValue;
+          V := GetJsonValueCI(JsonObj,'Id'); if Assigned(V) then Result[I].Id := StrToIntDef(V.Value,0) else Result[I].Id := JsonObj.GetValue<Integer>('Id',0);
+          V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+          if Assigned(V) then Result[I].OrganizationId := StrToIntDef(V.Value,0) else Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
+          V := GetJsonValueCI(JsonObj,'Name'); if Assigned(V) then Result[I].Name := V.Value else Result[I].Name := JsonObj.GetValue<string>('Name','');
+          V := GetJsonValueCI(JsonObj,'Orientation'); if Assigned(V) then Result[I].Orientation := V.Value else Result[I].Orientation := JsonObj.GetValue<string>('Orientation','');
+          V := GetJsonValueCI(JsonObj,'LastSeen'); if Assigned(V) then Result[I].LastSeen := V.Value else Result[I].LastSeen := JsonObj.GetValue<string>('LastSeen','');
+          V := GetJsonValueCI(JsonObj,'CurrentStatus'); if Assigned(V) then Result[I].CurrentStatus := V.Value else Result[I].CurrentStatus := JsonObj.GetValue<string>('CurrentStatus','');
+          V := GetJsonValueCI(JsonObj,'ProvisioningToken'); if Assigned(V) then Result[I].ProvisioningToken := V.Value else Result[I].ProvisioningToken := JsonObj.GetValue<string>('ProvisioningToken','');
+          V := GetJsonValueCI(JsonObj,'CreatedAt'); if Assigned(V) then Result[I].CreatedAt := V.Value else Result[I].CreatedAt := JsonObj.GetValue<string>('CreatedAt','');
+          V := GetJsonValueCI(JsonObj,'UpdatedAt'); if Assigned(V) then Result[I].UpdatedAt := V.Value else Result[I].UpdatedAt := JsonObj.GetValue<string>('UpdatedAt','');
         end;
       end;
     finally
@@ -495,6 +524,7 @@ begin
   
   RequestBody := TJSONObject.Create;
   try
+    // Accept server variations: OrganizationID vs OrganizationId. We send OrganizationId as spec.
     RequestBody.AddPair('OrganizationId', TJSONNumber.Create(AOrganizationId));
     RequestBody.AddPair('Name', AName);
     RequestBody.AddPair('Orientation', AOrientation);
@@ -508,7 +538,9 @@ begin
       try
         JsonObj := Response.Data as TJSONObject;
         Result.Id := JsonObj.GetValue<Integer>('Id');
-        Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId');
+        var V: TJSONValue;
+        V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+        if Assigned(V) then Result.OrganizationId := StrToIntDef(V.Value,0) else Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
         Result.Name := JsonObj.GetValue<string>('Name');
         Result.Orientation := JsonObj.GetValue<string>('Orientation');
         Result.LastSeen := JsonObj.GetValue<string>('LastSeen', '');
@@ -547,7 +579,9 @@ begin
       try
         JsonObj := Response.Data as TJSONObject;
         Result.Id := JsonObj.GetValue<Integer>('Id');
-        Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId');
+        var V: TJSONValue;
+        V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+        if Assigned(V) then Result.OrganizationId := StrToIntDef(V.Value,0) else Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
         Result.Name := JsonObj.GetValue<string>('Name');
         Result.Orientation := JsonObj.GetValue<string>('Orientation');
         Result.LastSeen := JsonObj.GetValue<string>('LastSeen', '');
@@ -594,12 +628,14 @@ begin
         for I := 0 to JsonArray.Count - 1 do
         begin
           JsonObj := JsonArray.Items[I] as TJSONObject;
-          Result[I].Id := JsonObj.GetValue<Integer>('Id');
-          Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationId');
-          Result[I].Name := JsonObj.GetValue<string>('Name');
-          Result[I].Orientation := JsonObj.GetValue<string>('Orientation');
-          Result[I].CreatedAt := JsonObj.GetValue<string>('CreatedAt', '');
-          Result[I].UpdatedAt := JsonObj.GetValue<string>('UpdatedAt', '');
+          var V: TJSONValue;
+          V := GetJsonValueCI(JsonObj,'Id'); if Assigned(V) then Result[I].Id := StrToIntDef(V.Value,0) else Result[I].Id := JsonObj.GetValue<Integer>('Id',0);
+          V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+          if Assigned(V) then Result[I].OrganizationId := StrToIntDef(V.Value,0) else Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
+          V := GetJsonValueCI(JsonObj,'Name'); if Assigned(V) then Result[I].Name := V.Value else Result[I].Name := JsonObj.GetValue<string>('Name','');
+          V := GetJsonValueCI(JsonObj,'Orientation'); if Assigned(V) then Result[I].Orientation := V.Value else Result[I].Orientation := JsonObj.GetValue<string>('Orientation','');
+          V := GetJsonValueCI(JsonObj,'CreatedAt'); if Assigned(V) then Result[I].CreatedAt := V.Value else Result[I].CreatedAt := JsonObj.GetValue<string>('CreatedAt','');
+          V := GetJsonValueCI(JsonObj,'UpdatedAt'); if Assigned(V) then Result[I].UpdatedAt := V.Value else Result[I].UpdatedAt := JsonObj.GetValue<string>('UpdatedAt','');
         end;
       end;
     finally
@@ -638,6 +674,8 @@ var
   RequestBody: TJSONObject;
   Response: TApiResponse;
   JsonObj: TJSONObject;
+  PreflightInfo: string;
+  DebugURL: string;
 begin
   FillChar(Result, SizeOf(Result), 0);
   
@@ -647,14 +685,40 @@ begin
     RequestBody.AddPair('Name', AName);
     RequestBody.AddPair('Orientation', AOrientation);
     
+    // Preflight: ask server what headers/query token it sees
+    PreflightInfo := '';
+    if FAuthToken <> '' then
+    begin
+      // Prepare header
+      FHttpClient.Request.CustomHeaders.FoldLines := False;
+      FHttpClient.Request.CustomHeaders.Clear;
+      FHttpClient.Request.CustomHeaders.Add('X-Auth-Token: ' + FAuthToken.Trim);
+      // Call /debug/headers with access_token query as well
+      DebugURL := FBaseURL + '/debug/headers?access_token=' + FAuthToken.Trim;
+      try
+        PreflightInfo := FHttpClient.Get(DebugURL);
+      except
+        on E: Exception do
+          PreflightInfo := 'Preflight failed: ' + E.Message;
+      end;
+    end;
+
     Response := DoRequest('POST', Format('/organizations/%d/campaigns', [AOrganizationId]), RequestBody);
+    if (not Response.Success) and (Response.StatusCode=401) then
+    begin
+      // Append debug details so UI can show them
+      FLastResponseBody := '[401 DEBUG] Token prefix=' + Copy(FAuthToken,1,30)+'...' +
+        '\n[Preflight] ' + PreflightInfo;
+    end;
     
     if Response.Success and Assigned(Response.Data) then
     begin
       try
         JsonObj := Response.Data as TJSONObject;
         Result.Id := JsonObj.GetValue<Integer>('Id');
-        Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId');
+        var V: TJSONValue;
+        V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+        if Assigned(V) then Result.OrganizationId := StrToIntDef(V.Value,0) else Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
         Result.Name := JsonObj.GetValue<string>('Name');
         Result.Orientation := JsonObj.GetValue<string>('Orientation');
         Result.CreatedAt := JsonObj.GetValue<string>('CreatedAt', '');
@@ -689,7 +753,9 @@ begin
       try
         JsonObj := Response.Data as TJSONObject;
         Result.Id := JsonObj.GetValue<Integer>('Id');
-        Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId');
+        var V: TJSONValue;
+        V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+        if Assigned(V) then Result.OrganizationId := StrToIntDef(V.Value,0) else Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
         Result.Name := JsonObj.GetValue<string>('Name');
         Result.Orientation := JsonObj.GetValue<string>('Orientation');
         Result.CreatedAt := JsonObj.GetValue<string>('CreatedAt', '');
@@ -733,10 +799,12 @@ begin
         for I := 0 to JsonArray.Count - 1 do
         begin
           JsonObj := JsonArray.Items[I] as TJSONObject;
-          Result[I].Id := JsonObj.GetValue<Integer>('MediaFileID');
-          Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationID');
-          Result[I].FileName := JsonObj.GetValue<string>('FileName');
-          Result[I].FileType := JsonObj.GetValue<string>('FileType');
+          // Use case-insensitive lookup for field names
+          var V: TJSONValue;
+          V := GetJsonValueCI(JsonObj,'MediaFileId'); if Assigned(V) then Result[I].Id := StrToIntDef(V.Value,0) else Result[I].Id := JsonObj.GetValue<Integer>('MediaFileID',0);
+          V := GetJsonValueCI(JsonObj,'OrganizationId'); if Assigned(V) then Result[I].OrganizationId := StrToIntDef(V.Value,0) else Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationID',0);
+          V := GetJsonValueCI(JsonObj,'FileName'); if Assigned(V) then Result[I].FileName := V.Value else Result[I].FileName := JsonObj.GetValue<string>('FileName','');
+          V := GetJsonValueCI(JsonObj,'FileType'); if Assigned(V) then Result[I].FileType := V.Value else Result[I].FileType := JsonObj.GetValue<string>('FileType','');
           Result[I].FileSize := JsonObj.GetValue<Int64>('FileSize', 0);
           Result[I].Duration := JsonObj.GetValue<Integer>('Duration', 0);
           Result[I].StorageURL := JsonObj.GetValue<string>('StorageURL', '');
@@ -751,18 +819,56 @@ begin
   end;
 end;
 
-function TApiClient.RequestMediaUpload: TMediaUploadResponse;
+function TApiClient.GetMediaFile(AMediaFileId: Integer): TMediaFileData;
 var
   Response: TApiResponse;
   JsonObj: TJSONObject;
+  V: TJSONValue;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Response := DoRequest('GET', Format('/media-files/%d', [AMediaFileId]));
+  if Response.Success and Assigned(Response.Data) then
+  begin
+    try
+      JsonObj := Response.Data as TJSONObject;
+      V := GetJsonValueCI(JsonObj,'MediaFileId'); if Assigned(V) then Result.Id := StrToIntDef(V.Value,0) else Result.Id := JsonObj.GetValue<Integer>('Id',0);
+      V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID'); if Assigned(V) then Result.OrganizationId := StrToIntDef(V.Value,0);
+      V := GetJsonValueCI(JsonObj,'FileName'); if Assigned(V) then Result.FileName := V.Value;
+      V := GetJsonValueCI(JsonObj,'FileType'); if Assigned(V) then Result.FileType := V.Value;
+      V := GetJsonValueCI(JsonObj,'FileSize'); if Assigned(V) then Result.FileSize := StrToInt64Def(V.Value,0);
+      V := GetJsonValueCI(JsonObj,'Duration'); if Assigned(V) then Result.Duration := StrToIntDef(V.Value,0);
+      V := GetJsonValueCI(JsonObj,'StorageURL'); if Assigned(V) then Result.StorageURL := V.Value;
+      V := GetJsonValueCI(JsonObj,'Tags'); if Assigned(V) then Result.Tags := V.Value;
+      V := GetJsonValueCI(JsonObj,'CreatedAt'); if Assigned(V) then Result.CreatedAt := V.Value;
+      V := GetJsonValueCI(JsonObj,'UpdatedAt'); if Assigned(V) then Result.UpdatedAt := V.Value;
+    finally
+      Response.Data.Free;
+    end;
+  end;
+end;
+
+function TApiClient.RequestMediaUpload(AOrganizationId: Integer; const AFileName, AFileType: string; AContentLength: Int64): TMediaUploadResponse;
+var
+  Response: TApiResponse;
+  JsonObj: TJSONObject;
+  Req: TJSONObject;
 begin
   Result.Success := False;
   Result.MediaFileId := 0;
   Result.UploadUrl := '';
   Result.StorageKey := '';
   Result.Message := '';
-  
-  Response := DoRequest('POST', '/media-files/upload-url');
+  // Build required request body per API schema
+  Req := TJSONObject.Create;
+  try
+    Req.AddPair('OrganizationId', TJSONNumber.Create(AOrganizationId));
+    Req.AddPair('FileName', AFileName);
+    Req.AddPair('FileType', AFileType);
+    Req.AddPair('ContentLength', TJSONNumber.Create(AContentLength));
+    Response := DoRequest('POST', '/media-files/upload-url', Req);
+  finally
+    Req.Free;
+  end;
   
   if Response.Success and Assigned(Response.Data) then
   begin
@@ -770,7 +876,7 @@ begin
       JsonObj := Response.Data as TJSONObject;
       Result.Success := JsonObj.GetValue<Boolean>('Success');
       Result.MediaFileId := JsonObj.GetValue<Integer>('MediaFileId');
-      Result.UploadUrl := JsonObj.GetValue<string>('UploadUrl');
+      Result.UploadUrl := RewriteMinioHost(JsonObj.GetValue<string>('UploadUrl'));
       Result.StorageKey := JsonObj.GetValue<string>('StorageKey');
       Result.Message := JsonObj.GetValue<string>('Message', '');
     finally
@@ -786,7 +892,6 @@ end;
 function TApiClient.UploadMediaFile(const AUploadUrl, AFilePath: string): Boolean;
 var
   FileStream: TFileStream;
-  Response: IHTTPResponse;
 begin
   Result := False;
   
@@ -796,8 +901,8 @@ begin
   FileStream := TFileStream.Create(AFilePath, fmOpenRead or fmShareDenyWrite);
   try
     try
-      Response := FHttpClient.Put(AUploadUrl, FileStream);
-      Result := (Response.StatusCode >= 200) and (Response.StatusCode < 300);
+      FHttpClient.Put(AUploadUrl, FileStream);
+      Result := (FHttpClient.ResponseCode >= 200) and (FHttpClient.ResponseCode < 300);
     except
       Result := False;
     end;
@@ -819,8 +924,16 @@ begin
   begin
     try
       JsonObj := Response.Data as TJSONObject;
-      if JsonObj.GetValue<Boolean>('Success') then
-        Result := JsonObj.GetValue<string>('DownloadUrl');
+      var V: TJSONValue;
+      V := GetJsonValueCI(JsonObj,'Success');
+      if Assigned(V) and (SameText(V.Value,'true') or (V is TJSONBool) and TJSONBool(V).AsBoolean) then
+      begin
+        var DU := GetJsonValueCI(JsonObj,'DownloadUrl');
+        if Assigned(DU) then
+          Result := RewriteMinioHost(DU.Value)
+        else
+          Result := RewriteMinioHost(JsonObj.GetValue<string>('DownloadUrl',''));
+      end;
     finally
       Response.Data.Free;
     end;

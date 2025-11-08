@@ -799,7 +799,165 @@ begin
     end;
 
     // Media files presigned URLs
-    if SameText(Request.PathInfo, '/media-files/upload-url') and SameText(Request.Method, 'POST') then
+    // Prefix normalization: allow optional /api prefix
+    var PathInfo := Request.PathInfo;
+    if Copy(PathInfo,1,4)='/api' then
+      PathInfo := Copy(PathInfo,5,MaxInt); // strip /api
+
+    // ===== Media Files CRUD & Analytics =====
+    // List media files for organization
+    if (Pos('/organizations/', PathInfo)=1) and (Pos('/media-files', PathInfo)>0) and SameText(Request.Method,'GET') then
+    begin
+      // Expect /organizations/{OrgId}/media-files
+      var Tail := Copy(PathInfo, Length('/organizations/')+1, MaxInt); // {OrgId}/media-files
+      var OrgIdStr := Copy(Tail,1, Pos('/',Tail)-1);
+      var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
+      var C := NewConnection; try
+        var Q := TFDQuery.Create(nil); try
+          Q.Connection := C;
+          Q.SQL.Text := 'select * from MediaFiles where OrganizationID=:Org order by CreatedAt desc';
+          Q.ParamByName('Org').AsInteger := OrgId;
+          Q.Open;
+          var Arr := TJSONArray.Create; try
+            while not Q.Eof do
+            begin
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger));
+              O.AddPair('OrganizationId', TJSONNumber.Create(Q.FieldByName('OrganizationID').AsInteger));
+              O.AddPair('FileName', Q.FieldByName('FileName').AsString);
+              O.AddPair('FileType', Q.FieldByName('FileType').AsString);
+              O.AddPair('StorageURL', Q.FieldByName('StorageURL').AsString);
+              O.AddPair('CreatedAt', Q.FieldByName('CreatedAt').AsString);
+              O.AddPair('UpdatedAt', Q.FieldByName('UpdatedAt').AsString);
+              Arr.AddElement(O);
+              Q.Next;
+            end;
+            var Root := TJSONObject.Create; try
+              Root.AddPair('value', Arr.Clone as TJSONArray); // envelope pattern
+              Root.AddPair('Success', TJSONBool.Create(True));
+              Root.AddPair('Message', '');
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+            finally Root.Free; end;
+          finally Arr.Free; end;
+        finally Q.Free; end;
+      finally C.Free; end;
+      Exit;
+    end;
+
+    // Get single media file
+    if (Copy(PathInfo,1,13)='/media-files/') and (Pos('/download-url', PathInfo)=0) and SameText(Request.Method,'GET') then
+    begin
+      var IdStr := Copy(PathInfo,14,MaxInt); // after '/media-files/'
+      var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid media id'); Exit; end;
+      var MF := TMediaFileRepository.GetById(Id); if MF=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var O := TJSONObject.Create; try
+          O.AddPair('Id', TJSONNumber.Create(MF.Id));
+          O.AddPair('OrganizationId', TJSONNumber.Create(MF.OrganizationId));
+          O.AddPair('FileName', MF.FileName);
+          O.AddPair('FileType', MF.FileType);
+          O.AddPair('StorageURL', MF.StorageURL);
+          O.AddPair('CreatedAt', DateTimeToStr(MF.CreatedAt));
+          O.AddPair('UpdatedAt', DateTimeToStr(MF.UpdatedAt));
+          O.AddPair('Success', TJSONBool.Create(True));
+          O.AddPair('Message', '');
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+        finally O.Free; end;
+      finally MF.Free; end;
+      Exit;
+    end;
+
+    // Create media file directly (metadata only - alternative to upload-url flow)
+    if (Pos('/organizations/', PathInfo)=1) and (Pos('/media-files', PathInfo)>0) and SameText(Request.Method,'POST') then
+    begin
+      // Distinguish from upload-url: path will be /organizations/{OrgId}/media-files
+      var Tail := Copy(PathInfo, Length('/organizations/')+1, MaxInt);
+      var OrgIdStr := Copy(Tail,1, Pos('/',Tail)-1);
+      var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var FileName := Body.GetValue<string>('FileName','');
+        var FileType := Body.GetValue<string>('FileType','application/octet-stream');
+        var StorageURL := Body.GetValue<string>('StorageURL','');
+        if (FileName='') or (StorageURL='') then begin JSONError(400,'Missing FileName or StorageURL'); Exit; end;
+        var MF := TMediaFileRepository.CreateMedia(OrgId, FileName, FileType, StorageURL);
+        try
+          var O := TJSONObject.Create; try
+            O.AddPair('Id', TJSONNumber.Create(MF.Id));
+            O.AddPair('OrganizationId', TJSONNumber.Create(MF.OrganizationId));
+            O.AddPair('FileName', MF.FileName);
+            O.AddPair('FileType', MF.FileType);
+            O.AddPair('StorageURL', MF.StorageURL);
+            O.AddPair('CreatedAt', DateTimeToStr(MF.CreatedAt));
+            O.AddPair('UpdatedAt', DateTimeToStr(MF.UpdatedAt));
+            O.AddPair('Success', TJSONBool.Create(True));
+            O.AddPair('Message', '');
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+          finally O.Free; end;
+        finally MF.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // Update media file
+    if (Copy(PathInfo,1,13)='/media-files/') and SameText(Request.Method,'PUT') then
+    begin
+      var IdStr := Copy(PathInfo,14,MaxInt);
+      var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid media id'); Exit; end;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var FileName := Body.GetValue<string>('FileName','');
+        var FileType := Body.GetValue<string>('FileType','');
+        var StorageURL := Body.GetValue<string>('StorageURL','');
+        if FileName='' then begin JSONError(400,'Missing FileName'); Exit; end;
+        // Simple update using SQL
+        var C := NewConnection; try
+          var Q := TFDQuery.Create(nil); try
+            Q.Connection := C;
+            Q.SQL.Text := 'update MediaFiles set FileName=:Name, FileType=:Type, StorageURL=:Url, UpdatedAt=NOW() where MediaFileID=:Id returning *';
+            Q.ParamByName('Name').AsString := FileName;
+            Q.ParamByName('Type').AsString := FileType;
+            Q.ParamByName('Url').AsString := StorageURL;
+            Q.ParamByName('Id').AsInteger := Id;
+            Q.Open;
+            if Q.Eof then begin JSONError(404,'Not found'); Exit; end;
+            var O := TJSONObject.Create; try
+              O.AddPair('Id', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger));
+              O.AddPair('OrganizationId', TJSONNumber.Create(Q.FieldByName('OrganizationID').AsInteger));
+              O.AddPair('FileName', Q.FieldByName('FileName').AsString);
+              O.AddPair('FileType', Q.FieldByName('FileType').AsString);
+              O.AddPair('StorageURL', Q.FieldByName('StorageURL').AsString);
+              O.AddPair('CreatedAt', Q.FieldByName('CreatedAt').AsString);
+              O.AddPair('UpdatedAt', Q.FieldByName('UpdatedAt').AsString);
+              O.AddPair('Success', TJSONBool.Create(True));
+              O.AddPair('Message', '');
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+            finally O.Free; end;
+          finally Q.Free; end;
+        finally C.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // Delete media file
+    if (Copy(PathInfo,1,13)='/media-files/') and SameText(Request.Method,'DELETE') then
+    begin
+      var IdStr := Copy(PathInfo,14,MaxInt);
+      var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid media id'); Exit; end;
+      var C := NewConnection; try
+        var Q := TFDQuery.Create(nil); try
+          Q.Connection := C;
+          Q.SQL.Text := 'delete from MediaFiles where MediaFileID=:Id';
+          Q.ParamByName('Id').AsInteger := Id;
+          Q.ExecSQL;
+          Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+        finally Q.Free; end;
+      finally C.Free; end;
+      Exit;
+    end;
+
+    // Upload URL (presign)
+    if SameText(PathInfo, '/media-files/upload-url') and SameText(Request.Method, 'POST') then
     begin
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
@@ -829,7 +987,7 @@ begin
       finally Body.Free; end;
       Exit;
     end;
-    if (Copy(Request.PathInfo, 1, 13) = '/media-files/') and (Pos('/download-url', Request.PathInfo) > 0) and
+    if (Copy(PathInfo, 1, 13) = '/media-files/') and (Pos('/download-url', PathInfo) > 0) and
        SameText(Request.Method, 'GET') then
     begin
       // /media-files/{id}/download-url
@@ -855,8 +1013,183 @@ begin
       Exit;
     end;
 
+    // Current playing on a display (analytics)
+    if (Copy(PathInfo,1,10)='/displays/') and (Pos('/current-playing', PathInfo)>0) and SameText(Request.Method,'GET') then
+    begin
+      var IdStr := Copy(PathInfo, 11, MaxInt);
+      var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
+      var DisplayId := StrToIntDef(IdStr,0); if DisplayId=0 then begin JSONError(400,'Invalid display id'); Exit; end;
+      var C := NewConnection; try
+        var Q := TFDQuery.Create(nil); try
+          Q.Connection := C;
+          Q.SQL.Text := 'select pl.*, mf.FileName, mf.FileType, c.Name as CampaignName ' +
+                        'from PlaybackLogs pl ' +
+                        'left join MediaFiles mf on mf.MediaFileID=pl.MediaFileID ' +
+                        'left join Campaigns c on c.CampaignID=pl.CampaignID ' +
+                        'where pl.DisplayID=:D order by pl.PlaybackTimestamp desc limit 1';
+          Q.ParamByName('D').AsInteger := DisplayId; Q.Open;
+          if Q.Eof then begin JSONError(404,'No playback yet'); Exit; end;
+          var O := TJSONObject.Create; try
+            O.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
+            O.AddPair('MediaFileId', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger));
+            O.AddPair('CampaignId', TJSONNumber.Create(Q.FieldByName('CampaignID').AsInteger));
+            O.AddPair('PlaybackTimestamp', Q.FieldByName('PlaybackTimestamp').AsString);
+            O.AddPair('MediaFileName', Q.FieldByName('FileName').AsString);
+            O.AddPair('MediaFileType', Q.FieldByName('FileType').AsString);
+            O.AddPair('CampaignName', Q.FieldByName('CampaignName').AsString);
+            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+          finally O.Free; end;
+        finally Q.Free; end;
+      finally C.Free; end;
+      Exit;
+    end;
+
+    // Set primary campaign for a display (control)
+    if (Copy(PathInfo,1,10)='/displays/') and (Pos('/set-primary', PathInfo)>0) and SameText(Request.Method,'POST') then
+    begin
+      var IdStr := Copy(PathInfo, 11, MaxInt);
+      var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
+      var DisplayId := StrToIntDef(IdStr,0); if DisplayId=0 then begin JSONError(400,'Invalid display id'); Exit; end;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var CampaignId := Body.GetValue<Integer>('CampaignId',0); if CampaignId=0 then begin JSONError(400,'Missing CampaignId'); Exit; end;
+        // Set only this assignment as primary
+        var C := NewConnection; try
+          var Q := TFDQuery.Create(nil); try
+            Q.Connection := C;
+            Q.SQL.Text := 'update DisplayCampaigns set IsPrimary=false where DisplayID=:D'; Q.ParamByName('D').AsInteger := DisplayId; Q.ExecSQL;
+            Q.SQL.Text := 'update DisplayCampaigns set IsPrimary=true where DisplayID=:D and CampaignID=:C'; Q.ParamByName('C').AsInteger := CampaignId; Q.ExecSQL;
+          finally Q.Free; end;
+        finally C.Free; end;
+        Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // Analytics: list plays with filters
+    if SameText(PathInfo, '/analytics/plays') and SameText(Request.Method,'GET') then
+    begin
+      var OrgId := StrToIntDef(Request.QueryFields.Values['organizationId'], 0);
+      var DisplayId := StrToIntDef(Request.QueryFields.Values['displayId'], 0);
+      var CampaignId := StrToIntDef(Request.QueryFields.Values['campaignId'], 0);
+      var MediaFileId := StrToIntDef(Request.QueryFields.Values['mediaFileId'], 0);
+      var FromTs := Request.QueryFields.Values['from'];
+      var ToTs := Request.QueryFields.Values['to'];
+      var C := NewConnection; try
+        var Q := TFDQuery.Create(nil); try
+          Q.Connection := C;
+          var SQL := 'select pl.*, d.Name as DisplayName, c.Name as CampaignName, mf.FileName as MediaFileName ' +
+                     'from PlaybackLogs pl ' +
+                     'left join Displays d on d.DisplayID=pl.DisplayID ' +
+                     'left join Campaigns c on c.CampaignID=pl.CampaignID ' +
+                     'left join MediaFiles mf on mf.MediaFileID=pl.MediaFileID where 1=1';
+          if OrgId>0 then SQL := SQL + ' and d.OrganizationID=:OrgId';
+          if DisplayId>0 then SQL := SQL + ' and pl.DisplayID=:DisplayId';
+          if CampaignId>0 then SQL := SQL + ' and pl.CampaignID=:CampaignId';
+          if MediaFileId>0 then SQL := SQL + ' and pl.MediaFileID=:MediaFileId';
+          if FromTs<>'' then SQL := SQL + ' and pl.PlaybackTimestamp >= :FromTs';
+          if ToTs<>'' then SQL := SQL + ' and pl.PlaybackTimestamp <= :ToTs';
+          SQL := SQL + ' order by pl.PlaybackTimestamp desc limit 1000';
+          Q.SQL.Text := SQL;
+          if OrgId>0 then Q.ParamByName('OrgId').AsInteger := OrgId;
+          if DisplayId>0 then Q.ParamByName('DisplayId').AsInteger := DisplayId;
+          if CampaignId>0 then Q.ParamByName('CampaignId').AsInteger := CampaignId;
+          if MediaFileId>0 then Q.ParamByName('MediaFileId').AsInteger := MediaFileId;
+          if FromTs<>'' then Q.ParamByName('FromTs').AsString := FromTs;
+          if ToTs<>'' then Q.ParamByName('ToTs').AsString := ToTs;
+          Q.Open;
+          var Arr := TJSONArray.Create; try
+            while not Q.Eof do
+            begin
+              var O := TJSONObject.Create;
+              O.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
+              O.AddPair('CampaignId', TJSONNumber.Create(Q.FieldByName('CampaignID').AsInteger));
+              O.AddPair('MediaFileId', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger));
+              O.AddPair('PlaybackTimestamp', Q.FieldByName('PlaybackTimestamp').AsString);
+              O.AddPair('DisplayName', Q.FieldByName('DisplayName').AsString);
+              O.AddPair('CampaignName', Q.FieldByName('CampaignName').AsString);
+              O.AddPair('MediaFileName', Q.FieldByName('MediaFileName').AsString);
+              Arr.AddElement(O);
+              Q.Next;
+            end;
+            var Root := TJSONObject.Create; try
+              Root.AddPair('value', Arr.Clone as TJSONArray);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+            finally Root.Free; end;
+          finally Arr.Free; end;
+        finally Q.Free; end;
+      finally C.Free; end;
+      Exit;
+    end;
+
+    // Analytics: summary by media
+    if SameText(PathInfo, '/analytics/summary/media') and SameText(Request.Method,'GET') then
+    begin
+      var OrgId := StrToIntDef(Request.QueryFields.Values['organizationId'], 0);
+      var FromTs := Request.QueryFields.Values['from'];
+      var ToTs := Request.QueryFields.Values['to'];
+      var C := NewConnection; try
+        var Q := TFDQuery.Create(nil); try
+          Q.Connection := C;
+          var SQL := 'select pl.MediaFileID, mf.FileName, count(*) as Plays ' +
+                     'from PlaybackLogs pl left join MediaFiles mf on mf.MediaFileID=pl.MediaFileID ' +
+                     'left join Displays d on d.DisplayID=pl.DisplayID where 1=1';
+          if OrgId>0 then SQL := SQL + ' and d.OrganizationID=:OrgId';
+          if FromTs<>'' then SQL := SQL + ' and pl.PlaybackTimestamp >= :FromTs';
+          if ToTs<>'' then SQL := SQL + ' and pl.PlaybackTimestamp <= :ToTs';
+          SQL := SQL + ' group by pl.MediaFileID, mf.FileName order by Plays desc';
+          Q.SQL.Text := SQL;
+          if OrgId>0 then Q.ParamByName('OrgId').AsInteger := OrgId;
+          if FromTs<>'' then Q.ParamByName('FromTs').AsString := FromTs;
+          if ToTs<>'' then Q.ParamByName('ToTs').AsString := ToTs;
+          Q.Open;
+          var Arr := TJSONArray.Create; try
+            while not Q.Eof do
+            begin
+              var O := TJSONObject.Create; O.AddPair('MediaFileId', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger)); O.AddPair('MediaFileName', Q.FieldByName('FileName').AsString); O.AddPair('Plays', TJSONNumber.Create(Q.FieldByName('Plays').AsInteger));
+              Arr.AddElement(O); Q.Next;
+            end;
+            var Root := TJSONObject.Create; try Root.AddPair('value', Arr.Clone as TJSONArray); Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse; finally Root.Free; end;
+          finally Arr.Free; end;
+        finally Q.Free; end;
+      finally C.Free; end; Exit;
+    end;
+
+    // Analytics: summary by campaign
+    if SameText(PathInfo, '/analytics/summary/campaigns') and SameText(Request.Method,'GET') then
+    begin
+      var OrgId := StrToIntDef(Request.QueryFields.Values['organizationId'], 0);
+      var FromTs := Request.QueryFields.Values['from'];
+      var ToTs := Request.QueryFields.Values['to'];
+      var C := NewConnection; try
+        var Q := TFDQuery.Create(nil); try
+          Q.Connection := C;
+          var SQL := 'select pl.CampaignID, c.Name, count(*) as Plays ' +
+                     'from PlaybackLogs pl left join Campaigns c on c.CampaignID=pl.CampaignID ' +
+                     'left join Displays d on d.DisplayID=pl.DisplayID where 1=1';
+          if OrgId>0 then SQL := SQL + ' and d.OrganizationID=:OrgId';
+          if FromTs<>'' then SQL := SQL + ' and pl.PlaybackTimestamp >= :FromTs';
+          if ToTs<>'' then SQL := SQL + ' and pl.PlaybackTimestamp <= :ToTs';
+          SQL := SQL + ' group by pl.CampaignID, c.Name order by Plays desc';
+          Q.SQL.Text := SQL;
+          if OrgId>0 then Q.ParamByName('OrgId').AsInteger := OrgId;
+          if FromTs<>'' then Q.ParamByName('FromTs').AsString := FromTs;
+          if ToTs<>'' then Q.ParamByName('ToTs').AsString := ToTs;
+          Q.Open;
+          var Arr := TJSONArray.Create; try
+            while not Q.Eof do
+            begin
+              var O := TJSONObject.Create; O.AddPair('CampaignId', TJSONNumber.Create(Q.FieldByName('CampaignID').AsInteger)); O.AddPair('CampaignName', Q.FieldByName('Name').AsString); O.AddPair('Plays', TJSONNumber.Create(Q.FieldByName('Plays').AsInteger));
+              Arr.AddElement(O); Q.Next;
+            end;
+            var Root := TJSONObject.Create; try Root.AddPair('value', Arr.Clone as TJSONArray); Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse; finally Root.Free; end;
+          finally Arr.Free; end;
+        finally Q.Free; end;
+      finally C.Free; end; Exit;
+    end;
+
     // Device
-    if SameText(Request.PathInfo, '/device/config') and SameText(Request.Method, 'POST') then
+    if SameText(PathInfo, '/device/config') and SameText(Request.Method, 'POST') then
     begin
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;

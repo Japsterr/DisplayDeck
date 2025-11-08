@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
-  FMX.Objects, FMX.Layouts, FMX.Edit, FMX.Controls.Presentation, uApiClient;
+  FMX.Objects, FMX.Layouts, FMX.Edit, FMX.Controls.Presentation, uApiClient,
+  FMX.DialogService.Sync;
 
 type
   // Event type for when login succeeds
@@ -63,30 +64,10 @@ begin
     // Call API to authenticate
     LoginResult := TApiClient.Instance.Login(edEmail.Text, edPassword.Text);
     
-    // DEBUG: Show RAW result
-    ShowMessage('=== RAW LOGIN RESULT ===' + #13#10 +
-      'Success: ' + BoolToStr(LoginResult.Success, True) + #13#10 +
-      'Message: ' + LoginResult.Message + #13#10 +
-      'Token: ' + Copy(LoginResult.Token, 1, 20) + #13#10 +
-      'UserID: ' + IntToStr(LoginResult.UserId) + #13#10 +
-      'OrgID: ' + IntToStr(LoginResult.OrganizationId) + #13#10 +
-      'LastURL: ' + TApiClient.Instance.LastURL + #13#10 +
-      'LastCode: ' + IntToStr(TApiClient.Instance.LastResponseCode) + #13#10 +
-      'LastBody: ' + Copy(TApiClient.Instance.LastResponseBody, 1, 200));
-    
     if LoginResult.Success then
     begin
-      // DEBUG: Show EVERYTHING we got from server
-      ShowMessage('=== LOGIN DEBUG ===' + #13#10 +
-        'Success: ' + BoolToStr(LoginResult.Success, True) + #13#10 +
-        'Token: ' + Copy(LoginResult.Token, 1, 30) + '...' + #13#10 +
-        'UserID: ' + IntToStr(LoginResult.UserId) + #13#10 +
-        'OrgID: ' + IntToStr(LoginResult.OrganizationId) + #13#10 +
-        'UserName: ' + LoginResult.UserName + #13#10 +
-        'UserEmail: ' + LoginResult.UserEmail + #13#10 +
-        'OrgName: ' + LoginResult.OrganizationName + #13#10 +
-        'Message: ' + LoginResult.Message + #13#10 +
-        '===================');
+      // Show success message
+      ShowMessage('Login successful! Welcome back.');
       
       // Clear password field for security
       edPassword.Text := '';
@@ -162,9 +143,7 @@ end;
 
 procedure TFrame1.ShowError(const AMessage: string);
 begin
-  // For now, use simple MessageDlg
-  // Later we can make this prettier with an in-form error label
-  MessageDlg(AMessage, TMsgDlgType.mtError, [TMsgDlgBtn.mbOK], 0);
+  TDialogServiceSync.MessageDialog(AMessage, TMsgDlgType.mtError, [TMsgDlgBtn.mbOK], TMsgDlgBtn.mbOK, 0);
 end;
 
 end.

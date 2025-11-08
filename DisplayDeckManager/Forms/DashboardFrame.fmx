@@ -344,11 +344,23 @@ object Frame3: TFrame3
           end
         end
         object LayoutBottom: TLayout
-          Align = Client
+          Align = Bottom
           Size.Width = 1196.000000000000000000
-          Size.Height = 307.000000000000000000
+          Size.Height = 100.000000000000000000
           Size.PlatformDefault = False
           TabOrder = 5
+          object imgLogoDashboard: TImage
+            Align = Center
+            Size.Width = 180.000000000000000000
+            Size.Height = 60.000000000000000000
+            Size.PlatformDefault = False
+            WrapMode = Fit
+            HitTest = False
+            MultiResBitmap = <
+              item
+                FileName = 'Logo\Logo.png'
+              end>
+          end
         end
       end
     end

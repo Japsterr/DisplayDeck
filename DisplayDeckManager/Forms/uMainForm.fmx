@@ -33,6 +33,19 @@ object Form1: TForm1
         Size.Height = 80.000000000000000000
         Size.PlatformDefault = False
         TabOrder = 0
+        object imgLogoTop: TImage
+          Align = Left
+          Margins.Right = 12.000000000000000000
+          Size.Width = 40.000000000000000000
+          Size.Height = 40.000000000000000000
+          Size.PlatformDefault = False
+          WrapMode = Fit
+          HitTest = False
+          MultiResBitmap = <
+            item
+              FileName = 'Logo\Logo.png'
+            end>
+        end
         object Label1: TLabel
           Align = Client
           StyledSettings = [Family]
@@ -162,6 +175,25 @@ object Form1: TForm1
           StyleLookup = 'listboxitemnodetail'
           TabOrder = 6
           Text = 'Settings'
+        end
+      end
+      object LayoutLogoBottom: TLayout
+        Align = Bottom
+        Size.Width = 240.000000000000000000
+        Size.Height = 80.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 3
+        object imgLogoBottom: TImage
+          Align = Center
+          Size.Width = 120.000000000000000000
+          Size.Height = 40.000000000000000000
+          Size.PlatformDefault = False
+          WrapMode = Fit
+          HitTest = False
+          MultiResBitmap = <
+            item
+              FileName = 'Logo\Logo.png'
+            end>
         end
       end
     end

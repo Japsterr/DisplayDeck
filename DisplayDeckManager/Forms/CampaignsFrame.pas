@@ -7,7 +7,7 @@ uses
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
   FMX.Objects, FMX.Layouts, FMX.ListView.Types, FMX.ListView.Appearances,
   FMX.ListView.Adapters.Base, FMX.ListView, FMX.Controls.Presentation, FMX.Edit,
-  FMX.ListBox, uApiClient, System.JSON;
+  FMX.ListBox, uApiClient, System.JSON, FMX.DialogService, FMX.DialogService.Sync;
 
 type
   TCampaignData = record
@@ -186,7 +186,7 @@ var
 begin
   if Trim(edtName.Text) = '' then
   begin
-    ShowMessage('Please enter a campaign name.');
+    TDialogService.ShowMessage('Please enter a campaign name.');
     Exit;
   end;
   
@@ -204,18 +204,19 @@ begin
       // Check if creation was successful
       if ResultCampaign.Id > 0 then
       begin
-        ShowMessage('Campaign "' + edtName.Text + '" created successfully');
+        TDialogService.ShowMessage('Campaign "' + edtName.Text + '" created successfully');
         LoadCampaigns;
         ClearDetails;
         EnableDetailPanel(False);
       end
       else
       begin
-        ShowMessage('Failed to create campaign. Please check server logs.' + #13#10 +
-                    'URL: ' + TApiClient.Instance.LastURL + #13#10 +
-                    'Response: ' + IntToStr(TApiClient.Instance.LastResponseCode) + #13#10 +
-                    'Token: ' + Copy(TApiClient.Instance.GetAuthToken, 1, 20) + '...' + #13#10 +
-                    'OrgId: ' + IntToStr(FOrganizationId));
+          TDialogService.ShowMessage('Failed to create campaign. Please check server logs.' + #13#10 +
+              'URL: ' + TApiClient.Instance.LastURL + #13#10 +
+              'Status: ' + IntToStr(TApiClient.Instance.LastResponseCode) + #13#10 +
+              'Token: ' + Copy(TApiClient.Instance.GetAuthToken, 1, 20) + '...' + #13#10 +
+              'OrgId: ' + IntToStr(FOrganizationId) + #13#10 +
+              'Debug: ' + TApiClient.Instance.LastResponseBody);
       end;
     end
     else
@@ -229,19 +230,19 @@ begin
       
       if ResultCampaign.Id > 0 then
       begin
-        ShowMessage('Campaign "' + edtName.Text + '" updated successfully');
+        TDialogService.ShowMessage('Campaign "' + edtName.Text + '" updated successfully');
         LoadCampaigns;
         ClearDetails;
         EnableDetailPanel(False);
       end
       else
       begin
-        ShowMessage('Failed to update campaign.');
+        TDialogService.ShowMessage('Failed to update campaign.');
       end;
     end;
   except
     on E: Exception do
-      ShowMessage('Error saving campaign: ' + E.Message + #13#10 +
+      TDialogService.ShowMessage('Error saving campaign: ' + E.Message + #13#10 +
                   'URL: ' + TApiClient.Instance.LastURL + #13#10 +
                   'Response: ' + TApiClient.Instance.LastResponseBody);
   end;
@@ -252,7 +253,7 @@ begin
   // TODO: Show dialog to manage campaign items
   // API: GET/POST/PUT/DELETE /campaigns/{CampaignId}/items
   // Each item links MediaFileId with DisplayOrder and Duration
-  ShowMessage('Manage media items for this campaign (dialog to be implemented)');
+  TDialogService.ShowMessage('Manage media items for this campaign (dialog to be implemented)');
 end;
 
 procedure TFrame6.btnAssignDisplaysClick(Sender: TObject);
@@ -261,7 +262,7 @@ begin
   // API: POST /displays/{DisplayId}/campaign-assignments
   //   Body: { "DisplayId", "CampaignId", "IsPrimary": true/false }
   // Note: Only displays with matching orientation can be assigned
-  ShowMessage('Assign campaign to displays (dialog to be implemented)');
+  TDialogService.ShowMessage('Assign campaign to displays (dialog to be implemented)');
 end;
 
 procedure TFrame6.btnDeleteClick(Sender: TObject);
@@ -270,24 +271,24 @@ var
 begin
   if FIsNew then Exit;
   
-  if MessageDlg('Delete this campaign?', TMsgDlgType.mtConfirmation, 
-                [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], 0) = mrYes then
+    if TDialogServiceSync.MessageDialog('Delete this campaign?', TMsgDlgType.mtConfirmation, 
+      [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], TMsgDlgBtn.mbNo, 0) = mrYes then
   begin
     try
       Success := TApiClient.Instance.DeleteCampaign(FSelectedCampaignId);
       
       if Success then
       begin
-        ShowMessage('Campaign deleted successfully');
+        TDialogService.ShowMessage('Campaign deleted successfully');
         LoadCampaigns;
         ClearDetails;
         EnableDetailPanel(False);
       end
       else
-        ShowMessage('Failed to delete campaign');
+        TDialogService.ShowMessage('Failed to delete campaign');
     except
       on E: Exception do
-        ShowMessage('Error deleting campaign: ' + E.Message);
+        TDialogService.ShowMessage('Error deleting campaign: ' + E.Message);
     end;
   end;
 end;

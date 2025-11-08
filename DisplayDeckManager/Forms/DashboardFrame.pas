@@ -5,7 +5,7 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
-  FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts;
+  FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, System.IOUtils;
 
 type
   // Event types for navigation
@@ -71,6 +71,14 @@ begin
   FUserName := UserName;
   lblWelcome.Text := 'Welcome back, ' + UserName + '!';
   LoadDashboardData;
+  // Load logo if present
+  var LogoPath := TPath.Combine(ExtractFilePath(ParamStr(0)), '..'+PathDelim+'Logo'+PathDelim+'Logo.png');
+  if FileExists(LogoPath) then
+  begin
+    var Img := FindComponent('imgLogoDashboard') as TImage;
+    if Assigned(Img) then
+      Img.Bitmap.LoadFromFile(LogoPath);
+  end;
 end;
 
 procedure TFrame3.LoadDashboardData;

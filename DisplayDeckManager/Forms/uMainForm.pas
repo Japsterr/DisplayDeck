@@ -7,7 +7,8 @@ uses
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, FMX.Objects,
   FMX.Layouts, LoginFrame, RegisterFrame, DashboardFrame, FMX.ListBox,
   FMX.Controls.Presentation, FMX.StdCtrls, ProfileFrame, DisplaysFrame,
-  CampaignsFrame, MediaLibraryFrame, AnalyticsFrame, SettingsFrame, uApiClient;
+  CampaignsFrame, MediaLibraryFrame, AnalyticsFrame, SettingsFrame, uApiClient,
+  System.IOUtils;
 
 type
   TMenuSection = (msNone, msDashboard, msProfile, msDisplays, 
@@ -86,6 +87,18 @@ begin
   
   // Set form properties
   Caption := 'DisplayDeck Manager';
+
+  // Attempt to load logo images at runtime (handles relative build output path)
+  var LogoPath := TPath.Combine(ExtractFilePath(ParamStr(0)), '..'+PathDelim+'Logo'+PathDelim+'Logo.png');
+  if FileExists(LogoPath) then
+  begin
+    var ImgTop := FindComponent('imgLogoTop') as TImage;
+    var ImgBottom := FindComponent('imgLogoBottom') as TImage;
+    if Assigned(ImgTop) then
+      ImgTop.Bitmap.LoadFromFile(LogoPath);
+    if Assigned(ImgBottom) then
+      ImgBottom.Bitmap.LoadFromFile(LogoPath);
+  end;
   
   // Load the login frame
   LoadLoginFrame;

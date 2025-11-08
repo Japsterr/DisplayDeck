@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
-  FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, uApiClient;
+  FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, uApiClient,
+  FMX.DialogService.Sync;
 
 type
   // Event types
@@ -181,9 +182,7 @@ end;
 
 procedure TFrame2.ShowError(const AMessage: string);
 begin
-  // For now, use simple MessageDlg
-  // Later we can make this prettier with an in-form error label
-  MessageDlg(AMessage, TMsgDlgType.mtError, [TMsgDlgBtn.mbOK], 0);
+  TDialogServiceSync.MessageDialog(AMessage, TMsgDlgType.mtError, [TMsgDlgBtn.mbOK], TMsgDlgBtn.mbOK, 0);
 end;
 
 end.

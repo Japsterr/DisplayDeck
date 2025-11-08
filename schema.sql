@@ -119,6 +119,18 @@ CREATE TABLE PlaybackLogs (
     FOREIGN KEY (CampaignID) REFERENCES Campaigns(CampaignID) ON DELETE CASCADE
 );
 
+-- 6. Device Provisioning Tokens (for QR/Barcode onboarding)
+CREATE TABLE IF NOT EXISTS ProvisioningTokens (
+    Token VARCHAR(128) PRIMARY KEY,
+    ExpiresAt TIMESTAMP WITH TIME ZONE NOT NULL,
+    Claimed BOOLEAN NOT NULL DEFAULT FALSE,
+    HardwareId VARCHAR(255),
+    DisplayID INT,
+    OrganizationID INT,
+    FOREIGN KEY (DisplayID) REFERENCES Displays(DisplayID) ON DELETE SET NULL,
+    FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE SET NULL
+);
+
 -- Insert some default data for testing
 INSERT INTO Plans (Name, Price, MaxDisplays, MaxCampaigns, MaxMediaStorageGB, IsActive) VALUES
 ('Free', 0.00, 1, 2, 1, TRUE),
