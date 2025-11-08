@@ -1,3 +1,9 @@
+<div align="center">
+
+	<img src="docs/assets/displaydeck-logo.png" alt="DisplayDeck" width="420" />
+
+</div>
+
 # DisplayDeck API
 
 Backend API for DisplayDeck, a digital signage SaaS. Linux-first, Dockerized stack: PostgreSQL + MinIO + Delphi WebBroker server, with Swagger UI.

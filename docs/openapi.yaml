@@ -23,6 +23,8 @@ paths:
   /auth/login:
     post:
       summary: Login
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -40,6 +42,8 @@ paths:
   /auth/register:
     post:
       summary: Register
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -83,6 +87,8 @@ paths:
   /organizations:
     get:
       summary: List organizations
+      security:
+        - BearerAuth: []
       responses:
         '200':
           description: OK
@@ -97,6 +103,8 @@ paths:
                       $ref: '#/components/schemas/Organization'
     post:
       summary: Create organization
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -114,6 +122,8 @@ paths:
   /organizations/{id}:
     get:
       summary: Get organization by id
+      security:
+        - BearerAuth: []
       parameters:
         - name: id
           in: path
@@ -133,6 +143,8 @@ paths:
   /organizations/{OrganizationId}/subscription:
     get:
       summary: Get subscription for organization
+      security:
+        - BearerAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -150,6 +162,8 @@ paths:
   /organizations/{OrganizationId}/displays:
     get:
       summary: List displays for organization
+      security:
+        - BearerAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -170,6 +184,8 @@ paths:
                       $ref: '#/components/schemas/Display'
     post:
       summary: Create display for organization
+      security:
+        - BearerAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -193,6 +209,8 @@ paths:
   /displays/{Id}:
     get:
       summary: Get display by id
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -208,6 +226,8 @@ paths:
                 $ref: '#/components/schemas/Display'
     put:
       summary: Update display
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -229,6 +249,8 @@ paths:
                 $ref: '#/components/schemas/Display'
     delete:
       summary: Delete display
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -242,6 +264,8 @@ paths:
   /organizations/{OrganizationId}/campaigns:
     get:
       summary: List campaigns for organization
+      security:
+        - BearerAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -262,6 +286,8 @@ paths:
                       $ref: '#/components/schemas/Campaign'
     post:
       summary: Create campaign for organization
+      security:
+        - BearerAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -285,6 +311,8 @@ paths:
   /campaigns/{Id}:
     get:
       summary: Get campaign by id
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -300,6 +328,8 @@ paths:
                 $ref: '#/components/schemas/Campaign'
     put:
       summary: Update campaign
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -321,6 +351,8 @@ paths:
                 $ref: '#/components/schemas/Campaign'
     delete:
       summary: Delete campaign
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -334,6 +366,8 @@ paths:
   /campaigns/{CampaignId}/items:
     get:
       summary: List items for campaign
+      security:
+        - BearerAuth: []
       parameters:
         - name: CampaignId
           in: path
@@ -354,6 +388,8 @@ paths:
                       $ref: '#/components/schemas/CampaignItem'
     post:
       summary: Create item for campaign
+      security:
+        - BearerAuth: []
       parameters:
         - name: CampaignId
           in: path
@@ -377,6 +413,8 @@ paths:
   /campaign-items/{Id}:
     get:
       summary: Get campaign item by id
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -392,6 +430,8 @@ paths:
                 $ref: '#/components/schemas/CampaignItem'
     put:
       summary: Update campaign item
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -413,6 +453,8 @@ paths:
                 $ref: '#/components/schemas/CampaignItem'
     delete:
       summary: Delete campaign item
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -426,6 +468,8 @@ paths:
   /displays/{DisplayId}/campaign-assignments:
     get:
       summary: List campaign assignments for display
+      security:
+        - BearerAuth: []
       parameters:
         - name: DisplayId
           in: path
@@ -446,6 +490,8 @@ paths:
                       $ref: '#/components/schemas/DisplayCampaign'
     post:
       summary: Create campaign assignment for display
+      security:
+        - BearerAuth: []
       parameters:
         - name: DisplayId
           in: path
@@ -469,6 +515,8 @@ paths:
   /campaign-assignments/{Id}:
     put:
       summary: Update campaign assignment
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -490,6 +538,8 @@ paths:
                 $ref: '#/components/schemas/DisplayCampaign'
     delete:
       summary: Delete campaign assignment
+      security:
+        - BearerAuth: []
       parameters:
         - name: Id
           in: path
@@ -503,6 +553,8 @@ paths:
   /media-files/upload-url:
     post:
       summary: Get presigned upload URL
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -521,6 +573,8 @@ paths:
       /organizations/{OrganizationId}/media-files:
         get:
           summary: List media files for organization
+          security:
+            - BearerAuth: []
           parameters:
             - name: OrganizationId
               in: path
@@ -539,6 +593,8 @@ paths:
                         items: { $ref: '#/components/schemas/MediaFile' }
         post:
           summary: Create media metadata (direct)
+          security:
+            - BearerAuth: []
           parameters:
             - name: OrganizationId
               in: path
@@ -559,6 +615,8 @@ paths:
       /media-files/{Id}:
         get:
           summary: Get media file by id
+          security:
+            - BearerAuth: []
           parameters:
             - name: Id
               in: path
@@ -572,6 +630,8 @@ paths:
                   schema: { $ref: '#/components/schemas/MediaFile' }
         put:
           summary: Update media file
+          security:
+            - BearerAuth: []
           parameters:
             - name: Id
               in: path
@@ -590,6 +650,8 @@ paths:
                   schema: { $ref: '#/components/schemas/MediaFile' }
         delete:
           summary: Delete media file
+          security:
+            - BearerAuth: []
           parameters:
             - name: Id
               in: path
@@ -601,6 +663,8 @@ paths:
       /displays/{Id}/current-playing:
         get:
           summary: Get current playing media on display
+          security:
+            - BearerAuth: []
           parameters:
             - name: Id
               in: path
@@ -618,6 +682,7 @@ paths:
                       CampaignId: { type: integer }
                       MediaFileId: { type: integer }
                       PlaybackTimestamp: { type: string, format: date-time }
+                      StartedAt: { type: string, format: date-time }
                       MediaFileName: { type: string }
                       MediaFileType: { type: string }
                       CampaignName: { type: string }
@@ -626,6 +691,8 @@ paths:
       /displays/{Id}/set-primary:
         post:
           summary: Set primary campaign for display
+          security:
+            - BearerAuth: []
           parameters:
             - name: Id
               in: path
@@ -1000,3 +1067,8 @@ components:
         CampaignId: { type: integer }
         PlaybackTimestamp: { type: string, format: date-time }
       required: [DisplayId, MediaFileId, CampaignId, PlaybackTimestamp]
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
