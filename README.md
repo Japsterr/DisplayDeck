@@ -40,7 +40,7 @@ c:\DisplayDeck\build_linux.bat
 # optional: copy .env.example to .env and adjust
 Copy-Item .env.example .env -Force
 # pin the server image version (defaults to latest if unset)
-$env:SERVER_TAG = '0.1.5'
+$env:SERVER_TAG = '0.1.6'
 docker compose --env-file .env up -d postgres minio server swagger-ui
 ```
 
@@ -71,14 +71,14 @@ Key overrides:
 - `MINIO_PUBLIC_ENDPOINT` controls the hostname used in pre-signed URLs (default `http://localhost:9000`).
 - `SIGV4_DEBUG` toggles extra SigV4 logging.
 
-## Try a local copy (prebuilt 0.1.5)
+## Try a local copy (prebuilt 0.1.6)
 
 Use the prebuilt image to test media upload/download quickly:
 
 ```powershell
 cd C:\DisplayDeck
 Copy-Item .env.example .env -Force
-$env:SERVER_TAG = '0.1.5'
+$env:SERVER_TAG = '0.1.6'
 docker compose --env-file .env pull server
 docker compose --env-file .env up -d postgres minio server swagger-ui
 cd tests
@@ -158,6 +158,16 @@ docker push ghcr.io/<YOUR_GH_USERNAME>/displaydeck-server:latest
 
 Update `docker-compose.prod.yml` to point to your image (owner and tag), then deploy with the prod compose file.
 
+Notes about GitHub Actions in this repo:
+
+- The GH runners cannot compile Delphi. Two workflows exist under `.github/workflows/`:
+	- `docker-publish.yml` includes a check for the presence of `Server/Linux/DisplayDeck.WebBroker` and skips image publish if missing.
+	- `docker-ghcr.yml` builds and pushes on `master`. It now performs the same check and skips if the Linux binary is not present in the repo.
+- To have CI publish images automatically, either:
+	- Commit the prebuilt `Server/Linux/DisplayDeck.WebBroker` binary (not generally recommended), or
+	- Adjust the workflow to download the binary from a Release asset, or
+	- Use a self-hosted runner that can build the binary.
+
 ### Push to Docker Hub (alternative)
 
 ```powershell
@@ -170,6 +180,16 @@ docker push <your-dockerhub-username>/displaydeck-server:latest
 
 - This project targets Linux. Ensure your Linux SDK is installed in RAD Studio and `build_linux.bat` works on your machine.
 - The server image is Debian-based and already includes required runtime libs (libpq, SSL, krb5, etc.).
+
+## Troubleshooting
+
+- 404/preview issues in Media Library after upgrades:
+	- If media records exist but the underlying object was never uploaded or has been removed from MinIO, thumbnails and previews may fail.
+	- As of 0.1.6, `/media-files/{id}/download-url` is robust against endpoint changes in `StorageURL`, but it cannot recover missing objects.
+	- Remedies:
+		- Delete the orphan records via UI or `DELETE /media-files/{id}` and re-upload.
+		- Re-upload the file to the expected `StorageURL` path in the bucket.
+	- Tip: Use `tests\media-upload-download.ps1` to validate presigned PUT/GET end-to-end.
 
 ---
 
