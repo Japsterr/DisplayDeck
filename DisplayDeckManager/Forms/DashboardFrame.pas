@@ -1,4 +1,4 @@
-unit DashboardFrame;
+﻿unit DashboardFrame;
 
 interface
 

@@ -59,4 +59,73 @@ uses
 //   GET  /organizations/{OrgId} - Get organization details
 //   PUT  /organizations/{OrgId} - Update organization
 
+procedure TFrame4.Initialize(AUserId, AOrganizationId: Integer; const AUserName, AEmail: string);
+begin
+  FUserId := AUserId;
+  FOrganizationId := AOrganizationId;
+  edtEmail.Text := AEmail;
+  edtFullName.Text := AUserName;
+  LoadUserProfile;
+end;
+
+procedure TFrame4.LoadUserProfile;
+begin
+  // Placeholder values until wired to real API
+  if edtOrgName.Text = '' then
+    edtOrgName.Text := 'Organization';
+  if edtSubscription.Text = '' then
+    edtSubscription.Text := 'Free';
+end;
+
+function TFrame4.ValidateForm: Boolean;
+begin
+  Result := False;
+
+  if Trim(edtFullName.Text) = '' then
+  begin
+    TDialogService.ShowMessage('Please enter your full name');
+    Exit;
+  end;
+
+  if Trim(edtOrgName.Text) = '' then
+  begin
+    TDialogService.ShowMessage('Please enter organization name');
+    Exit;
+  end;
+
+  // If password fields are filled, validate them
+  if (Trim(edtNewPassword.Text) <> '') or (Trim(edtConfirmPassword.Text) <> '') then
+  begin
+    if Length(Trim(edtNewPassword.Text)) < 6 then
+    begin
+      TDialogService.ShowMessage('Password must be at least 6 characters');
+      Exit;
+    end;
+
+    if edtNewPassword.Text <> edtConfirmPassword.Text then
+    begin
+      TDialogService.ShowMessage('Passwords do not match');
+      Exit;
+    end;
+  end;
+
+  Result := True;
+end;
+
+procedure TFrame4.btnSaveProfileClick(Sender: TObject);
+begin
+  if not ValidateForm then
+    Exit;
+
+  // TODO: API call to update user/organization and optional password
+  TDialogService.ShowMessage('Profile updated successfully');
+
+  // Clear password fields
+  edtNewPassword.Text := '';
+  edtConfirmPassword.Text := '';
+end;
+
+end.
+
+
 

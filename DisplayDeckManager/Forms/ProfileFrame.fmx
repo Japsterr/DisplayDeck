@@ -40,7 +40,7 @@ object Frame4: TFrame4
       TabOrder = 0
       object RectCard: TRectangle
         Align = Center
-        Fill.Color = xFFFFFFFF
+        Fill.Color = claWhite
         Size.Width = 800.000000000000000000
         Size.Height = 650.000000000000000000
         Size.PlatformDefault = False
@@ -60,6 +60,8 @@ object Frame4: TFrame4
           object lblTitle: TLabel
             Align = Top
             StyledSettings = [Family, Style]
+            Position.X = 40.000000000000000000
+            Position.Y = 40.000000000000000000
             Size.Width = 720.000000000000000000
             Size.Height = 40.000000000000000000
             Size.PlatformDefault = False
@@ -72,14 +74,14 @@ object Frame4: TFrame4
             Align = Client
             Margins.Top = 16.000000000000000000
             Size.Width = 720.000000000000000000
-            Size.Height = 502.000000000000000000
+            Size.Height = 446.000000000000000000
             Size.PlatformDefault = False
             TabOrder = 1
-            Viewport.Width = 720.000000000000000000
-            Viewport.Height = 502.000000000000000000
+            Viewport.Width = 704.000000000000000000
+            Viewport.Height = 446.000000000000000000
             object LayoutForm: TLayout
               Align = Top
-              Size.Width = 720.000000000000000000
+              Size.Width = 704.000000000000000000
               Size.Height = 600.000000000000000000
               Size.PlatformDefault = False
               TabOrder = 0
@@ -88,7 +90,7 @@ object Frame4: TFrame4
                 StyledSettings = [Family, Style]
                 Margins.Top = 8.000000000000000000
                 Position.Y = 8.000000000000000000
-                Size.Width = 720.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 30.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.Font.Size = 16.000000000000000000
@@ -101,10 +103,9 @@ object Frame4: TFrame4
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
                 Position.Y = 54.000000000000000000
-                Size.Width = 720.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
-                TextSettings.Font.Size = 12.000000000000000000
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'Full Name'
                 TabOrder = 1
@@ -113,23 +114,22 @@ object Frame4: TFrame4
                 Touch.InteractiveGestures = [LongTap, DoubleTap]
                 Align = Top
                 TabOrder = 2
-                Position.Y = 74.000000000000000000
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 78.000000000000000000
                 Margins.Top = 4.000000000000000000
-                Size.Width = 720.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 40.000000000000000000
                 Size.PlatformDefault = False
                 StyledSettings = [Family, Style]
-                TextSettings.Font.Size = 14.000000000000000000
               end
               object lblEmail: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 130.000000000000000000
-                Size.Width = 720.000000000000000000
+                Position.Y = 134.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
-                TextSettings.Font.Size = 12.000000000000000000
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'Email'
                 TabOrder = 3
@@ -138,21 +138,21 @@ object Frame4: TFrame4
                 Touch.InteractiveGestures = [LongTap, DoubleTap]
                 Align = Top
                 TabOrder = 4
-                Position.Y = 150.000000000000000000
+                ReadOnly = True
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 158.000000000000000000
                 Margins.Top = 4.000000000000000000
-                Size.Width = 720.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 40.000000000000000000
                 Size.PlatformDefault = False
                 StyledSettings = [Family, Style]
-                TextSettings.Font.Size = 14.000000000000000000
-                ReadOnly = True
               end
               object lblSectionOrganization: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 32.000000000000000000
-                Position.Y = 222.000000000000000000
-                Size.Width = 720.000000000000000000
+                Position.Y = 230.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 30.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.Font.Size = 16.000000000000000000
@@ -164,11 +164,10 @@ object Frame4: TFrame4
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 268.000000000000000000
-                Size.Width = 720.000000000000000000
+                Position.Y = 276.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
-                TextSettings.Font.Size = 12.000000000000000000
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'Organization Name'
                 TabOrder = 6
@@ -177,23 +176,22 @@ object Frame4: TFrame4
                 Touch.InteractiveGestures = [LongTap, DoubleTap]
                 Align = Top
                 TabOrder = 7
-                Position.Y = 288.000000000000000000
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 300.000000000000000000
                 Margins.Top = 4.000000000000000000
-                Size.Width = 720.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 40.000000000000000000
                 Size.PlatformDefault = False
                 StyledSettings = [Family, Style]
-                TextSettings.Font.Size = 14.000000000000000000
               end
               object lblSubscription: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 344.000000000000000000
-                Size.Width = 720.000000000000000000
+                Position.Y = 356.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
-                TextSettings.Font.Size = 12.000000000000000000
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'Subscription Tier'
                 TabOrder = 8
@@ -202,21 +200,21 @@ object Frame4: TFrame4
                 Touch.InteractiveGestures = [LongTap, DoubleTap]
                 Align = Top
                 TabOrder = 9
-                Position.Y = 364.000000000000000000
+                ReadOnly = True
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 380.000000000000000000
                 Margins.Top = 4.000000000000000000
-                Size.Width = 720.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 40.000000000000000000
                 Size.PlatformDefault = False
                 StyledSettings = [Family, Style]
-                TextSettings.Font.Size = 14.000000000000000000
-                ReadOnly = True
               end
               object lblSectionSecurity: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 32.000000000000000000
-                Position.Y = 436.000000000000000000
-                Size.Width = 720.000000000000000000
+                Position.Y = 452.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 30.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.Font.Size = 16.000000000000000000
@@ -228,11 +226,10 @@ object Frame4: TFrame4
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 482.000000000000000000
-                Size.Width = 720.000000000000000000
+                Position.Y = 498.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
-                TextSettings.Font.Size = 12.000000000000000000
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'New Password'
                 TabOrder = 11
@@ -242,23 +239,22 @@ object Frame4: TFrame4
                 Align = Top
                 TabOrder = 12
                 Password = True
-                Position.Y = 502.000000000000000000
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 522.000000000000000000
                 Margins.Top = 4.000000000000000000
-                Size.Width = 720.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 40.000000000000000000
                 Size.PlatformDefault = False
                 StyledSettings = [Family, Style]
-                TextSettings.Font.Size = 14.000000000000000000
               end
               object lblConfirmPassword: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 558.000000000000000000
-                Size.Width = 720.000000000000000000
+                Position.Y = 578.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
-                TextSettings.Font.Size = 12.000000000000000000
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'Confirm Password'
                 TabOrder = 13
@@ -268,19 +264,20 @@ object Frame4: TFrame4
                 Align = Top
                 TabOrder = 14
                 Password = True
-                Position.Y = 578.000000000000000000
+                TextSettings.Font.Size = 14.000000000000000000
+                Position.Y = 602.000000000000000000
                 Margins.Top = 4.000000000000000000
-                Size.Width = 720.000000000000000000
+                Size.Width = 704.000000000000000000
                 Size.Height = 40.000000000000000000
                 Size.PlatformDefault = False
                 StyledSettings = [Family, Style]
-                TextSettings.Font.Size = 14.000000000000000000
               end
             end
           end
           object LayoutButtons: TLayout
             Align = Bottom
             Margins.Top = 16.000000000000000000
+            Position.X = 40.000000000000000000
             Position.Y = 558.000000000000000000
             Size.Width = 720.000000000000000000
             Size.Height = 52.000000000000000000
@@ -288,15 +285,16 @@ object Frame4: TFrame4
             TabOrder = 2
             object btnSaveProfile: TButton
               Align = Right
+              StyledSettings = [Family, Style]
               Position.X = 612.000000000000000000
               Size.Width = 108.000000000000000000
               Size.Height = 52.000000000000000000
               Size.PlatformDefault = False
-              StyledSettings = [Family, Style]
               TabOrder = 0
               Text = 'Save Changes'
               TextSettings.Font.Size = 14.000000000000000000
               TextSettings.FontColor = xFF2C3E50
+              TextSettings.Trimming = None
               OnClick = btnSaveProfileClick
             end
           end

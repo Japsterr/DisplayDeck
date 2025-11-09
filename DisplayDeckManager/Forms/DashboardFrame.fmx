@@ -309,8 +309,14 @@ object Frame3: TFrame3
                 TabOrder = 1
                 object btnAddDisplay: TButton
                   Align = Left
+                  Margins.Left = 5.000000000000000000
+                  Margins.Top = 20.000000000000000000
+                  Margins.Right = 5.000000000000000000
+                  Margins.Bottom = 20.000000000000000000
+                  Position.X = 5.000000000000000000
+                  Position.Y = 20.000000000000000000
                   Size.Width = 150.000000000000000000
-                  Size.Height = 120.000000000000000000
+                  Size.Height = 80.000000000000000000
                   Size.PlatformDefault = False
                   TabOrder = 0
                   Text = '+ Add Display'
@@ -319,9 +325,14 @@ object Frame3: TFrame3
                 end
                 object btnCreateCampaign: TButton
                   Align = Left
-                  Position.X = 150.000000000000000000
+                  Margins.Left = 5.000000000000000000
+                  Margins.Top = 20.000000000000000000
+                  Margins.Right = 5.000000000000000000
+                  Margins.Bottom = 20.000000000000000000
+                  Position.X = 165.000000000000000000
+                  Position.Y = 20.000000000000000000
                   Size.Width = 150.000000000000000000
-                  Size.Height = 120.000000000000000000
+                  Size.Height = 80.000000000000000000
                   Size.PlatformDefault = False
                   TabOrder = 1
                   Text = '+ Create Campaign'
@@ -330,12 +341,19 @@ object Frame3: TFrame3
                 end
                 object btnUploadMedia: TButton
                   Align = Left
-                  Position.X = 300.000000000000000000
+                  StyledSettings = [Family, Style, FontColor]
+                  Margins.Left = 5.000000000000000000
+                  Margins.Top = 20.000000000000000000
+                  Margins.Right = 5.000000000000000000
+                  Margins.Bottom = 20.000000000000000000
+                  Position.X = 325.000000000000000000
+                  Position.Y = 20.000000000000000000
                   Size.Width = 150.000000000000000000
-                  Size.Height = 120.000000000000000000
+                  Size.Height = 80.000000000000000000
                   Size.PlatformDefault = False
                   TabOrder = 2
                   Text = '+ Upload Media'
+                  TextSettings.Font.Size = 16.000000000000000000
                   TextSettings.Trimming = None
                   OnClick = btnUploadMediaClick
                 end
@@ -345,21 +363,21 @@ object Frame3: TFrame3
         end
         object LayoutBottom: TLayout
           Align = Bottom
+          Position.Y = 691.000000000000000000
           Size.Width = 1196.000000000000000000
           Size.Height = 100.000000000000000000
           Size.PlatformDefault = False
           TabOrder = 5
           object imgLogoDashboard: TImage
-            Align = Center
-            Size.Width = 180.000000000000000000
-            Size.Height = 60.000000000000000000
-            Size.PlatformDefault = False
-            WrapMode = Fit
-            HitTest = False
             MultiResBitmap = <
               item
                 FileName = 'Logo\Logo.png'
               end>
+            Align = Center
+            HitTest = False
+            Size.Width = 180.000000000000000000
+            Size.Height = 60.000000000000000000
+            Size.PlatformDefault = False
           end
         end
       end
