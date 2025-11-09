@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.6 - 2025-11-09
+
+- Fix download-url 400 errors for existing media
+  - Robustly parse `StorageURL` by stripping either public or internal MinIO endpoint
+  - Handle stale scheme/host to reliably extract bucket/key
+  - Return clear 4xx messages for invalid storage paths
+- Built and published server image tag `0.1.6` (local)
+- Verified with `tests/media-upload-download.ps1` (PUT 200, GET 200)
+
 ## 0.1.5 - 2025-11-09
 
 - Fix S3 SigV4 signature for presigned PUT/GET against MinIO

@@ -968,15 +968,17 @@ begin
         var FileName := Body.GetValue<string>('FileName','');
         var FileType := Body.GetValue<string>('FileType','application/octet-stream');
         if (OrgId=0) or (FileName='') then begin JSONError(400,'Missing fields'); Exit; end;
-        var Bucket := GetEnv('MINIO_BUCKET','displaydeck');
-        var Endpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
+        // Use the same default bucket name created by docker compose (minio-setup)
+        var Bucket := GetEnv('MINIO_BUCKET','displaydeck-media');
+        var InternalEndpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
+        var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT', InternalEndpoint);
         var Access := GetEnv('MINIO_ACCESS_KEY','minioadmin');
         var Secret := GetEnv('MINIO_SECRET_KEY','minioadmin');
         var Region := GetEnv('MINIO_REGION','us-east-1');
         var Key := Format('org/%d/%s/%s',[OrgId, FormatDateTime('yyyymmddhhnnsszz', Now), FileName]);
-        var Params: TS3PresignParams; Params.Endpoint:=Endpoint; Params.Region:=Region; Params.Bucket:=Bucket; Params.ObjectKey:=Key; Params.AccessKey:=Access; Params.SecretKey:=Secret; Params.Method:='PUT'; Params.ExpiresSeconds:=900;
+        var Params: TS3PresignParams; Params.Endpoint:=PublicEndpoint; Params.Region:=Region; Params.Bucket:=Bucket; Params.ObjectKey:=Key; Params.AccessKey:=Access; Params.SecretKey:=Secret; Params.Method:='PUT'; Params.ExpiresSeconds:=900;
         var Url: string; if not BuildS3PresignedUrl(Params, Url) then begin JSONError(500,'Failed to generate URL'); Exit; end;
-        var StorageURL := Endpoint.TrimRight(['/']) + '/' + Bucket + '/' + Key;
+        var StorageURL := PublicEndpoint.TrimRight(['/']) + '/' + Bucket + '/' + Key;
         var MF := TMediaFileRepository.CreateMedia(OrgId, FileName, FileType, StorageURL);
         try
           var Obj := TJSONObject.Create;
@@ -994,21 +996,44 @@ begin
        SameText(Request.Method, 'GET') then
     begin
       // /media-files/{id}/download-url
-      var Tail := Copy(Request.PathInfo, 14, MaxInt);
+      // Use normalized PathInfo (without optional /api prefix) for parsing
+      var Tail := Copy(PathInfo, 14, MaxInt);
       var IdStr := Copy(Tail, 1, Pos('/', Tail)-1);
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid media id'); Exit; end;
       var MF := TMediaFileRepository.GetById(Id); if MF=nil then begin JSONError(404,'Not found'); Exit; end;
       try
-        var Endpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
+        var InternalEndpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
+        var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT', InternalEndpoint);
         var Access := GetEnv('MINIO_ACCESS_KEY','minioadmin');
         var Secret := GetEnv('MINIO_SECRET_KEY','minioadmin');
         var Region := GetEnv('MINIO_REGION','us-east-1');
-        // Parse bucket/key from StorageURL of form endpoint/bucket/key
-        var Path := MF.StorageURL;
-        if Path.StartsWith(Endpoint) then Path := Copy(Path, Length(Endpoint)+1, MaxInt);
+        // Robust parsing: StorageURL may have been saved with either internal or public endpoint.
+        // Strip either endpoint prefix if present, then extract bucket and key.
+        var Path := Trim(MF.StorageURL);
+        if Path='' then begin JSONError(400,'Missing storage path'); Exit; end;
+        if Path.StartsWith(PublicEndpoint) then
+          Path := Copy(Path, Length(PublicEndpoint)+1, MaxInt)
+        else if Path.StartsWith(InternalEndpoint) then
+          Path := Copy(Path, Length(InternalEndpoint)+1, MaxInt);
         if (Length(Path)>0) and (Path[1]='/') then Path := Copy(Path,2,MaxInt);
-        var p := Pos('/', Path); var Bucket := Copy(Path,1,p-1); var Key := Copy(Path,p+1, MaxInt);
-        var Params: TS3PresignParams; Params.Endpoint:=Endpoint; Params.Region:=Region; Params.Bucket:=Bucket; Params.ObjectKey:=Key; Params.AccessKey:=Access; Params.SecretKey:=Secret; Params.Method:='GET'; Params.ExpiresSeconds:=900;
+        // Fallback: if still contains scheme://host because endpoints changed, strip host portion.
+        var SchemePos := Pos('://', Path);
+        if SchemePos>0 then
+        begin
+          // find next slash after scheme://
+          var HostEndIdx := SchemePos + 3; // position where host starts
+          var SlashAfterHost := 0;
+          var i := HostEndIdx;
+          while i <= Length(Path) do begin if Path[i]='/' then begin SlashAfterHost := i; Break; end; Inc(i); end;
+          if SlashAfterHost>0 then
+            Path := Copy(Path, SlashAfterHost+1, MaxInt);
+        end;
+        var p := Pos('/', Path);
+        if p=0 then begin JSONError(400,'Invalid storage path'); Exit; end;
+        var Bucket := Copy(Path,1,p-1);
+        var Key := Copy(Path,p+1, MaxInt);
+        if (Bucket='') or (Key='') then begin JSONError(400,'Invalid storage path'); Exit; end;
+        var Params: TS3PresignParams; Params.Endpoint:=PublicEndpoint; Params.Region:=Region; Params.Bucket:=Bucket; Params.ObjectKey:=Key; Params.AccessKey:=Access; Params.SecretKey:=Secret; Params.Method:='GET'; Params.ExpiresSeconds:=900;
         var Url: string; if not BuildS3PresignedUrl(Params, Url) then begin JSONError(500,'Failed to generate URL'); Exit; end;
         var Obj := TJSONObject.Create; Obj.AddPair('DownloadUrl', Url); Obj.AddPair('Success', TJSONBool.Create(True)); Obj.AddPair('Message', '');
         Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
