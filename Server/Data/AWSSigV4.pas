@@ -3,7 +3,8 @@ unit AWSSigV4;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.DateUtils, System.NetEncoding, System.Hash, System.Net.URLClient;
+  System.SysUtils, System.Classes, System.DateUtils, System.NetEncoding, System.Hash, System.Net.URLClient,
+  System.Generics.Collections;
 
 type
   TS3PresignParams = record
@@ -20,6 +21,11 @@ type
 function BuildS3PresignedUrl(const P: TS3PresignParams; out Url: string): Boolean;
 
 implementation
+
+function DebugEnabled: Boolean;
+begin
+  Result := SameText(GetEnvironmentVariable('SIGV4_DEBUG'), 'true');
+end;
 
 function UriEncode(const S: string; const EncodeSlash: Boolean): string;
 var
@@ -48,11 +54,12 @@ function BuildS3PresignedUrl(const P: TS3PresignParams; out Url: string): Boolea
 var
   DateStamp, AmzDate, CredentialScope, Credential, Algorithm: string;
   CanonicalUri, Host, SignedHeaders, CanonicalHeaders, CanonicalQuery, CanonicalRequest, StringToSign: string;
-  DerivedKey: TBytes;
   Signature: string;
   Service: string;
   ExpiresStr: string;
   Uri: TURI;
+  QueryPairs: TArray<string>;
+  i: Integer;
 begin
   Result := False;
   Url := '';
@@ -77,15 +84,25 @@ begin
   if (Uri.Port > 0) and (Uri.Port <> 80) and (Uri.Port <> 443) then
     Host := Host + ':' + Uri.Port.ToString;
 
-  CanonicalUri := '/' + UriEncode(P.Bucket, True) + '/' + UriEncode(P.ObjectKey, True);
+  CanonicalUri := '/' + UriEncode(P.Bucket, False) + '/' + UriEncode(P.ObjectKey, False);
   SignedHeaders := 'host';
   CanonicalHeaders := 'host:' + Host.ToLower + #10;
-  CanonicalQuery :=
-    'X-Amz-Algorithm=' + Algorithm + '&' +
-    'X-Amz-Credential=' + UriEncode(Credential, True) + '&' +
-    'X-Amz-Date=' + AmzDate + '&' +
-    'X-Amz-Expires=' + ExpiresStr + '&' +
-    'X-Amz-SignedHeaders=' + SignedHeaders;
+  // Build sorted canonical query parameters per AWS SigV4 spec
+  SetLength(QueryPairs, 5);
+  QueryPairs[0] := 'X-Amz-Algorithm=' + UriEncode(Algorithm, True);
+  QueryPairs[1] := 'X-Amz-Credential=' + UriEncode(Credential, True);
+  QueryPairs[2] := 'X-Amz-Date=' + UriEncode(AmzDate, True);
+  QueryPairs[3] := 'X-Amz-Expires=' + UriEncode(ExpiresStr, True);
+  QueryPairs[4] := 'X-Amz-SignedHeaders=' + UriEncode(SignedHeaders, True);
+  // Sort by parameter name
+  TArray.Sort<string>(QueryPairs);
+  CanonicalQuery := '';
+  for i := 0 to High(QueryPairs) do
+  begin
+    if CanonicalQuery <> '' then
+      CanonicalQuery := CanonicalQuery + '&';
+    CanonicalQuery := CanonicalQuery + QueryPairs[i];
+  end;
 
   CanonicalRequest := P.Method + #10 +
                       CanonicalUri + #10 +
@@ -105,14 +122,28 @@ begin
   var KService := HmacSHA256(KRegion, TEncoding.UTF8.GetBytes(Service));
   var KSigning := HmacSHA256(KService, TEncoding.UTF8.GetBytes('aws4_request'));
   var SigBytes := THashSHA2.GetHMACAsBytes(TEncoding.UTF8.GetBytes(StringToSign), KSigning);
-  // Convert signature bytes to lowercase hex string
-  var HexBuf: string;
-  SetLength(HexBuf, Length(SigBytes) * 2);
-  if Length(SigBytes) > 0 then
-    BinToHex(PAnsiChar(@SigBytes[0]), PAnsiChar(@HexBuf[1]), Length(SigBytes));
-  Signature := LowerCase(HexBuf);
+  // Proper lowercase hex conversion avoiding Ansi/Unicode pointer issues
+  var idx: Integer; var sb: TStringBuilder;
+  sb := TStringBuilder.Create(Length(SigBytes)*2);
+  try
+    for idx := 0 to High(SigBytes) do
+      sb.Append(LowerCase(IntToHex(SigBytes[idx], 2)));
+    Signature := sb.ToString;
+  finally
+    sb.Free;
+  end;
 
+  // Ensure endpoint has no trailing slash, then append canonical path and query. Endpoint may already include scheme and host.
   Url := P.Endpoint.TrimRight(['/']) + CanonicalUri + '?' + CanonicalQuery + '&X-Amz-Signature=' + Signature;
+  if DebugEnabled then
+  begin
+    WriteLn('SIGV4 CanonicalRequest>>');
+    WriteLn(CanonicalRequest);
+    WriteLn('SIGV4 StringToSign>>');
+    WriteLn(StringToSign);
+    WriteLn('SIGV4 URL>>');
+    WriteLn(Url);
+  end;
   Result := True;
 end;
 

@@ -37,7 +37,11 @@ c:\DisplayDeck\build_linux.bat
 3) Bring up the stack (DB, MinIO, server, Swagger UI)
 
 ```powershell
-docker compose up -d postgres minio server swagger-ui
+# optional: copy .env.example to .env and adjust
+Copy-Item .env.example .env -Force
+# pin the server image version (defaults to latest if unset)
+$env:SERVER_TAG = '0.1.5'
+docker compose --env-file .env up -d postgres minio server swagger-ui
 ```
 
 - API base: http://localhost:2001
@@ -46,7 +50,6 @@ docker compose up -d postgres minio server swagger-ui
 Run tests (optional):
 
 ```powershell
-.\n+tests\smoke-tests.ps1
 tests\pairing-tests.ps1
 ```
 
@@ -55,11 +58,34 @@ tests\pairing-tests.ps1
 Server reads configuration from env vars (see `.env.example`):
 
 - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-- MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_REGION
+- MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_REGION, MINIO_PUBLIC_ENDPOINT
 - JWT_SECRET (required)
 - SERVER_DEBUG (default "false"; gates debug endpoints)
+- SIGV4_DEBUG (default "false"; prints SigV4 canonical request when true)
+- SERVER_TAG (image tag used by compose; defaults to `latest` if unset)
 
 The compose file `docker-compose.yml` sets sane defaults. Override via environment or an `.env` file.
+Key overrides:
+
+- `SERVER_TAG` controls the server image tag used.
+- `MINIO_PUBLIC_ENDPOINT` controls the hostname used in pre-signed URLs (default `http://localhost:9000`).
+- `SIGV4_DEBUG` toggles extra SigV4 logging.
+
+## Try a local copy (prebuilt 0.1.5)
+
+Use the prebuilt image to test media upload/download quickly:
+
+```powershell
+cd C:\DisplayDeck
+Copy-Item .env.example .env -Force
+$env:SERVER_TAG = '0.1.5'
+docker compose --env-file .env pull server
+docker compose --env-file .env up -d postgres minio server swagger-ui
+cd tests
+./media-upload-download.ps1
+```
+
+Expected result: the script reports PUT/GET 200 and `Media upload/download SUCCESS`.
 
 ## API overview
 
