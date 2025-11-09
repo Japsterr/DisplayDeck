@@ -68,7 +68,8 @@ services:
       DB_NAME: displaydeck
       DB_USER: displaydeck_user
       DB_PASSWORD: verysecretpassword
-      MINIO_ENDPOINT: http://minio:9000
+      # Use localhost so pre-signed URLs are reachable from the desktop client
+      MINIO_ENDPOINT: http://localhost:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_REGION: us-east-1
