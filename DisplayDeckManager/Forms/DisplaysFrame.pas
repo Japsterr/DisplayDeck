@@ -57,16 +57,27 @@ type
     btnSave: TButton;
     LayoutSpacer6: TLayout;
     btnDelete: TButton;
-    procedure btnAddDisplayClick(Sender: TObject);
+    LayoutSpacer7: TLayout;
+    lblCurrentPlayingLabel: TLabel;
+    lblCurrentPlayingValue: TLabel;
+    btnRefreshPlaying: TButton;
+    LayoutSpacer8: TLayout;
+    btnPairDisplay: TButton;
+    btnSetPrimary: TButton;
+    procedure btnAddDisplayClick(Sender: TObject); // repurposed as new display creation, pairing via separate button
     procedure ListView1ItemClick(const Sender: TObject; const AItem: TListViewItem);
     procedure btnSaveClick(Sender: TObject);
     procedure btnDeleteClick(Sender: TObject);
     procedure cboOrientationChange(Sender: TObject);
+    procedure btnRefreshPlayingClick(Sender: TObject);
+    procedure btnPairDisplayClick(Sender: TObject);
+    procedure btnSetPrimaryClick(Sender: TObject);
   private
     FDisplays: array of TLocalDisplayData;
     FSelectedDisplayId: Integer;
     FIsNewDisplay: Boolean;
     FOrganizationId: Integer;
+    FPlayingTimer: TTimer;
     procedure LoadDisplays;
     procedure PopulateOrientationCombo;
     procedure ShowDisplayDetails(const Display: TLocalDisplayData);
@@ -77,6 +88,10 @@ type
     procedure DeleteDisplay;
     function GetCurrentDisplayData: TLocalDisplayData;
     function FindDisplayById(AId: Integer): Integer;
+    procedure LoadCurrentPlaying(ADisplayId: Integer);
+    procedure PairDisplayFlow;
+    procedure SetPrimaryCampaignFlow;
+    procedure PlayingTimerTick(Sender: TObject);
   public
     procedure Initialize(AOrganizationId: Integer);
   end;
@@ -86,7 +101,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.DateUtils, FMX.DialogService, FMX.DialogService.Sync;
+  System.DateUtils, FMX.DialogService, FMX.DialogService.Sync, uTheme;
 
 { TFrame5 }
 
@@ -97,6 +112,25 @@ begin
   ClearDisplayDetails;
   EnableDetailPanel(False);
   LoadDisplays;
+  // Auto refresh current playing every 20s when a display is selected
+  FPlayingTimer := TTimer.Create(Self);
+  FPlayingTimer.Interval := 20000; // 20 seconds
+  FPlayingTimer.OnTimer := PlayingTimerTick;
+  // Apply simple theme tweaks to match mockups
+  StyleBackground(RectBackground);
+  StyleCard(RectListCard);
+  StyleCard(RectDetailCard);
+  StyleHeaderLabel(lblDetailTitle);
+  StyleMutedLabel(lblNameLabel);
+  StyleMutedLabel(lblOrientationLabel);
+  StyleMutedLabel(lblStatusLabel);
+  StyleMutedLabel(lblLastSeenLabel);
+  StyleMutedLabel(lblProvisioningLabel);
+  StylePrimaryButton(btnSave); WireButtonHover(btnSave);
+  StyleDangerButton(btnDelete); WireButtonHover(btnDelete);
+  StylePrimaryButton(btnPairDisplay); WireButtonHover(btnPairDisplay);
+  StylePrimaryButton(btnSetPrimary); WireButtonHover(btnSetPrimary);
+  StylePrimaryButton(btnRefreshPlaying); WireButtonHover(btnRefreshPlaying);
 end;
 
 procedure TFrame5.PopulateOrientationCombo;
@@ -221,6 +255,8 @@ begin
     lblProvisioningValue.Text := 'Not generated';
   
   btnDelete.Visible := True;
+  // Load current playing info asynchronously
+  LoadCurrentPlaying(Display.Id);
 end;
 
 procedure TFrame5.ClearDisplayDetails;
@@ -233,6 +269,7 @@ begin
   lblLastSeenValue.Text := 'Never';
   lblProvisioningValue.Text := 'Not generated';
   btnDelete.Visible := False;
+  lblCurrentPlayingValue.Text := 'No data';
 end;
 
 procedure TFrame5.EnableDetailPanel(AEnabled: Boolean);
@@ -243,15 +280,147 @@ begin
   btnDelete.Enabled := AEnabled and not FIsNewDisplay;
 end;
 
+procedure TFrame5.LoadCurrentPlaying(ADisplayId: Integer);
+var
+  CP: uApiClient.TCurrentPlaying;
+begin
+  lblCurrentPlayingValue.Text := 'Loading...';
+  try
+    CP := TApiClient.Instance.GetDisplayCurrentPlaying(ADisplayId);
+    if (CP.MediaFileId > 0) then
+      lblCurrentPlayingValue.Text := Format('%s (Media %d) started %s', [CP.MediaFileName, CP.MediaFileId, CP.StartedAt])
+    else
+      lblCurrentPlayingValue.Text := 'Idle';
+  except
+    on E: Exception do
+      lblCurrentPlayingValue.Text := 'Error: ' + E.Message;
+  end;
+end;
+
+procedure TFrame5.PlayingTimerTick(Sender: TObject);
+begin
+  if (FSelectedDisplayId > 0) then
+    try
+      LoadCurrentPlaying(FSelectedDisplayId);
+    except
+      // silent errors to avoid UI spam
+    end;
+end;
+
+procedure TFrame5.btnRefreshPlayingClick(Sender: TObject);
+begin
+  if FSelectedDisplayId > 0 then
+    LoadCurrentPlaying(FSelectedDisplayId);
+end;
+
+procedure TFrame5.PairDisplayFlow;
+var
+  Inputs: array of string;
+  Token, Name, Orientation: string;
+  NewDisp: uApiClient.TDisplayData;
+begin
+  // Inputs: Token, Optional Name, Orientation
+  SetLength(Inputs,3);
+  Inputs[0] := '';
+  Inputs[1] := '';
+  Inputs[2] := 'Portrait';
+  // Use DialogService for cross-platform (InputQuery deprecated)
+  TDialogService.InputQuery('Pair Display', ['Provisioning Token','Optional Name','Orientation (Portrait/Landscape)'], Inputs,
+    procedure(const AResult: TModalResult; const AValues: array of string)
+    begin
+      if AResult <> mrOk then Exit;
+      Token := Trim(AValues[0]);
+      Name := Trim(AValues[1]);
+      if Token = '' then
+      begin
+        TDialogService.ShowMessage('Token is required');
+        Exit;
+      end;
+      Orientation := Trim(AValues[2]);
+      if (Orientation = '') then Orientation := 'Portrait';
+      if not SameText(Orientation,'Portrait') and not SameText(Orientation,'Landscape') then
+      begin
+        TDialogService.ShowMessage('Orientation must be Portrait or Landscape');
+        Exit;
+      end;
+      try
+        NewDisp := TApiClient.Instance.ClaimDisplay(FOrganizationId, Token, Name, Orientation);
+        if NewDisp.Id > 0 then
+        begin
+          TDialogService.ShowMessage('Display paired successfully');
+          LoadDisplays;
+        end
+        else
+          TDialogService.ShowMessage('Pairing failed');
+      except
+        on E: Exception do
+          TDialogService.ShowMessage('Error pairing: ' + E.Message);
+      end;
+    end);
+end;
+
+procedure TFrame5.btnPairDisplayClick(Sender: TObject);
+begin
+  PairDisplayFlow;
+end;
+
+procedure TFrame5.SetPrimaryCampaignFlow;
+var
+  Inputs: array of string;
+  CampaignId: Integer;
+  Success: Boolean;
+  Campaigns: TArray<uApiClient.TCampaignData>;
+  ListStr: string;
+begin
+  if FSelectedDisplayId <= 0 then Exit;
+  SetLength(Inputs,1);
+  Inputs[0] := '';
+  // Build helper list of campaigns for user reference
+  try
+    Campaigns := TApiClient.Instance.GetCampaigns(FOrganizationId);
+    if Length(Campaigns) > 0 then
+    begin
+      for var C in Campaigns do
+        ListStr := ListStr + Format('%d=%s; ', [C.Id, C.Name]);
+      ListStr := Trim(ListStr);
+    end
+    else
+      ListStr := 'None available';
+  except
+    on E: Exception do ListStr := 'Error loading campaigns: ' + E.Message;
+  end;
+  TDialogService.InputQuery('Set Primary Campaign', ['Campaign Id (Available: '+ListStr+')'], Inputs,
+    procedure(const AResult: TModalResult; const AValues: array of string)
+    begin
+      if AResult <> mrOk then Exit;
+      CampaignId := StrToIntDef(Trim(AValues[0]),0);
+      if CampaignId=0 then
+      begin
+        TDialogService.ShowMessage('Invalid Campaign Id');
+        Exit;
+      end;
+      try
+        Success := TApiClient.Instance.SetDisplayPrimary(FSelectedDisplayId, CampaignId);
+        if Success then
+          TDialogService.ShowMessage('Primary campaign updated')
+        else
+          TDialogService.ShowMessage('Failed to update primary campaign');
+      except
+        on E: Exception do
+          TDialogService.ShowMessage('Error setting primary: ' + E.Message);
+      end;
+    end);
+end;
+
+procedure TFrame5.btnSetPrimaryClick(Sender: TObject);
+begin
+  SetPrimaryCampaignFlow;
+end;
+
 procedure TFrame5.btnAddDisplayClick(Sender: TObject);
 begin
-  FIsNewDisplay := True;
-  FSelectedDisplayId := 0;
-  ClearDisplayDetails;
-  lblDetailTitle.Text := 'New Display';
-  EnableDetailPanel(True);
-  btnDelete.Visible := False;
-  edtName.SetFocus;
+  // Pairing-first flow: prompt for token (and optional name) instead of manual creation
+  PairDisplayFlow;
 end;
 
 function TFrame5.ValidateDisplayData: Boolean;

@@ -13,7 +13,8 @@ uses
   CampaignsFrame in 'Forms\CampaignsFrame.pas' {Frame6: TFrame},
   MediaLibraryFrame in 'Forms\MediaLibraryFrame.pas' {Frame7: TFrame},
   AnalyticsFrame in 'Forms\AnalyticsFrame.pas' {Frame8: TFrame},
-  SettingsFrame in 'Forms\SettingsFrame.pas' {Frame9: TFrame};
+  SettingsFrame in 'Forms\SettingsFrame.pas' {Frame9: TFrame},
+  uTheme in 'Forms\uTheme.pas';
 
 {$R *.res}
 

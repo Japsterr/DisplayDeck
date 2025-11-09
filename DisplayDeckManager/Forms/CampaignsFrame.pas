@@ -7,7 +7,7 @@ uses
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
   FMX.Objects, FMX.Layouts, FMX.ListView.Types, FMX.ListView.Appearances,
   FMX.ListView.Adapters.Base, FMX.ListView, FMX.Controls.Presentation, FMX.Edit,
-  FMX.ListBox, uApiClient, System.JSON, FMX.DialogService, FMX.DialogService.Sync;
+  FMX.ListBox, uApiClient, System.JSON, FMX.DialogService, FMX.DialogService.Sync, uTheme;
 
 type
   TCampaignData = record
@@ -82,6 +82,13 @@ begin
   ClearDetails;
   EnableDetailPanel(False);
   LoadCampaigns;
+  // Theme styling
+  StyleBackground(RectBackground);
+  StyleCard(RectListCard);
+  StyleCard(RectDetailCard);
+  StyleHeaderLabel(lblDetailTitle);
+  StyleMutedLabel(lblNameLabel);
+  StyleMutedLabel(lblOrientationLabel);
 end;
 
 procedure TFrame6.LoadCampaigns;

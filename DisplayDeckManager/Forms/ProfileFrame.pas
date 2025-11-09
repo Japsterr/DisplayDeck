@@ -3,7 +3,7 @@ unit ProfileFrame;
 interface
 
 uses
-  System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
+  System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
   FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, FMX.Edit;
 
@@ -49,7 +49,7 @@ implementation
 {$R *.fmx}
 
 uses
-  System.JSON, FMX.DialogService;
+  System.JSON, FMX.DialogService, uTheme;
 
 // API Base: http://localhost:2001/tms/xdata
 // Endpoints:
@@ -59,71 +59,4 @@ uses
 //   GET  /organizations/{OrgId} - Get organization details
 //   PUT  /organizations/{OrgId} - Update organization
 
-procedure TFrame4.Initialize(AUserId, AOrganizationId: Integer; const AUserName, AEmail: string);
-begin
-  FUserId := AUserId;
-  FOrganizationId := AOrganizationId;
-  edtEmail.Text := AEmail;
-  edtFullName.Text := AUserName;
-  LoadUserProfile;
-end;
 
-procedure TFrame4.LoadUserProfile;
-begin
-  // TODO: API call to GET /users/{FUserId} and GET /organizations/{FOrganizationId}
-  // For now, populate with sample data
-  edtOrgName.Text := 'Sample Organization';
-  edtSubscription.Text := 'Pro Plan';
-end;
-
-function TFrame4.ValidateForm: Boolean;
-begin
-  Result := False;
-  
-  if Trim(edtFullName.Text) = '' then
-  begin
-    TDialogService.ShowMessage('Please enter your full name');
-    Exit;
-  end;
-  
-  if Trim(edtOrgName.Text) = '' then
-  begin
-    TDialogService.ShowMessage('Please enter organization name');
-    Exit;
-  end;
-  
-  // If password fields are filled, validate them
-  if (Trim(edtNewPassword.Text) <> '') or (Trim(edtConfirmPassword.Text) <> '') then
-  begin
-    if Length(Trim(edtNewPassword.Text)) < 6 then
-    begin
-      TDialogService.ShowMessage('Password must be at least 6 characters');
-      Exit;
-    end;
-    
-    if edtNewPassword.Text <> edtConfirmPassword.Text then
-    begin
-      TDialogService.ShowMessage('Passwords do not match');
-      Exit;
-    end;
-  end;
-  
-  Result := True;
-end;
-
-procedure TFrame4.btnSaveProfileClick(Sender: TObject);
-begin
-  if not ValidateForm then
-    Exit;
-    
-  // TODO: API call to PUT /users/{FUserId} and PUT /organizations/{FOrganizationId}
-  // If password changed, call PUT /users/{FUserId}/password
-  
-  TDialogService.ShowMessage('Profile updated successfully');
-  
-  // Clear password fields
-  edtNewPassword.Text := '';
-  edtConfirmPassword.Text := '';
-end;
-
-end.

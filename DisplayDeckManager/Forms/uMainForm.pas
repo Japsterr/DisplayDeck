@@ -8,7 +8,7 @@ uses
   FMX.Layouts, LoginFrame, RegisterFrame, DashboardFrame, FMX.ListBox,
   FMX.Controls.Presentation, FMX.StdCtrls, ProfileFrame, DisplaysFrame,
   CampaignsFrame, MediaLibraryFrame, AnalyticsFrame, SettingsFrame, uApiClient,
-  System.IOUtils;
+  System.IOUtils, uTheme;
 
 type
   TMenuSection = (msNone, msDashboard, msProfile, msDisplays, 
@@ -61,6 +61,10 @@ type
     procedure HandleNavigateToSection(const SectionTag: Integer);
     procedure ClearCurrentFrame;
     procedure LoadSection(ASection: TMenuSection);
+    procedure MenuItemMouseEnter(Sender: TObject);
+    procedure MenuItemMouseLeave(Sender: TObject);
+    procedure AttachMenuHover(Item: TListBoxItem);
+    procedure ApplyGlobalTheme; // live restyling when theme changes
   public
     { Public declarations }
   end;
@@ -95,21 +99,125 @@ begin
     var ImgTop := FindComponent('imgLogoTop') as TImage;
     var ImgBottom := FindComponent('imgLogoBottom') as TImage;
     if Assigned(ImgTop) then
+    begin
       ImgTop.Bitmap.LoadFromFile(LogoPath);
+      ImgTop.Width := 140; ImgTop.Height := 40;
+    end;
     if Assigned(ImgBottom) then
+    begin
       ImgBottom.Bitmap.LoadFromFile(LogoPath);
+      ImgBottom.Width := 140; ImgBottom.Height := 40;
+    end;
   end;
   
   // Load the login frame
   LoadLoginFrame;
+  // Apply theme to navigation background if present
+  var NavRect := FindComponent('Rectangle1') as TRectangle;
+  if Assigned(NavRect) then StyleNavBackground(NavRect);
+  // Style menu items: first one active by default
+  for var i := 0 to lstMenu.Items.Count - 1 do
+  begin
+    var It := lstMenu.ListItems[i];
+    StyleMenuItem(It, i=0);
+    AttachMenuHover(It);
+  end;
+  // Register callback for live dark/light mode changes
+  RegisterThemeChangedCallback(ApplyGlobalTheme);
 end;
 
 procedure TForm1.ClearCurrentFrame;
 begin
   if Assigned(FCurrentFrame) then
   begin
+    // Detach parent to avoid FMX access during destruction of child controls
+    FCurrentFrame.Parent := nil;
     FCurrentFrame.Free;
     FCurrentFrame := nil;
+  end;
+end;
+
+procedure TForm1.MenuItemMouseEnter(Sender: TObject);
+var
+  It: TListBoxItem;
+begin
+  if not (Sender is TListBoxItem) then Exit;
+  It := TListBoxItem(Sender);
+  // Do not override active item's styling
+  if (lstMenu.ItemIndex >= 0) and (lstMenu.ListItems[lstMenu.ItemIndex] = It) then Exit;
+  It.TextSettings.FontColor := ColorNavHover;
+  It.StyledSettings := It.StyledSettings - [TStyledSetting.FontColor];
+  It.Opacity := 1.0;
+end;
+
+procedure TForm1.MenuItemMouseLeave(Sender: TObject);
+var
+  It: TListBoxItem;
+  Active: Boolean;
+begin
+  if not (Sender is TListBoxItem) then Exit;
+  It := TListBoxItem(Sender);
+  Active := (lstMenu.ItemIndex >= 0) and (lstMenu.ListItems[lstMenu.ItemIndex] = It);
+  StyleMenuItem(It, Active);
+end;
+
+procedure TForm1.AttachMenuHover(Item: TListBoxItem);
+begin
+  if Item = nil then Exit;
+  Item.OnMouseEnter := MenuItemMouseEnter;
+  Item.OnMouseLeave := MenuItemMouseLeave;
+end;
+
+procedure TForm1.ApplyGlobalTheme;
+var
+  NavRect: TRectangle;
+begin
+  // Restyle navigation background
+  NavRect := Rectangle1;
+  if Assigned(NavRect) then StyleNavBackground(NavRect);
+  // Restyle menu items preserving active selection
+  for var i := 0 to lstMenu.Items.Count - 1 do
+    StyleMenuItem(lstMenu.ListItems[i], i = lstMenu.ItemIndex);
+  // Restyle active frame selectively
+  if Assigned(FCurrentFrame) then
+  begin
+    if FCurrentFrame is TFrame3 then // Dashboard
+    begin
+      var D := TFrame3(FCurrentFrame);
+      StyleBackground(D.RectBackground);
+      StyleCard(D.RectQuickActions);
+      StyleCard(D.RectCardDisplays);
+      StyleCard(D.RectCardCampaigns);
+      StyleCard(D.RectCardMedia);
+    end
+    else if FCurrentFrame is TFrame5 then // Displays
+    begin
+      var DF := TFrame5(FCurrentFrame);
+      StyleBackground(DF.RectBackground);
+      StyleCard(DF.RectListCard);
+      StyleCard(DF.RectDetailCard);
+      StyleHeaderLabel(DF.lblDetailTitle);
+      StyleMutedLabel(DF.lblNameLabel);
+      StyleMutedLabel(DF.lblOrientationLabel);
+      StyleMutedLabel(DF.lblStatusLabel);
+      StyleMutedLabel(DF.lblLastSeenLabel);
+      StyleMutedLabel(DF.lblProvisioningLabel);
+      StylePrimaryButton(DF.btnSave);
+      StyleDangerButton(DF.btnDelete);
+      StylePrimaryButton(DF.btnPairDisplay);
+      StylePrimaryButton(DF.btnSetPrimary);
+      StylePrimaryButton(DF.btnRefreshPlaying);
+    end
+    else if FCurrentFrame is TFrame9 then // Settings
+    begin
+      var SF := TFrame9(FCurrentFrame);
+      // Attempt to find rectangles/cards by name
+      var Bg := SF.RectBackground;
+      var Card := SF.RectCard;
+      StyleBackground(Bg);
+      StyleCard(Card);
+      StyleHeaderLabel(SF.lblTitle);
+    end;
   end;
 end;
 
@@ -120,7 +228,7 @@ begin
   ClearCurrentFrame;
   
   // Create and setup login frame
-  LoginFrm := TFrame1.Create(Self);
+  LoginFrm := TFrame1.Create(nil);
   LoginFrm.Parent := LayoutContent;
   LoginFrm.Align := TAlignLayout.Client;
   
@@ -141,7 +249,7 @@ begin
   ClearCurrentFrame;
   
   // Create and setup register frame
-  RegisterFrm := TFrame2.Create(Self);
+  RegisterFrm := TFrame2.Create(nil);
   RegisterFrm.Parent := LayoutContent;
   RegisterFrm.Align := TAlignLayout.Client;
   
@@ -162,7 +270,7 @@ begin
   ClearCurrentFrame;
   
   // Create and setup dashboard frame
-  DashboardFrm := TFrame3.Create(Self);
+  DashboardFrm := TFrame3.Create(nil);
   DashboardFrm.Parent := LayoutContent;
   DashboardFrm.Align := TAlignLayout.Client;
   
@@ -186,7 +294,7 @@ var
   ProfileFrm: TFrame4;
 begin
   ClearCurrentFrame;
-  ProfileFrm := TFrame4.Create(Self);
+  ProfileFrm := TFrame4.Create(nil);
   ProfileFrm.Parent := LayoutContent;
   ProfileFrm.Align := TAlignLayout.Client;
   ProfileFrm.Initialize(FCurrentUserId, FCurrentOrgId, FCurrentUserName, FCurrentUserEmail);
@@ -199,7 +307,7 @@ var
   DisplaysFrm: TFrame5;
 begin
   ClearCurrentFrame;
-  DisplaysFrm := TFrame5.Create(Self);
+  DisplaysFrm := TFrame5.Create(nil);
   DisplaysFrm.Parent := LayoutContent;
   DisplaysFrm.Align := TAlignLayout.Client;
   DisplaysFrm.Initialize(FCurrentOrgId);
@@ -212,7 +320,7 @@ var
   CampaignsFrm: TFrame6;
 begin
   ClearCurrentFrame;
-  CampaignsFrm := TFrame6.Create(Self);
+  CampaignsFrm := TFrame6.Create(nil);
   CampaignsFrm.Parent := LayoutContent;
   CampaignsFrm.Align := TAlignLayout.Client;
   CampaignsFrm.Initialize(FCurrentOrgId);
@@ -225,7 +333,7 @@ var
   MediaFrm: TFrame7;
 begin
   ClearCurrentFrame;
-  MediaFrm := TFrame7.Create(Self);
+  MediaFrm := TFrame7.Create(nil);
   MediaFrm.Parent := LayoutContent;
   MediaFrm.Align := TAlignLayout.Client;
   MediaFrm.Initialize(FCurrentOrgId);
@@ -238,7 +346,7 @@ var
   AnalyticsFrm: TFrame8;
 begin
   ClearCurrentFrame;
-  AnalyticsFrm := TFrame8.Create(Self);
+  AnalyticsFrm := TFrame8.Create(nil);
   AnalyticsFrm.Parent := LayoutContent;
   AnalyticsFrm.Align := TAlignLayout.Client;
   AnalyticsFrm.Initialize(FCurrentOrgId);
@@ -251,7 +359,7 @@ var
   SettingsFrm: TFrame9;
 begin
   ClearCurrentFrame;
-  SettingsFrm := TFrame9.Create(Self);
+  SettingsFrm := TFrame9.Create(nil);
   SettingsFrm.Parent := LayoutContent;
   SettingsFrm.Align := TAlignLayout.Client;
   SettingsFrm.Initialize;
@@ -294,6 +402,9 @@ begin
   
   // Load the selected section
   LoadSection(Section);
+  // Update menu item styles for active highlight
+  for var i := 0 to lstMenu.Items.Count - 1 do
+    StyleMenuItem(lstMenu.ListItems[i], lstMenu.ListItems[i] = Item);
 end;
 
 procedure TForm1.HandleLoginSuccess(Sender: TObject; const AToken: string; 
@@ -367,6 +478,8 @@ begin
   // Update menu selection
   if (SectionTag >= 1) and (SectionTag <= lstMenu.Items.Count) then
     lstMenu.ItemIndex := SectionTag - 1;
+  for var i := 0 to lstMenu.Items.Count - 1 do
+    StyleMenuItem(lstMenu.ListItems[i], i = lstMenu.ItemIndex);
 end;
 
 end.

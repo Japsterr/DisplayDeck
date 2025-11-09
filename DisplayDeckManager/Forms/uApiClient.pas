@@ -3,8 +3,8 @@ unit uApiClient;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.JSON, FMX.Dialogs,
-  IdHTTP, IdSSLOpenSSL, IdGlobal;
+  System.SysUtils, System.Classes, System.JSON, FMX.Dialogs, System.IOUtils,
+  IdHTTP, IdSSLOpenSSL, IdGlobal, System.Generics.Collections; // added for inline expansions
 
 type
   // Response wrapper types
@@ -78,6 +78,15 @@ type
     Message: string;
   end;
 
+  // Display insight/control
+  TCurrentPlaying = record
+    DisplayId: Integer;
+    CampaignId: Integer;
+    MediaFileId: Integer;
+    MediaFileName: string;
+    StartedAt: string;
+  end;
+
   // Singleton API Client
   TApiClient = class
   private
@@ -87,12 +96,16 @@ type
     FLastURL: string;
     FLastResponseCode: Integer;
     FLastResponseBody: string;
+    FConfigPath: string;
     class var FInstance: TApiClient;
     constructor Create;
     function DoRequest(const AMethod, APath: string; ABody: TJSONObject = nil): TApiResponse;
     // Case-insensitive JSON value fetch helper
     function GetJsonValueCI(AObj: TJSONObject; const AName: string): TJSONValue;
     function RewriteMinioHost(const AUrl: string): string;
+    function ParseCurrentPlaying(AObj: TJSONObject): TCurrentPlaying;
+    procedure LoadConfig;
+    procedure SaveConfig;
   public
     destructor Destroy; override;
     class function Instance: TApiClient;
@@ -102,6 +115,9 @@ type
     procedure SetBaseURL(const AURL: string);
     procedure SetAuthToken(const AToken: string);
     function GetAuthToken: string;
+    procedure ClearAuthToken; // clears and persists removal
+    procedure UpdateBaseURL(const AURL: string); // updates base URL and persists
+    procedure SaveState; // explicit persist of current config
     
     // Debug properties
     property LastURL: string read FLastURL;
@@ -118,6 +134,11 @@ type
     function CreateDisplay(AOrganizationId: Integer; const AName, AOrientation: string): TDisplayData;
     function UpdateDisplay(const ADisplay: TDisplayData): TDisplayData;
     function DeleteDisplay(ADisplayId: Integer): Boolean;
+    // Display pairing (claim a device using provisioning token)
+    function ClaimDisplay(AOrganizationId: Integer; const AProvisioningToken, AName, AOrientation: string): TDisplayData;
+    // Display insight/control
+    function GetDisplayCurrentPlaying(ADisplayId: Integer): TCurrentPlaying;
+    function SetDisplayPrimary(ADisplayId, ACampaignId: Integer): Boolean;
 
     // Campaign endpoints
     function GetCampaigns(AOrganizationId: Integer): TArray<TCampaignData>;
@@ -132,6 +153,7 @@ type
     function RequestMediaUpload(AOrganizationId: Integer; const AFileName, AFileType: string; AContentLength: Int64): TMediaUploadResponse;
     function UploadMediaFile(const AUploadUrl, AFilePath: string): Boolean;
     function GetMediaDownloadUrl(AMediaFileId: Integer): string;
+    function GuessMimeType(const AFilePath: string): string;
   end;
 
 implementation
@@ -152,6 +174,8 @@ begin
   FAuthToken := '';
   // Avoid header folding issues for long JWT values
   FHttpClient.Request.CustomHeaders.FoldLines := False;
+  FConfigPath := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) + 'displaydeck-config.json';
+  LoadConfig; // attempt to restore persisted token/base url
 end;
 
 destructor TApiClient.Destroy;
@@ -189,6 +213,26 @@ end;
 function TApiClient.GetAuthToken: string;
 begin
   Result := FAuthToken;
+end;
+
+procedure TApiClient.ClearAuthToken;
+begin
+  FAuthToken := '';
+  SaveConfig;
+end;
+
+procedure TApiClient.UpdateBaseURL(const AURL: string);
+begin
+  if AURL.Trim <> '' then
+  begin
+    FBaseURL := AURL.Trim;
+    SaveConfig;
+  end;
+end;
+
+procedure TApiClient.SaveState;
+begin
+  SaveConfig;
 end;
 
 function TApiClient.DoRequest(const AMethod, APath: string; ABody: TJSONObject = nil): TApiResponse;
@@ -313,12 +357,28 @@ begin
   Result := StringReplace(Result, 'http://minio:9000', 'http://localhost:9000', [rfIgnoreCase, rfReplaceAll]);
 end;
 
+function TApiClient.ParseCurrentPlaying(AObj: TJSONObject): TCurrentPlaying;
+var
+  V: TJSONValue;
+begin
+  Result.DisplayId := 0;
+  Result.CampaignId := 0;
+  Result.MediaFileId := 0;
+  Result.MediaFileName := '';
+  Result.StartedAt := '';
+  if AObj = nil then Exit;
+  V := GetJsonValueCI(AObj,'DisplayId'); if Assigned(V) then Result.DisplayId := StrToIntDef(V.Value,0);
+  V := GetJsonValueCI(AObj,'CampaignId'); if Assigned(V) then Result.CampaignId := StrToIntDef(V.Value,0);
+  V := GetJsonValueCI(AObj,'MediaFileId'); if not Assigned(V) then V := GetJsonValueCI(AObj,'MediaFileID'); if Assigned(V) then Result.MediaFileId := StrToIntDef(V.Value,0);
+  V := GetJsonValueCI(AObj,'MediaFileName'); if Assigned(V) then Result.MediaFileName := V.Value;
+  V := GetJsonValueCI(AObj,'StartedAt'); if Assigned(V) then Result.StartedAt := V.Value;
+end;
+
 function TApiClient.Login(const AEmail, APassword: string): TLoginResponse;
 var
   RequestBody: TJSONObject;
   Response: TApiResponse;
   UserObj: TJSONObject;
-  OrgObj: TJSONObject;
   SV, TV, OrgVal, MV: TJSONValue;
 begin
   Result.Success := False;
@@ -371,11 +431,16 @@ begin
           end;
           
           FAuthToken := Result.Token; // store trimmed token
+          SaveConfig; // persist after successful login
         end
         else
+        begin
           MV := GetJsonValueCI(Response.Data as TJSONObject,'Message');
-          if Assigned(MV) then Result.Message := MV.Value
-          else Result.Message := (Response.Data as TJSONObject).GetValue<string>('Message','Login failed');
+          if Assigned(MV) then
+            Result.Message := MV.Value
+          else
+            Result.Message := (Response.Data as TJSONObject).GetValue<string>('Message','Login failed');
+        end;
       finally
         Response.Data.Free;
       end;
@@ -426,6 +491,7 @@ begin
           end;
           
           FAuthToken := Result.Token;
+          SaveConfig; // persist after successful registration
         end
         else
           Result.Message := (Response.Data as TJSONObject).GetValue<string>('Message', 'Registration failed');
@@ -500,7 +566,8 @@ begin
       Result.Name := JsonObj.GetValue<string>('Name');
       Result.Orientation := JsonObj.GetValue<string>('Orientation');
       Result.LastSeen := JsonObj.GetValue<string>('LastSeen', '');
-      Result.CurrentStatus := JsonObj.GetValue<string>('CurrentStatus');
+      // Handle missing CurrentStatus gracefully
+      Result.CurrentStatus := JsonObj.GetValue<string>('CurrentStatus', '');
       Result.ProvisioningToken := JsonObj.GetValue<string>('ProvisioningToken', '');
       Result.CreatedAt := JsonObj.GetValue<string>('CreatedAt', '');
       Result.UpdatedAt := JsonObj.GetValue<string>('UpdatedAt', '');
@@ -544,7 +611,7 @@ begin
         Result.Name := JsonObj.GetValue<string>('Name');
         Result.Orientation := JsonObj.GetValue<string>('Orientation');
         Result.LastSeen := JsonObj.GetValue<string>('LastSeen', '');
-        Result.CurrentStatus := JsonObj.GetValue<string>('CurrentStatus');
+        Result.CurrentStatus := JsonObj.GetValue<string>('CurrentStatus', '');
         Result.ProvisioningToken := JsonObj.GetValue<string>('ProvisioningToken', '');
         Result.CreatedAt := JsonObj.GetValue<string>('CreatedAt', '');
         Result.UpdatedAt := JsonObj.GetValue<string>('UpdatedAt', '');
@@ -585,7 +652,7 @@ begin
         Result.Name := JsonObj.GetValue<string>('Name');
         Result.Orientation := JsonObj.GetValue<string>('Orientation');
         Result.LastSeen := JsonObj.GetValue<string>('LastSeen', '');
-        Result.CurrentStatus := JsonObj.GetValue<string>('CurrentStatus');
+        Result.CurrentStatus := JsonObj.GetValue<string>('CurrentStatus', '');
         Result.ProvisioningToken := JsonObj.GetValue<string>('ProvisioningToken', '');
         Result.CreatedAt := JsonObj.GetValue<string>('CreatedAt', '');
         Result.UpdatedAt := JsonObj.GetValue<string>('UpdatedAt', '');
@@ -606,6 +673,126 @@ begin
   Result := Response.Success;
   if Assigned(Response.Data) then
     Response.Data.Free;
+end;
+
+function TApiClient.ClaimDisplay(AOrganizationId: Integer; const AProvisioningToken, AName, AOrientation: string): TDisplayData;
+var
+  RequestBody: TJSONObject;
+  Response: TApiResponse;
+  JsonObj: TJSONObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  RequestBody := TJSONObject.Create;
+  try
+    RequestBody.AddPair('ProvisioningToken', AProvisioningToken);
+    if AName <> '' then RequestBody.AddPair('Name', AName);
+    if AOrientation <> '' then RequestBody.AddPair('Orientation', AOrientation);
+    Response := DoRequest('POST', Format('/organizations/%d/displays/claim', [AOrganizationId]), RequestBody);
+  finally
+    RequestBody.Free;
+  end;
+
+  if Response.Success and Assigned(Response.Data) then
+  begin
+    try
+      JsonObj := Response.Data as TJSONObject;
+      var V: TJSONValue;
+      V := GetJsonValueCI(JsonObj,'Id'); if Assigned(V) then Result.Id := StrToIntDef(V.Value,0) else Result.Id := JsonObj.GetValue<Integer>('Id',0);
+      V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+      if Assigned(V) then Result.OrganizationId := StrToIntDef(V.Value,0) else Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
+      V := GetJsonValueCI(JsonObj,'Name'); if Assigned(V) then Result.Name := V.Value else Result.Name := JsonObj.GetValue<string>('Name','');
+      V := GetJsonValueCI(JsonObj,'Orientation'); if Assigned(V) then Result.Orientation := V.Value else Result.Orientation := JsonObj.GetValue<string>('Orientation','');
+      V := GetJsonValueCI(JsonObj,'LastSeen'); if Assigned(V) then Result.LastSeen := V.Value else Result.LastSeen := JsonObj.GetValue<string>('LastSeen','');
+      V := GetJsonValueCI(JsonObj,'CurrentStatus'); if Assigned(V) then Result.CurrentStatus := V.Value else Result.CurrentStatus := JsonObj.GetValue<string>('CurrentStatus','');
+      V := GetJsonValueCI(JsonObj,'ProvisioningToken'); if Assigned(V) then Result.ProvisioningToken := V.Value else Result.ProvisioningToken := JsonObj.GetValue<string>('ProvisioningToken','');
+      V := GetJsonValueCI(JsonObj,'CreatedAt'); if Assigned(V) then Result.CreatedAt := V.Value else Result.CreatedAt := JsonObj.GetValue<string>('CreatedAt','');
+      V := GetJsonValueCI(JsonObj,'UpdatedAt'); if Assigned(V) then Result.UpdatedAt := V.Value else Result.UpdatedAt := JsonObj.GetValue<string>('UpdatedAt','');
+    finally
+      Response.Data.Free;
+    end;
+  end
+  else if Assigned(Response.Data) then
+    Response.Data.Free;
+end;
+
+function TApiClient.GetDisplayCurrentPlaying(ADisplayId: Integer): TCurrentPlaying;
+var
+  Response: TApiResponse;
+  Obj: TJSONObject;
+begin
+  Result.DisplayId := 0; Result.CampaignId := 0; Result.MediaFileId := 0; Result.MediaFileName := ''; Result.StartedAt := '';
+  Response := DoRequest('GET', Format('/displays/%d/current-playing', [ADisplayId]));
+  if Response.Success and Assigned(Response.Data) then
+  begin
+    try
+      Obj := Response.Data as TJSONObject;
+      Result := ParseCurrentPlaying(Obj);
+    finally
+      Response.Data.Free;
+    end;
+  end;
+end;
+
+function TApiClient.SetDisplayPrimary(ADisplayId, ACampaignId: Integer): Boolean;
+var
+  Body: TJSONObject;
+  Response: TApiResponse;
+begin
+  Body := TJSONObject.Create;
+  try
+    Body.AddPair('CampaignId', TJSONNumber.Create(ACampaignId));
+    Response := DoRequest('POST', Format('/displays/%d/set-primary', [ADisplayId]), Body);
+  finally
+    Body.Free;
+  end;
+  Result := Response.Success;
+  if Assigned(Response.Data) then Response.Data.Free;
+end;
+
+procedure TApiClient.LoadConfig;
+var
+  LText: string;
+  LJSON: TJSONObject;
+  TokVal, UrlVal: TJSONValue;
+begin
+  if not FileExists(FConfigPath) then Exit;
+  try
+    LText := TFile.ReadAllText(FConfigPath, TEncoding.UTF8);
+    LJSON := TJSONObject.ParseJSONValue(LText) as TJSONObject;
+    try
+      if Assigned(LJSON) then
+      begin
+        TokVal := GetJsonValueCI(LJSON, 'AuthToken');
+        if Assigned(TokVal) then FAuthToken := TokVal.Value.Trim;
+        UrlVal := GetJsonValueCI(LJSON, 'BaseURL');
+        if Assigned(UrlVal) and (UrlVal.Value.Trim <> '') then FBaseURL := UrlVal.Value.Trim;
+      end;
+    finally
+      LJSON.Free;
+    end;
+  except
+    // swallow errors to avoid startup disruption
+  end;
+end;
+
+procedure TApiClient.SaveConfig;
+var
+  LJSON: TJSONObject;
+  LText: string;
+begin
+  LJSON := TJSONObject.Create;
+  try
+    LJSON.AddPair('BaseURL', FBaseURL);
+    LJSON.AddPair('AuthToken', FAuthToken);
+    LText := LJSON.ToJSON;
+    try
+      TFile.WriteAllText(FConfigPath, LText, TEncoding.UTF8);
+    except
+      // ignore write errors
+    end;
+  finally
+    LJSON.Free;
+  end;
 end;
 
 function TApiClient.GetCampaigns(AOrganizationId: Integer): TArray<TCampaignData>;
@@ -892,6 +1079,8 @@ end;
 function TApiClient.UploadMediaFile(const AUploadUrl, AFilePath: string): Boolean;
 var
   FileStream: TFileStream;
+  PrevContentType, PrevAccept: string;
+  Mime: string;
 begin
   Result := False;
   
@@ -901,10 +1090,25 @@ begin
   FileStream := TFileStream.Create(AFilePath, fmOpenRead or fmShareDenyWrite);
   try
     try
+      // Preserve previous request headers so we can restore after raw upload
+      PrevContentType := FHttpClient.Request.ContentType;
+      PrevAccept := FHttpClient.Request.Accept;
+      // Determine mime type from extension
+      Mime := GuessMimeType(AFilePath);
+      FHttpClient.Request.ContentType := Mime;
+      FHttpClient.Request.Accept := '*/*';
+      // Clear custom JSON headers for S3/MinIO PUT (avoid confusing server)
+      FHttpClient.Request.CustomHeaders.Clear;
+      // Execute binary PUT
       FHttpClient.Put(AUploadUrl, FileStream);
+      // Restore headers
+      FHttpClient.Request.ContentType := PrevContentType;
+      FHttpClient.Request.Accept := PrevAccept;
       Result := (FHttpClient.ResponseCode >= 200) and (FHttpClient.ResponseCode < 300);
     except
       Result := False;
+      FLastResponseCode := FHttpClient.ResponseCode;
+      FLastResponseBody := 'Upload failed; HTTP ' + IntToStr(FHttpClient.ResponseCode) + ' Body=' + FHttpClient.ResponseText;
     end;
   finally
     FileStream.Free;
@@ -938,6 +1142,22 @@ begin
       Response.Data.Free;
     end;
   end;
+end;
+
+function TApiClient.GuessMimeType(const AFilePath: string): string;
+var
+  Ext: string;
+begin
+  Ext := LowerCase(ExtractFileExt(AFilePath));
+  if Ext = '.png' then Result := 'image/png'
+  else if (Ext = '.jpg') or (Ext = '.jpeg') then Result := 'image/jpeg'
+  else if Ext = '.gif' then Result := 'image/gif'
+  else if Ext = '.mp4' then Result := 'video/mp4'
+  else if Ext = '.webm' then Result := 'video/webm'
+  else if (Ext = '.mov') or (Ext = '.qt') then Result := 'video/quicktime'
+  else if Ext = '.pdf' then Result := 'application/pdf'
+  else if Ext = '.json' then Result := 'application/json'
+  else Result := 'application/octet-stream';
 end;
 
 initialization

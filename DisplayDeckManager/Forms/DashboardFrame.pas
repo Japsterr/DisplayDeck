@@ -5,7 +5,7 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
-  FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, System.IOUtils;
+  FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, System.IOUtils, uTheme;
 
 type
   // Event types for navigation
@@ -79,6 +79,12 @@ begin
     if Assigned(Img) then
       Img.Bitmap.LoadFromFile(LogoPath);
   end;
+  // Theme styling
+  StyleBackground(RectBackground);
+  StyleCard(RectQuickActions);
+  StyleCard(RectCardDisplays);
+  StyleCard(RectCardCampaigns);
+  StyleCard(RectCardMedia);
 end;
 
 procedure TFrame3.LoadDashboardData;

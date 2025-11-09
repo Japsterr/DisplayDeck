@@ -64,7 +64,7 @@ object Frame5: TFrame5
           Size.Height = 60.000000000000000000
           Size.PlatformDefault = False
           TabOrder = 1
-          Text = '+ Add Display'
+          Text = '+ Pair Display'
           TextSettings.Font.Size = 14.000000000000000000
           TextSettings.FontColor = xFF2C3E50
           TextSettings.Trimming = None
@@ -160,7 +160,7 @@ object Frame5: TFrame5
                 TabOrder = 1
                 object VertScrollBox1: TVertScrollBox
                   Align = Client
-                  Size.Width = 440.000000000000000000
+                  Size.Width = 740.000000000000000000
                   Size.Height = 619.000000000000000000
                   Size.PlatformDefault = False
                   TabOrder = 0
@@ -329,7 +329,7 @@ object Frame5: TFrame5
                       Align = Top
                       Position.Y = 416.000000000000000000
                       Size.Width = 440.000000000000000000
-                      Size.Height = 104.000000000000000000
+                      Size.Height = 300.000000000000000000
                       Size.PlatformDefault = False
                       TabOrder = 15
                       object btnSave: TButton
@@ -366,6 +366,88 @@ object Frame5: TFrame5
                         TextSettings.FontColor = xFF2C3E50
                         TextSettings.Trimming = None
                         OnClick = btnDeleteClick
+                      end
+                      object LayoutSpacer7: TLayout
+                        Align = Top
+                        Position.Y = 104.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 12.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 3
+                      end
+                      object lblCurrentPlayingLabel: TLabel
+                        Align = Top
+                        StyledSettings = [Family, Style]
+                        Position.Y = 116.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 26.000000000000000000
+                        Size.PlatformDefault = False
+                        TextSettings.Font.Size = 13.000000000000000000
+                        TextSettings.FontColor = xFF7F8C8D
+                        Text = 'Current Playing'
+                        TabOrder = 4
+                      end
+                      object lblCurrentPlayingValue: TLabel
+                        Align = Top
+                        StyledSettings = [Family, Style]
+                        Position.Y = 142.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 28.000000000000000000
+                        Size.PlatformDefault = False
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        Text = 'No data'
+                        TabOrder = 5
+                      end
+                      object btnRefreshPlaying: TButton
+                        Align = Top
+                        StyledSettings = [Family, Style]
+                        Position.Y = 170.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 40.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 6
+                        Text = 'Refresh Current Playing'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnRefreshPlayingClick
+                      end
+                      object LayoutSpacer8: TLayout
+                        Align = Top
+                        Position.Y = 210.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 12.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 7
+                      end
+                      object btnPairDisplay: TButton
+                        Align = Top
+                        StyledSettings = [Family, Style]
+                        Position.Y = 222.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 40.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 8
+                        Text = 'Pair Display (Token)'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnPairDisplayClick
+                      end
+                      object btnSetPrimary: TButton
+                        Align = Top
+                        StyledSettings = [Family, Style]
+                        Position.Y = 262.000000000000000000
+                        Size.Width = 440.000000000000000000
+                        Size.Height = 40.000000000000000000
+                        Size.PlatformDefault = False
+                        TabOrder = 9
+                        Text = 'Set Primary Campaign'
+                        TextSettings.Font.Size = 14.000000000000000000
+                        TextSettings.FontColor = xFF2C3E50
+                        TextSettings.Trimming = None
+                        OnClick = btnSetPrimaryClick
                       end
                     end
                   end

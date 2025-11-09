@@ -64,7 +64,7 @@ implementation
 {$R *.fmx}
 
 uses
-  FMX.DialogService, FMX.DialogService.Sync, System.IOUtils;
+  FMX.DialogService, FMX.DialogService.Sync, System.IOUtils, uTheme;
 
 // API Base: http://localhost:2001/tms/xdata
 // Endpoints:
@@ -79,6 +79,16 @@ begin
   FSelectedMediaId := -1;
   ClearForm;
   LoadMediaFiles;
+  // Theme styling
+  StyleBackground(RectBackground);
+  StyleCard(RectListCard);
+  StyleCard(RectDetailCard);
+  StyleHeaderLabel(lblDetailTitle);
+  StyleMutedLabel(lblFileName);
+  StyleMutedLabel(lblFileType);
+  StyleMutedLabel(lblFileSize);
+  StyleMutedLabel(lblDuration);
+  StyleMutedLabel(lblTags);
 end;
 
 procedure TFrame7.LoadMediaFiles;

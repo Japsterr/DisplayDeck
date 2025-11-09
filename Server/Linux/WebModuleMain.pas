@@ -167,15 +167,19 @@ procedure TWebModule1.DefaultHandlerAction(Sender: TObject; Request: TWebRequest
 begin
 
   Handled := True;
+  // Normalize optional /api prefix once for all routing decisions
+  var NormalizedPath := Request.PathInfo;
+  if Copy(NormalizedPath,1,4)='/api' then
+    NormalizedPath := Copy(NormalizedPath,5,MaxInt);
   try
-    if SameText(Request.PathInfo, '/health') and SameText(Request.Method, 'GET') then
+    if SameText(NormalizedPath, '/health') and SameText(Request.Method, 'GET') then
     begin
       HandleHealth(Response);
       Response.SendResponse;
       Exit;
     end;
 
-    if DebugEnabled and SameText(Request.PathInfo, '/debug/headers') and SameText(Request.Method,'GET') then
+    if DebugEnabled and SameText(NormalizedPath, '/debug/headers') and SameText(Request.Method,'GET') then
     begin
       var Obj := TJSONObject.Create;
       try
@@ -187,7 +191,7 @@ begin
       Exit;
     end;
 
-    if (Request.PathInfo = '/organizations') then
+    if (NormalizedPath = '/organizations') then
     begin
       if SameText(Request.Method, 'GET') then
       begin
@@ -236,15 +240,15 @@ begin
     end;
 
     // Only match /organizations/{id} (no further segments)
-    if (Copy(Request.PathInfo, 1, 15) = '/organizations/') and SameText(Request.Method, 'GET') and
-       (Pos('/', Copy(Request.PathInfo, 16, MaxInt)) = 0) then
+    if (Copy(NormalizedPath, 1, 15) = '/organizations/') and SameText(Request.Method, 'GET') and
+       (Pos('/', Copy(NormalizedPath, 16, MaxInt)) = 0) then
     begin
       HandleOrganizationById(Request, Response);
       Exit;
     end;
 
     // ----- Auth -----
-    if SameText(Request.PathInfo, '/auth/register') and SameText(Request.Method, 'POST') then
+    if SameText(NormalizedPath, '/auth/register') and SameText(Request.Method, 'POST') then
     begin
       // Spec: AuthRegisterRequest { Email, Password, OrganizationName }
       // Create organization, then user (Role='Owner'), and return AuthResponse with Token & User
@@ -298,7 +302,7 @@ begin
       finally Body.Free; end;
       Exit;
     end;
-    if SameText(Request.PathInfo, '/auth/login') and SameText(Request.Method, 'POST') then
+    if SameText(NormalizedPath, '/auth/login') and SameText(Request.Method, 'POST') then
     begin
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
       try
@@ -410,11 +414,11 @@ begin
     end;
 
     // Organization sub-resources
-    if (Copy(Request.PathInfo, 1, 15) = '/organizations/') and SameText(Request.Method, 'GET') and
-       (Pos('/subscription', Request.PathInfo) > 0) then
+     if (Copy(NormalizedPath, 1, 15) = '/organizations/') and SameText(Request.Method, 'GET') and
+       (Pos('/subscription', NormalizedPath) > 0) then
     begin
       // /organizations/{OrganizationId}/subscription
-      var OrgIdStr := Copy(Request.PathInfo, 16, MaxInt);
+      var OrgIdStr := Copy(NormalizedPath, 16, MaxInt);
       var Slash := Pos('/', OrgIdStr);
       if Slash>0 then OrgIdStr := Copy(OrgIdStr, 1, Slash-1);
       var OrgId := StrToIntDef(OrgIdStr,0);
@@ -435,11 +439,10 @@ begin
       finally C.Free; end;
       Exit;
     end;
-    if (Copy(Request.PathInfo, 1, 15) = '/organizations/') and
-       (Pos('/displays', Request.PathInfo) > 0) then
+    if (Copy(NormalizedPath, 1, 15) = '/organizations/') and (Pos('/displays', NormalizedPath) > 0) then
     begin
       // /organizations/{orgId}/displays
-      var OrgIdStr := Copy(Request.PathInfo, 16, MaxInt);
+      var OrgIdStr := Copy(NormalizedPath, 16, MaxInt);
       var Slash := Pos('/', OrgIdStr);
       if Slash>0 then OrgIdStr := Copy(OrgIdStr, 1, Slash-1);
       var OrgId := StrToIntDef(OrgIdStr,0);
@@ -491,7 +494,7 @@ begin
     end;
 
     // Device pairing: device asks for ephemeral provisioning token
-    if SameText(Request.PathInfo, '/device/provisioning/token') and SameText(Request.Method,'POST') then
+    if (SameText(Request.PathInfo, '/device/provisioning/token') or SameText(Request.PathInfo, '/api/device/provisioning/token')) and SameText(Request.Method,'POST') then
     begin
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
@@ -511,9 +514,9 @@ begin
     end;
 
     // Account-side claiming: link a device provisioning token to an organization (via JWT org)
-    if (Copy(Request.PathInfo,1,15) = '/organizations/') and (Pos('/displays/claim', Request.PathInfo)>0) and SameText(Request.Method,'POST') then
+    if (Copy(NormalizedPath,1,15) = '/organizations/') and (Pos('/displays/claim', NormalizedPath)>0) and SameText(Request.Method,'POST') then
     begin
-      var OrgIdStr := Copy(Request.PathInfo, 16, MaxInt); var Slash := Pos('/', OrgIdStr); if Slash>0 then OrgIdStr := Copy(OrgIdStr,1,Slash-1);
+      var OrgIdStr := Copy(NormalizedPath, 16, MaxInt); var Slash := Pos('/', OrgIdStr); if Slash>0 then OrgIdStr := Copy(OrgIdStr,1,Slash-1);
       var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
       var TokOrg, TokUser: Integer; var TokRole: string;
       if not RequireJWT(TokOrg, TokUser, TokRole) then Exit;
@@ -542,10 +545,10 @@ begin
     end;
 
     // Organization campaigns: /organizations/{OrganizationId}/campaigns
-    if (Copy(Request.PathInfo, 1, 15) = '/organizations/') and
-       (Pos('/campaigns', Request.PathInfo) > 0) then
+     if (Copy(NormalizedPath, 1, 15) = '/organizations/') and
+       (Pos('/campaigns', NormalizedPath) > 0) then
     begin
-      var OrgIdStr := Copy(Request.PathInfo, 16, MaxInt);
+      var OrgIdStr := Copy(NormalizedPath, 16, MaxInt);
       var Slash := Pos('/', OrgIdStr); if Slash>0 then OrgIdStr := Copy(OrgIdStr, 1, Slash-1);
       var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
       if SameText(Request.Method,'GET') then
@@ -1033,7 +1036,10 @@ begin
             O.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
             O.AddPair('MediaFileId', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger));
             O.AddPair('CampaignId', TJSONNumber.Create(Q.FieldByName('CampaignID').AsInteger));
-            O.AddPair('PlaybackTimestamp', Q.FieldByName('PlaybackTimestamp').AsString);
+            // Provide both PlaybackTimestamp (original) and StartedAt (client expectation)
+            var TS := Q.FieldByName('PlaybackTimestamp').AsString;
+            O.AddPair('PlaybackTimestamp', TS);
+            O.AddPair('StartedAt', TS);
             O.AddPair('MediaFileName', Q.FieldByName('FileName').AsString);
             O.AddPair('MediaFileType', Q.FieldByName('FileType').AsString);
             O.AddPair('CampaignName', Q.FieldByName('CampaignName').AsString);
@@ -1327,7 +1333,10 @@ var
   Org: TOrganization;
   Obj: TJSONObject;
 begin
-  IdStr := Copy(Request.PathInfo, 16, MaxInt);
+  // Support optional /api prefix by stripping it before extracting the id
+  var P := Request.PathInfo;
+  if Copy(P,1,4)='/api' then P := Copy(P,5,MaxInt);
+  IdStr := Copy(P, 16, MaxInt);
   Id := StrToIntDef(IdStr, 0);
   if Id = 0 then
   begin
