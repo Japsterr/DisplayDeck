@@ -78,12 +78,16 @@ var
   Q: TStringList;
   i: Integer;
   Name, Value: string;
-  MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY: string;
+  MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_PUBLIC_ENDPOINT: string;
 begin
   // Implement AWS SigV4 pre-signed URL (minimal)
   // Reference: https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html
   // Read configuration from environment, or fall back to sensible defaults
-  MINIO_ENDPOINT := EnvOrDefault('MINIO_ENDPOINT', 'http://localhost:9000');
+  // Internal endpoint (reachable from server container) and optional public endpoint (reachable from client)
+  MINIO_ENDPOINT := EnvOrDefault('MINIO_ENDPOINT', 'http://minio:9000');
+  MINIO_PUBLIC_ENDPOINT := GetEnvironmentVariable('MINIO_PUBLIC_ENDPOINT');
+  if MINIO_PUBLIC_ENDPOINT <> '' then
+    MINIO_ENDPOINT := MINIO_PUBLIC_ENDPOINT; // Use public host for signature so client can reach it
   MINIO_ACCESS_KEY := EnvOrDefault('MINIO_ACCESS_KEY', 'minioadmin');
   MINIO_SECRET_KEY := EnvOrDefault('MINIO_SECRET_KEY', 'minioadmin');
   Region := EnvOrDefault('MINIO_REGION', 'us-east-1');

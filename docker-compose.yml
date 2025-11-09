@@ -72,6 +72,8 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_REGION: us-east-1
+      # Public endpoint for generating client-accessible pre-signed URLs
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
       # Strong JWT secret for production
       JWT_SECRET: ${JWT_SECRET:-change-this-in-prod-9b1d5c4e7f2a47b9a3c1d8e0f5b6c2a1}
       # Toggle server debug logs and endpoints
