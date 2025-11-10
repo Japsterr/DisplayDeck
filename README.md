@@ -40,7 +40,7 @@ c:\DisplayDeck\build_linux.bat
 # optional: copy .env.example to .env and adjust
 Copy-Item .env.example .env -Force
 # pin the server image version (defaults to latest if unset)
-$env:SERVER_TAG = '0.1.6'
+$env:SERVER_TAG = '0.1.7'
 docker compose --env-file .env up -d postgres minio server swagger-ui
 ```
 
@@ -71,14 +71,14 @@ Key overrides:
 - `MINIO_PUBLIC_ENDPOINT` controls the hostname used in pre-signed URLs (default `http://localhost:9000`).
 - `SIGV4_DEBUG` toggles extra SigV4 logging.
 
-## Try a local copy (prebuilt 0.1.6)
+## Try a local copy (prebuilt 0.1.7)
 
 Use the prebuilt image to test media upload/download quickly:
 
 ```powershell
 cd C:\DisplayDeck
 Copy-Item .env.example .env -Force
-$env:SERVER_TAG = '0.1.6'
+$env:SERVER_TAG = '0.1.7'
 docker compose --env-file .env pull server
 docker compose --env-file .env up -d postgres minio server swagger-ui
 cd tests
@@ -98,7 +98,7 @@ Key routes (full spec in `docs/openapi.yaml`):
 - Campaigns: GET/POST `/organizations/{OrganizationId}/campaigns`, GET/PUT/DELETE `/campaigns/{Id}`
 - Campaign Items: GET/POST `/campaigns/{CampaignId}/items`, GET/PUT/DELETE `/campaign-items/{Id}`
 - Assignments: GET/POST `/displays/{DisplayId}/campaign-assignments`, PUT/DELETE `/campaign-assignments/{Id}`
-- Media: POST `/media-files/upload-url`, GET `/media-files/{MediaFileId}/download-url`
+- Media: POST `/media-files/upload-url`, GET `/media-files/{MediaFileId}/download-url`, GET `/media-files/{Id}`, PUT `/media-files/{Id}`
 - Device: POST `/device/provisioning/token`, POST `/device/config`, POST `/device/logs`
 - Plans & Roles: GET `/plans`, GET `/roles`
 - Playback Logs: POST `/playback-logs`
@@ -190,6 +190,31 @@ docker push <your-dockerhub-username>/displaydeck-server:latest
 		- Delete the orphan records via UI or `DELETE /media-files/{id}` and re-upload.
 		- Re-upload the file to the expected `StorageURL` path in the bucket.
 	- Tip: Use `tests\media-upload-download.ps1` to validate presigned PUT/GET end-to-end.
+
+## Orientation (since 0.1.7)
+
+Media files now carry an `Orientation` (`Landscape` or `Portrait`).
+
+Server side:
+- Schema: `MediaFiles.Orientation VARCHAR(20) DEFAULT 'Landscape'`.
+- Endpoints include `Orientation` in create/upload-url response, list and get JSON.
+- `PUT /media-files/{Id}` accepts `Orientation` for metadata updates.
+
+Desktop app behavior:
+- Uploads show a confirmation dialog: Yes = Landscape, No = Portrait; default is Landscape.
+- Previous bitmap auto-detect logic was removed for broader Delphi compiler compatibility.
+- Orientation can be edited after upload in the Media Library via a combo box (Save persists changes).
+
+Upgrades:
+- Existing databases: apply `migrations/2025-11-10_add_orientation.sql` or run an `ALTER TABLE` if column missing.
+- Fresh installs: `schema.sql` already contains the column.
+
+Testing:
+- Use `tests\media-upload-download.ps1` to confirm round-trip; script now validates the `Orientation` field.
+
+Edge cases:
+- Missing orientation in client update calls defaults to existing value.
+- Invalid orientation strings are coerced server-side to `Landscape` if unsupported (future hard validation may return 400).
 
 ---
 

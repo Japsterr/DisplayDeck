@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.7 - 2025-11-10
+
+- Orientation support for media files end-to-end
+  - DB: add `Orientation VARCHAR(20) DEFAULT 'Landscape'` to `MediaFiles`
+  - API: include `Orientation` in list/get/create and `upload-url` responses
+  - API: update `PUT /media-files/{Id}` to accept and persist `Orientation`
+  - OpenAPI + API docs updated with Orientation
+  - Desktop app: prompt (Yes=Landscape / No=Portrait) for orientation on upload; orientation editable via combo box in details pane (auto-detect removed for compiler compatibility)
+- Migration: `migrations/2025-11-10_add_orientation.sql` for existing databases
+- Docs: README examples bumped to `0.1.7`
+
 ## 0.1.6 - 2025-11-09
 
 - Fix download-url 400 errors for existing media

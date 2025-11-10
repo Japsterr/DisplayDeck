@@ -57,6 +57,17 @@ object Frame7: TFrame7
           Text = 'Media Library'
           TabOrder = 0
         end
+        object cbbTypeFilter: TComboBox
+          Align = Right
+          Position.X = 886.000000000000000000
+          Size.Width = 160.000000000000000000
+          Size.Height = 40.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+          ItemIndex = -1
+          Margins.Right = 8.000000000000000000
+          Position.Y = 10.000000000000000000
+        end
         object btnUploadMedia: TButton
           Align = Right
           StyledSettings = [Family, Style]
@@ -64,7 +75,7 @@ object Frame7: TFrame7
           Size.Width = 150.000000000000000000
           Size.Height = 60.000000000000000000
           Size.PlatformDefault = False
-          TabOrder = 1
+          TabOrder = 2
           Text = '+ Upload Media'
           TextSettings.Font.Size = 14.000000000000000000
           TextSettings.FontColor = xFF2C3E50
@@ -266,7 +277,7 @@ object Frame7: TFrame7
                     TextSettings.Font.Size = 14.000000000000000000
                     KeyboardType = NumberPad
                   end
-                  object lblTags: TLabel
+                  object lblOrientation: TLabel
                     Align = Top
                     StyledSettings = [Family, Style]
                     Margins.Top = 16.000000000000000000
@@ -276,14 +287,37 @@ object Frame7: TFrame7
                     Size.PlatformDefault = False
                     TextSettings.Font.Size = 12.000000000000000000
                     TextSettings.FontColor = xFF7F8C8D
-                    Text = 'Tags (comma separated)'
+                    Text = 'Orientation'
                     TabOrder = 8
+                  end
+                  object cbbOrientation: TComboBox
+                    Align = Top
+                    TabOrder = 9
+                    Position.Y = 332.000000000000000000
+                    Margins.Top = 4.000000000000000000
+                    Size.Width = 736.000000000000000000
+                    Size.Height = 40.000000000000000000
+                    Size.PlatformDefault = False
+                    ItemIndex = -1
+                  end
+                  object lblTags: TLabel
+                    Align = Top
+                    StyledSettings = [Family, Style]
+                    Margins.Top = 16.000000000000000000
+                    Position.Y = 388.000000000000000000
+                    Size.Width = 736.000000000000000000
+                    Size.Height = 20.000000000000000000
+                    Size.PlatformDefault = False
+                    TextSettings.Font.Size = 12.000000000000000000
+                    TextSettings.FontColor = xFF7F8C8D
+                    Text = 'Tags (comma separated)'
+                    TabOrder = 10
                   end
                   object edtTags: TEdit
                     Touch.InteractiveGestures = [LongTap, DoubleTap]
                     Align = Top
-                    TabOrder = 9
-                    Position.Y = 332.000000000000000000
+                    TabOrder = 11
+                    Position.Y = 408.000000000000000000
                     Margins.Top = 4.000000000000000000
                     Size.Width = 736.000000000000000000
                     Size.Height = 40.000000000000000000
@@ -294,7 +328,7 @@ object Frame7: TFrame7
                   object LayoutPreview: TLayout
                     Align = Top
                     Margins.Top = 24.000000000000000000
-                    Position.Y = 396.000000000000000000
+                    Position.Y = 472.000000000000000000
                     Size.Width = 736.000000000000000000
                     Size.Height = 200.000000000000000000
                     Size.PlatformDefault = False
