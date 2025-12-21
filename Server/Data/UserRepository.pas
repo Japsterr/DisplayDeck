@@ -8,6 +8,7 @@ type
   TUserRepository = class
   public
     class function FindByEmail(const Email: string): TUser;
+    class function FindById(const UserId: Integer): TUser;
     class function CreateUser(const OrganizationId: Integer; const Email, Password, Role: string): TUser;
   end;
 
@@ -50,6 +51,27 @@ begin
       Q.Connection := Conn;
       Q.SQL.Text := 'select * from Users where lower(Email)=lower(:Email)';
       Q.ParamByName('Email').AsString := Email;
+      Q.Open;
+      if Q.Eof then Exit(nil);
+      Result := MapUser(Q);
+    finally
+      Q.Free;
+    end;
+  finally
+    Conn.Free;
+  end;
+end;
+
+class function TUserRepository.FindById(const UserId: Integer): TUser;
+var Conn: TFDConnection; Q: TFDQuery;
+begin
+  Conn := NewConnection;
+  try
+    Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := Conn;
+      Q.SQL.Text := 'select * from Users where UserID=:Id';
+      Q.ParamByName('Id').AsInteger := UserId;
       Q.Open;
       if Q.Eof then Exit(nil);
       Result := MapUser(Q);

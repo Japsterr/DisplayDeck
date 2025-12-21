@@ -36,6 +36,13 @@ begin
   Result.FileName := Q.FieldByName('FileName').AsString;
   Result.FileType := Q.FieldByName('FileType').AsString;
   Result.Orientation := Q.FieldByName('Orientation').AsString;
+  if Q.FindField('ProcessingStatus') <> nil then
+    Result.ProcessingStatus := Q.FieldByName('ProcessingStatus').AsString;
+  if Q.FindField('ProcessingError') <> nil then
+    Result.ProcessingError := Q.FieldByName('ProcessingError').AsString;
+  Result.HasValidatedAt := (Q.FindField('ValidatedAt') <> nil) and (not Q.FieldByName('ValidatedAt').IsNull);
+  if Result.HasValidatedAt then
+    Result.ValidatedAt := Q.FieldByName('ValidatedAt').AsDateTime;
   Result.StorageURL := Q.FieldByName('StorageURL').AsString;
   Result.CreatedAt := Q.FieldByName('CreatedAt').AsDateTime;
   Result.UpdatedAt := Q.FieldByName('UpdatedAt').AsDateTime;
@@ -49,7 +56,7 @@ begin
     Q := TFDQuery.Create(nil);
     try
       Q.Connection := C;
-      Q.SQL.Text := 'insert into MediaFiles (OrganizationID, FileName, FileType, Orientation, StorageURL) values (:Org,:Name,:Type,:Orient,:Url) returning *';
+      Q.SQL.Text := 'insert into MediaFiles (OrganizationID, FileName, FileType, Orientation, StorageURL, ProcessingStatus) values (:Org,:Name,:Type,:Orient,:Url,''uploaded'') returning *';
       Q.ParamByName('Org').AsInteger := OrgId;
       Q.ParamByName('Name').AsString := FileName;
       Q.ParamByName('Type').AsString := FileType;

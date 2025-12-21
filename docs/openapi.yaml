@@ -54,6 +54,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
 
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRefreshRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /auth/logout:
+    post:
+      summary: Logout (revoke refresh token)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLogoutRequest'
+      responses:
+        '204':
+          description: No Content
+
   /plans:
     get:
       summary: List plans
@@ -155,11 +185,205 @@ paths:
               schema:
                 $ref: '#/components/schemas/Subscription'
 
+  /organizations/{OrganizationId}/api-keys:
+    get:
+      summary: List API keys for organization
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiKeyListItem'
+    post:
+      summary: Create API key for organization
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCreateResponse'
+
+  /organizations/{OrganizationId}/api-keys/{ApiKeyId}:
+    delete:
+      summary: Revoke API key
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: ApiKeyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: No Content
+
+  /organizations/{OrganizationId}/webhooks:
+    get:
+      summary: List webhooks for organization
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Webhook'
+    post:
+      summary: Create webhook
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookCreateResponse'
+
+  /organizations/{OrganizationId}/webhooks/{WebhookId}:
+    get:
+      summary: Get webhook
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: WebhookId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+    delete:
+      summary: Delete webhook
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: WebhookId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: No Content
+
+  /organizations/{OrganizationId}/audit-log:
+    get:
+      summary: List audit log entries
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+            maximum: 200
+        - name: beforeId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListResponse'
+
   /organizations/{OrganizationId}/displays:
     get:
       summary: List displays for organization
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -182,12 +406,18 @@ paths:
       summary: Create display for organization
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: OrganizationId
           in: path
           required: true
           schema:
             type: integer
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -207,6 +437,7 @@ paths:
       summary: Get display by id
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -224,6 +455,7 @@ paths:
       summary: Update display
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -247,6 +479,7 @@ paths:
       summary: Delete display
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -262,6 +495,7 @@ paths:
       summary: List campaigns for organization
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -284,12 +518,18 @@ paths:
       summary: Create campaign for organization
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: OrganizationId
           in: path
           required: true
           schema:
             type: integer
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -297,8 +537,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CampaignCreate'
       responses:
-        '200':
-          description: OK
+        '201':
+          description: Created
           content:
             application/json:
               schema:
@@ -309,6 +549,7 @@ paths:
       summary: Get campaign by id
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -326,6 +567,7 @@ paths:
       summary: Update campaign
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -349,6 +591,7 @@ paths:
       summary: Delete campaign
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -364,6 +607,7 @@ paths:
       summary: List items for campaign
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: CampaignId
           in: path
@@ -386,12 +630,18 @@ paths:
       summary: Create item for campaign
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: CampaignId
           in: path
           required: true
           schema:
             type: integer
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -399,8 +649,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CampaignItemCreate'
       responses:
-        '200':
-          description: OK
+        '201':
+          description: Created
           content:
             application/json:
               schema:
@@ -411,6 +661,7 @@ paths:
       summary: Get campaign item by id
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -428,6 +679,7 @@ paths:
       summary: Update campaign item
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -451,6 +703,7 @@ paths:
       summary: Delete campaign item
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -466,6 +719,7 @@ paths:
       summary: List campaign assignments for display
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: DisplayId
           in: path
@@ -488,12 +742,18 @@ paths:
       summary: Create campaign assignment for display
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: DisplayId
           in: path
           required: true
           schema:
             type: integer
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -513,6 +773,7 @@ paths:
       summary: Update campaign assignment
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -536,6 +797,7 @@ paths:
       summary: Delete campaign assignment
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -551,6 +813,7 @@ paths:
       summary: Get presigned upload URL
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -570,6 +833,7 @@ paths:
       summary: List media files for organization
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -590,6 +854,7 @@ paths:
       summary: Create media metadata (direct)
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: OrganizationId
           in: path
@@ -612,6 +877,7 @@ paths:
       summary: Get media file by id
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -627,6 +893,7 @@ paths:
       summary: Update media file
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -647,6 +914,7 @@ paths:
       summary: Delete media file
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -660,6 +928,7 @@ paths:
       summary: Get presigned download URL
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: MediaFileId
           in: path
@@ -678,6 +947,7 @@ paths:
       summary: Get current playing media on display
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -706,6 +976,7 @@ paths:
       summary: Set primary campaign for display
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: Id
           in: path
@@ -728,6 +999,7 @@ paths:
       summary: List playback logs with filters
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - in: query
           name: organizationId
@@ -773,6 +1045,7 @@ paths:
       summary: Playback summary grouped by media file
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - in: query
           name: organizationId
@@ -805,6 +1078,7 @@ paths:
       summary: Playback summary grouped by campaign
       security:
         - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - in: query
           name: organizationId
@@ -1042,6 +1316,16 @@ components:
         Email: { type: string }
         Password: { type: string }
         OrganizationName: { type: string }
+    AuthRefreshRequest:
+      type: object
+      properties:
+        RefreshToken: { type: string }
+      required: [RefreshToken]
+    AuthLogoutRequest:
+      type: object
+      properties:
+        RefreshToken: { type: string }
+      required: [RefreshToken]
     User:
       type: object
       properties:
@@ -1056,9 +1340,79 @@ components:
       type: object
       properties:
         Token: { type: string }
+        RefreshToken: { type: string }
         User: { $ref: '#/components/schemas/User' }
         Success: { type: boolean }
         Message: { type: string }
+
+    ApiKeyCreateRequest:
+      type: object
+      properties:
+        Name: { type: string }
+        Scopes: { type: string, description: "Space-separated scopes" }
+        ExpiresAt: { type: string, format: date-time, nullable: true }
+      required: [Name, Scopes]
+    ApiKeyCreateResponse:
+      type: object
+      properties:
+        ApiKeyId: { type: integer, format: int64 }
+        ApiKey: { type: string, description: "Only returned once" }
+        Name: { type: string }
+        Scopes: { type: string }
+        ExpiresAt: { type: string, format: date-time, nullable: true }
+    ApiKeyListItem:
+      type: object
+      properties:
+        ApiKeyId: { type: integer, format: int64 }
+        Name: { type: string }
+        Scopes: { type: string }
+        CreatedAt: { type: string, format: date-time }
+        LastUsedAt: { type: string, format: date-time, nullable: true }
+        ExpiresAt: { type: string, format: date-time, nullable: true }
+        RevokedAt: { type: string, format: date-time, nullable: true }
+
+    WebhookCreateRequest:
+      type: object
+      properties:
+        Url: { type: string }
+        Events: { type: string, description: "Comma-separated events" }
+        Secret: { type: string, description: "Optional; generated if omitted" }
+      required: [Url, Events]
+    Webhook:
+      type: object
+      properties:
+        WebhookId: { type: integer, format: int64 }
+        Url: { type: string }
+        Events: { type: string }
+        IsActive: { type: boolean }
+    WebhookCreateResponse:
+      allOf:
+        - $ref: '#/components/schemas/Webhook'
+        - type: object
+          properties:
+            Secret: { type: string }
+
+    AuditLogEntry:
+      type: object
+      properties:
+        AuditLogId: { type: integer, format: int64 }
+        CreatedAt: { type: string, format: date-time }
+        UserId: { type: integer, nullable: true }
+        Action: { type: string }
+        ObjectType: { type: string }
+        ObjectId: { type: string }
+        Details: { type: string }
+        RequestId: { type: string }
+        IpAddress: { type: string }
+        UserAgent: { type: string }
+    AuditLogListResponse:
+      type: object
+      properties:
+        Items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+        NextBeforeId: { type: integer, format: int64, nullable: true }
     UploadUrlRequest:
       type: object
       properties:
@@ -1144,3 +1498,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key

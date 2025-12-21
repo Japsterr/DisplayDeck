@@ -67,7 +67,10 @@ services:
 
   # DisplayDeck API server (Linux container)
   server:
-    image: ghcr.io/japsterr/displaydeck-server:${SERVER_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: displaydeck-server:local
     container_name: displaydeck-server
     restart: unless-stopped
     environment:

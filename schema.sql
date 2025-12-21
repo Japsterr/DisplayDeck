@@ -50,6 +50,9 @@ CREATE TABLE MediaFiles (
     FileName VARCHAR(255) NOT NULL,
     FileType VARCHAR(100) NOT NULL,
     Orientation VARCHAR(20) NOT NULL DEFAULT 'Landscape',
+    ProcessingStatus VARCHAR(20) NOT NULL DEFAULT 'uploaded', -- uploaded|validating|ready|failed
+    ProcessingError TEXT,
+    ValidatedAt TIMESTAMP WITH TIME ZONE,
     StorageURL VARCHAR(1024) NOT NULL,
     CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -94,6 +97,10 @@ CREATE TABLE Displays (
     LastSeen TIMESTAMP WITH TIME ZONE,
     CurrentStatus VARCHAR(50), -- e.g., 'Online', 'Offline'
     ProvisioningToken VARCHAR(255),
+    LastHeartbeatAt TIMESTAMP WITH TIME ZONE,
+    AppVersion VARCHAR(50),
+    DeviceInfo JSONB,
+    LastIp VARCHAR(64),
     CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE CASCADE
@@ -130,6 +137,78 @@ CREATE TABLE IF NOT EXISTS ProvisioningTokens (
     OrganizationID INT,
     FOREIGN KEY (DisplayID) REFERENCES Displays(DisplayID) ON DELETE SET NULL,
     FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE SET NULL
+);
+
+-- 7. Refresh tokens (rotating) for /auth/refresh
+CREATE TABLE IF NOT EXISTS RefreshTokens (
+    RefreshTokenID BIGSERIAL PRIMARY KEY,
+    OrganizationID INT NOT NULL,
+    UserID INT NOT NULL,
+    TokenHash VARCHAR(128) NOT NULL UNIQUE,
+    ExpiresAt TIMESTAMP WITH TIME ZONE NOT NULL,
+    RevokedAt TIMESTAMP WITH TIME ZONE,
+    LastUsedAt TIMESTAMP WITH TIME ZONE,
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE CASCADE,
+    FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
+);
+
+-- 8. Scoped API keys
+CREATE TABLE IF NOT EXISTS ApiKeys (
+    ApiKeyID BIGSERIAL PRIMARY KEY,
+    OrganizationID INT NOT NULL,
+    Name VARCHAR(255) NOT NULL,
+    KeyHash VARCHAR(128) NOT NULL UNIQUE,
+    Scopes TEXT NOT NULL,
+    CreatedByUserID INT,
+    ExpiresAt TIMESTAMP WITH TIME ZONE,
+    RevokedAt TIMESTAMP WITH TIME ZONE,
+    LastUsedAt TIMESTAMP WITH TIME ZONE,
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE CASCADE,
+    FOREIGN KEY (CreatedByUserID) REFERENCES Users(UserID) ON DELETE SET NULL
+);
+
+-- 9. Webhook subscriptions
+CREATE TABLE IF NOT EXISTS Webhooks (
+    WebhookID BIGSERIAL PRIMARY KEY,
+    OrganizationID INT NOT NULL,
+    Url VARCHAR(1024) NOT NULL,
+    Secret VARCHAR(255),
+    Events TEXT NOT NULL DEFAULT '*',
+    IsActive BOOLEAN NOT NULL DEFAULT TRUE,
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE CASCADE
+);
+
+-- 10. Idempotency keys (request replay)
+CREATE TABLE IF NOT EXISTS IdempotencyKeys (
+    IdempotencyKey VARCHAR(128) PRIMARY KEY,
+    OrganizationID INT,
+    Method VARCHAR(16) NOT NULL,
+    Path VARCHAR(255) NOT NULL,
+    ResponseStatus INT NOT NULL,
+    ResponseBody TEXT NOT NULL,
+    ExpiresAt TIMESTAMP WITH TIME ZONE NOT NULL,
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11. Audit logs
+CREATE TABLE IF NOT EXISTS AuditLogs (
+    AuditLogID BIGSERIAL PRIMARY KEY,
+    OrganizationID INT NOT NULL,
+    UserID INT,
+    Action VARCHAR(128) NOT NULL,
+    ObjectType VARCHAR(64),
+    ObjectId VARCHAR(64),
+    Details JSONB,
+    RequestId VARCHAR(64),
+    IpAddress VARCHAR(64),
+    UserAgent VARCHAR(255),
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE CASCADE,
+    FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE SET NULL
 );
 
 -- Insert some default data for testing

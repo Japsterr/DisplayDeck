@@ -35,12 +35,20 @@ uses
   DisplayCampaignRepository,
   MediaFileRepository,
   UserRepository,
+  RefreshTokenRepository,
+  ApiKeyRepository,
+  IdempotencyRepository,
+  AuditLogRepository,
+  WebhookRepository,
   PasswordUtils,
   JWTUtils,
   AWSSigV4,
   ProvisioningTokenRepository,
   uServerContainer,
-  System.Hash; // for THashSHA2
+  System.Hash,
+  System.Threading,
+  IdHTTP,
+  IdSSLOpenSSL; // optional for https webhooks
 
 constructor TWebModule1.Create(AOwner: TComponent);
 var
@@ -55,13 +63,58 @@ begin
 end;
 
 procedure TWebModule1.DefaultHandlerAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
+var
+  RequestId: string;
+  ClientIp: string;
+  UserAgent: string;
+  IdempotencyKey: string;
+  AuthApiKeyId: Int64;
+  AuthKind: string;
   // Local helper to reply 501 for yet-to-be-implemented endpoints
+  procedure SetHeaderSafe(const Name, Value: string);
+  begin
+    try
+      Response.SetCustomHeader(Name, Value);
+    except
+      // ignore
+    end;
+  end;
+  function EnsureRequestId: string;
+  var
+    G: TGUID;
+  begin
+    Result := Request.GetFieldByName('X-Request-Id');
+    if Result = '' then Result := Request.GetFieldByName('x-request-id');
+    Result := Trim(Result);
+    if Result = '' then
+    begin
+      CreateGUID(G);
+      Result := GUIDToString(G);
+      Result := Result.Replace('{','').Replace('}','');
+    end;
+    SetHeaderSafe('X-Request-Id', Result);
+  end;
+  procedure SendJson(const Status: Integer; const JsonText: string);
+  begin
+    Response.StatusCode := Status;
+    Response.ContentType := 'application/json';
+    Response.Content := JsonText;
+    Response.SendResponse;
+  end;
+  function JSONError(Code: Integer; const Msg: string; const ErrCode: string = ''): Boolean;
+  var
+    CodeText: string;
+  begin
+    if ErrCode.Trim <> '' then CodeText := ErrCode.Trim else CodeText := 'error';
+    SendJson(Code,
+      '{"code":"' + StringReplace(CodeText, '"', '\"', [rfReplaceAll]) +
+      '","message":"' + StringReplace(Msg, '"', '\"', [rfReplaceAll]) +
+      '","requestId":"' + StringReplace(RequestId, '"', '\"', [rfReplaceAll]) + '"}');
+    Result := True;
+  end;
   procedure NotImpl(const Feature: string);
   begin
-    Response.StatusCode := 501; // Not Implemented
-    Response.ContentType := 'application/json';
-    Response.Content := '{"message":"Not Implemented: ' + StringReplace(Feature, '"', '\"', [rfReplaceAll]) + '"}';
-    Response.SendResponse;
+    JSONError(501, 'Not Implemented: ' + Feature, 'not_implemented');
   end;
   function GetEnv(const Name, DefaultVal: string): string;
   begin
@@ -84,13 +137,86 @@ procedure TWebModule1.DefaultHandlerAction(Sender: TObject; Request: TWebRequest
       raise;
     end;
   end;
-  function JSONError(Code: Integer; const Msg: string): Boolean;
+  function GetClientIp: string;
   begin
-    Response.StatusCode := Code;
-    Response.ContentType := 'application/json';
-    Response.Content := '{"message":"' + StringReplace(Msg, '"', '\"', [rfReplaceAll]) + '"}';
-    Response.SendResponse;
+    Result := Request.GetFieldByName('X-Forwarded-For');
+    if Result = '' then Result := Request.RemoteAddr;
+    Result := Trim(Result);
+  end;
+  function HashSha256Hex(const S: string): string;
+  begin
+    Result := THashSHA2.GetHashString(S, THashSHA2.TSHA2Version.SHA256);
+  end;
+  function GenerateOpaqueToken: string;
+  var
+    G: TGUID;
+    Seed: string;
+    Bytes: TBytes;
+  begin
+    CreateGUID(G);
+    Seed := GUIDToString(G) + '|' + IntToStr(DateTimeToUnix(Now, False)) + '|' + IntToStr(Random(MaxInt));
+    Bytes := THashSHA2.GetHashBytes(Seed, THashSHA2.TSHA2Version.SHA256);
+    Result := JWTUtils.Base64UrlEncode(Bytes);
+  end;
+  function NormalizeScopes(const S: string): string;
+  begin
+    Result := ' ' + LowerCase(StringReplace(S, ',', ' ', [rfReplaceAll])) + ' ';
+    while Pos('  ', Result) > 0 do Result := StringReplace(Result, '  ', ' ', [rfReplaceAll]);
+  end;
+  function ApiKeyHasScopes(const ApiKeyScopes: string; const RequiredScopes: array of string): Boolean;
+  var
+    Hay: string;
+    R: string;
+  begin
+    Hay := NormalizeScopes(ApiKeyScopes);
+    for R in RequiredScopes do
+    begin
+      if Trim(R) = '' then Continue;
+      if Pos(' ' + LowerCase(Trim(R)) + ' ', Hay) = 0 then Exit(False);
+    end;
     Result := True;
+  end;
+
+  function TryJWT(out OrgId: Integer; out UserId: Integer; out Role: string): Boolean; forward;
+  function RequireJWT(out OrgId: Integer; out UserId: Integer; out Role: string): Boolean; forward;
+
+  function TryApiKeyAuth(const RequiredScopes: array of string; out OrgId: Integer; out UserId: Integer; out Role: string): Boolean;
+  var
+    ApiKey: string;
+    Info: TApiKeyInfo;
+    Hash: string;
+  begin
+    Result := False;
+    OrgId := 0; UserId := 0; Role := '';
+
+    ApiKey := Trim(Request.GetFieldByName('X-Api-Key'));
+    if ApiKey = '' then ApiKey := Trim(Request.GetFieldByName('x-api-key'));
+    if ApiKey = '' then Exit(False);
+
+    Hash := HashSha256Hex(ApiKey);
+    if not TApiKeyRepository.FindByHash(Hash, Info) then
+      Exit(False);
+    if Info.Revoked then Exit(False);
+    if Info.HasExpiresAt and (Info.ExpiresAt < Now) then Exit(False);
+    if not ApiKeyHasScopes(Info.Scopes, RequiredScopes) then Exit(False);
+
+    TApiKeyRepository.TouchLastUsed(Info.ApiKeyId);
+    AuthApiKeyId := Info.ApiKeyId;
+    AuthKind := 'apiKey';
+
+    OrgId := Info.OrganizationId;
+    UserId := 0;
+    Role := 'ApiKey';
+    Result := True;
+  end;
+  function RequireAuth(const RequiredScopes: array of string; out OrgId: Integer; out UserId: Integer; out Role: string): Boolean;
+  begin
+    // Prefer JWT, but allow scoped API keys as fallback.
+    Result := TryJWT(OrgId, UserId, Role);
+    if Result then begin AuthKind := 'jwt'; Exit; end;
+    Result := TryApiKeyAuth(RequiredScopes, OrgId, UserId, Role);
+    if not Result then
+      JSONError(401, 'Unauthorized', 'unauthorized');
   end;
   function CleanToken(const S: string): string;
   var i: Integer; ch: Char;
@@ -103,12 +229,19 @@ procedure TWebModule1.DefaultHandlerAction(Sender: TObject; Request: TWebRequest
         Result := Result + ch;
     end;
   end;
-  function RequireJWT(out OrgId: Integer; out UserId: Integer; out Role: string): Boolean;
-  var H, RawToken, QueryToken, TryToken: string; Parts: TArray<string>; Payload: TJSONObject; Secret: string;
+  function TryJWT(out OrgId: Integer; out UserId: Integer; out Role: string): Boolean;
+  var
+    H, RawToken, QueryToken, TryToken: string;
+    Parts: TArray<string>;
+    Payload: TJSONObject;
+    Secret: string;
+    NowSec: Int64;
   begin
-    Result := False; OrgId := 0; UserId := 0; Role := '';
+    Result := False;
+    OrgId := 0; UserId := 0; Role := '';
+
     H := Request.GetFieldByName('Authorization');
-      if (H<>'') and H.StartsWith('Bearer ') then
+    if (H <> '') and H.StartsWith('Bearer ') then
       RawToken := H.Substring(7)
     else
     begin
@@ -118,37 +251,70 @@ procedure TWebModule1.DefaultHandlerAction(Sender: TObject; Request: TWebRequest
       if RawToken='' then RawToken := Request.GetFieldByName('X_AUTH_TOKEN');
       if RawToken.StartsWith('Bearer ') then RawToken := RawToken.Substring(7);
     end;
-      if DebugEnabled then
-        Writeln(Format('RequireJWT Authorization="%s" X-Auth-Token="%s" RawToken="%s"',
-          [H, Request.GetFieldByName('X-Auth-Token'), RawToken]));
+
+    if DebugEnabled then
+      Writeln(Format('TryJWT Authorization="%s" X-Auth-Token="%s" RawToken="%s"',
+        [H, Request.GetFieldByName('X-Auth-Token'), RawToken]));
+
     QueryToken := Request.QueryFields.Values['access_token'];
-    // sanitize
     RawToken := CleanToken(RawToken);
     QueryToken := CleanToken(QueryToken);
-    if RawToken='' then RawToken := QueryToken;
-    if RawToken='' then begin JSONError(401,'Unauthorized'); Exit; end;
+    if RawToken = '' then RawToken := QueryToken;
+    if RawToken = '' then Exit(False);
+
     Parts := RawToken.Split([' ']);
     Secret := GetEnv('JWT_SECRET','changeme');
     TryToken := Parts[0];
+
+    Payload := nil;
     if not VerifyJWT(TryToken, Secret, Payload) then
     begin
-      // Try the query token fallback in case header was mangled by client
       if (QueryToken<>'') then
       begin
-        if not VerifyJWT(QueryToken, Secret, Payload) then begin JSONError(401,'Invalid token'); Exit; end;
+        if not VerifyJWT(QueryToken, Secret, Payload) then Exit(False);
       end
-      else begin JSONError(401,'Invalid token'); Exit; end;
+      else
+        Exit(False);
     end;
+
     try
       OrgId := Payload.GetValue<Integer>('org',0);
       UserId := Payload.GetValue<Integer>('sub',0);
       Role := Payload.GetValue<string>('role','');
-      var NowSec := DateTimeToUnix(Now, False);
-      if Payload.GetValue<Integer>('exp', NowSec) < NowSec then begin JSONError(401,'Token expired'); Exit; end;
+      NowSec := DateTimeToUnix(Now, False);
+      if Payload.GetValue<Int64>('exp', NowSec) < NowSec then Exit(False);
     finally
       Payload.Free;
     end;
     Result := True;
+  end;
+
+  function RequireJWT(out OrgId: Integer; out UserId: Integer; out Role: string): Boolean;
+  begin
+    Result := TryJWT(OrgId, UserId, Role);
+    if not Result then
+      JSONError(401, 'Unauthorized', 'unauthorized');
+  end;
+
+  function TryReplayIdempotency(const OrganizationId: Integer): Boolean;
+  var
+    Hit: TIdempotencyHit;
+  begin
+    Result := False;
+    if Trim(IdempotencyKey) = '' then Exit(False);
+    Hit := TIdempotencyRepository.TryGet(Trim(IdempotencyKey), Request.Method, Request.PathInfo, OrganizationId);
+    if not Hit.Hit then Exit(False);
+    Response.StatusCode := Hit.StatusCode;
+    Response.ContentType := 'application/json';
+    Response.Content := Hit.ResponseBody;
+    Response.SendResponse;
+    Result := True;
+  end;
+
+  procedure StoreIdempotency(const OrganizationId: Integer; const StatusCode: Integer; const Body: string);
+  begin
+    if Trim(IdempotencyKey) = '' then Exit;
+    TIdempotencyRepository.Store(Trim(IdempotencyKey), Request.Method, Request.PathInfo, OrganizationId, StatusCode, Body, Now + 1);
   end;
   function CheckPlanAllowsDisplay(const OrganizationId: Integer): Boolean;
   var C: TFDConnection; Q: TFDQuery; Limit, Count: Integer;
@@ -165,8 +331,19 @@ procedure TWebModule1.DefaultHandlerAction(Sender: TObject; Request: TWebRequest
     finally C.Free; end;
   end;
 begin
+  RequestId := '';
+  ClientIp := '';
+  UserAgent := '';
+  IdempotencyKey := '';
+  AuthApiKeyId := 0;
+  AuthKind := '';
 
   Handled := True;
+  Randomize;
+  RequestId := EnsureRequestId;
+  ClientIp := GetClientIp;
+  UserAgent := Request.GetFieldByName('User-Agent');
+  IdempotencyKey := Trim(Request.GetFieldByName('Idempotency-Key'));
   // Normalize optional /api prefix once for all routing decisions
   var NormalizedPath := Request.PathInfo;
   if Copy(NormalizedPath,1,4)='/api' then
@@ -279,6 +456,9 @@ begin
             var Secret := GetEnv('JWT_SECRET','changeme');
             var Token := CreateJWT(Header, Payload, Secret);
             Header.Free; Payload.Free;
+
+            var RefreshToken := GenerateOpaqueToken;
+            TRefreshTokenRepository.StoreToken(User.OrganizationId, User.Id, HashSha256Hex(RefreshToken), Now + 30);
             // Build AuthResponse
             var UserObj := TJSONObject.Create;
             UserObj.AddPair('Id', TJSONNumber.Create(User.Id));
@@ -289,6 +469,7 @@ begin
             var Obj := TJSONObject.Create;
             try
               Obj.AddPair('Token', Token);
+              Obj.AddPair('RefreshToken', RefreshToken);
               Obj.AddPair('User', UserObj);
               Obj.AddPair('Success', TJSONBool.Create(True));
               Obj.AddPair('Message', '');
@@ -327,6 +508,9 @@ begin
           var Secret := GetEnv('JWT_SECRET','changeme');
           var Token := CreateJWT(Header, Payload, Secret);
           Header.Free; Payload.Free;
+
+          var RefreshToken := GenerateOpaqueToken;
+          TRefreshTokenRepository.StoreToken(U.OrganizationId, U.Id, HashSha256Hex(RefreshToken), Now + 30);
           // Build AuthResponse as per spec
           var UserObj := TJSONObject.Create;
           UserObj.AddPair('Id', TJSONNumber.Create(U.Id));
@@ -337,6 +521,7 @@ begin
           var Obj := TJSONObject.Create;
           try
             Obj.AddPair('Token', Token);
+            Obj.AddPair('RefreshToken', RefreshToken);
             Obj.AddPair('User', UserObj);
             Obj.AddPair('Success', TJSONBool.Create(True));
             Obj.AddPair('Message', '');
@@ -345,6 +530,91 @@ begin
           finally Obj.Free; end;
         finally U.Free; end;
       finally Body.Free; end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/auth/refresh') and SameText(Request.Method, 'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      try
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var RefreshToken := Body.GetValue<string>('RefreshToken','');
+        if RefreshToken='' then begin JSONError(400,'Missing RefreshToken'); Exit; end;
+
+        var OrgId: Integer;
+        var UserId: Integer;
+        var Hash := HashSha256Hex(RefreshToken);
+        if not TRefreshTokenRepository.ValidateToken(Hash, OrgId, UserId) then
+        begin
+          JSONError(401, 'Invalid refresh token', 'invalid_refresh_token');
+          Exit;
+        end;
+
+        // Rotate refresh token
+        TRefreshTokenRepository.RevokeToken(Hash);
+        var NewRefreshToken := GenerateOpaqueToken;
+        TRefreshTokenRepository.StoreToken(OrgId, UserId, HashSha256Hex(NewRefreshToken), Now + 30);
+
+        var U := TUserRepository.FindById(UserId);
+        if U=nil then begin JSONError(401, 'Unauthorized', 'unauthorized'); Exit; end;
+        try
+          var Header := TJSONObject.Create; Header.AddPair('alg','HS256'); Header.AddPair('typ','JWT');
+          var Payload := TJSONObject.Create;
+          var NowSec := DateTimeToUnix(Now, False);
+          Payload.AddPair('sub', TJSONNumber.Create(U.Id));
+          Payload.AddPair('org', TJSONNumber.Create(U.OrganizationId));
+          Payload.AddPair('role', U.Role);
+          Payload.AddPair('iat', TJSONNumber.Create(NowSec));
+          Payload.AddPair('exp', TJSONNumber.Create(NowSec + 86400));
+          var Secret := GetEnv('JWT_SECRET','changeme');
+          var Token := CreateJWT(Header, Payload, Secret);
+          Header.Free; Payload.Free;
+
+          var UserObj := TJSONObject.Create;
+          UserObj.AddPair('Id', TJSONNumber.Create(U.Id));
+          UserObj.AddPair('OrganizationId', TJSONNumber.Create(U.OrganizationId));
+          UserObj.AddPair('Email', U.Email);
+          UserObj.AddPair('PasswordHash', U.PasswordHash);
+          UserObj.AddPair('Role', U.Role);
+
+          var Obj := TJSONObject.Create;
+          try
+            Obj.AddPair('Token', Token);
+            Obj.AddPair('RefreshToken', NewRefreshToken);
+            Obj.AddPair('User', UserObj);
+            Obj.AddPair('Success', TJSONBool.Create(True));
+            Obj.AddPair('Message', '');
+            Response.StatusCode := 200;
+            Response.ContentType := 'application/json';
+            Response.Content := Obj.ToJSON;
+            Response.SendResponse;
+          finally
+            Obj.Free;
+          end;
+        finally
+          U.Free;
+        end;
+      finally
+        Body.Free;
+      end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/auth/logout') and SameText(Request.Method, 'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      try
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var RefreshToken := Body.GetValue<string>('RefreshToken','');
+        if RefreshToken='' then begin JSONError(400,'Missing RefreshToken'); Exit; end;
+        TRefreshTokenRepository.RevokeToken(HashSha256Hex(RefreshToken));
+        Response.StatusCode := 204;
+        Response.ContentType := 'application/json';
+        Response.Content := '';
+        Response.SendResponse;
+      finally
+        Body.Free;
+      end;
       Exit;
     end;
     if DebugEnabled and SameText(NormalizedPath, '/auth/debug-verify') and SameText(Request.Method, 'POST') then
@@ -376,6 +646,344 @@ begin
         finally Obj.Free; end;
       finally Body.Free; end;
       Exit;
+    end;
+
+    // ----- API Keys -----
+    if (Copy(NormalizedPath, 1, 15) = '/organizations/') then
+    begin
+      var Rest := Copy(NormalizedPath, 16, MaxInt);
+      var p := Pos('/', Rest);
+      if p > 0 then
+      begin
+        var OrgIdStr := Copy(Rest, 1, p-1);
+        var Tail := Copy(Rest, p+1, MaxInt);
+        var PathOrgId := StrToIntDef(OrgIdStr, 0);
+
+        if (PathOrgId > 0) and SameText(Tail, 'api-keys') and SameText(Request.Method, 'GET') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['api_keys:read'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var C := NewConnection;
+          try
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text := 'select ApiKeyID, Name, Scopes, CreatedAt, LastUsedAt, ExpiresAt, RevokedAt from ApiKeys where OrganizationID=:Org order by ApiKeyID';
+              Q.ParamByName('Org').AsInteger := PathOrgId;
+              Q.Open;
+              var Arr := TJSONArray.Create;
+              try
+                while not Q.Eof do
+                begin
+                  var Obj := TJSONObject.Create;
+                  Obj.AddPair('ApiKeyId', TJSONNumber.Create(Q.FieldByName('ApiKeyID').AsLargeInt));
+                  Obj.AddPair('Name', Q.FieldByName('Name').AsString);
+                  Obj.AddPair('Scopes', Q.FieldByName('Scopes').AsString);
+                  Obj.AddPair('CreatedAt', DateToISO8601(Q.FieldByName('CreatedAt').AsDateTime, True));
+                  if not Q.FieldByName('LastUsedAt').IsNull then
+                    Obj.AddPair('LastUsedAt', DateToISO8601(Q.FieldByName('LastUsedAt').AsDateTime, True))
+                  else
+                    Obj.AddPair('LastUsedAt', TJSONNull.Create);
+                  if not Q.FieldByName('ExpiresAt').IsNull then
+                    Obj.AddPair('ExpiresAt', DateToISO8601(Q.FieldByName('ExpiresAt').AsDateTime, True))
+                  else
+                    Obj.AddPair('ExpiresAt', TJSONNull.Create);
+                  if not Q.FieldByName('RevokedAt').IsNull then
+                    Obj.AddPair('RevokedAt', DateToISO8601(Q.FieldByName('RevokedAt').AsDateTime, True))
+                  else
+                    Obj.AddPair('RevokedAt', TJSONNull.Create);
+                  Arr.AddElement(Obj);
+                  Q.Next;
+                end;
+                Response.StatusCode := 200;
+                Response.ContentType := 'application/json';
+                Response.Content := Arr.ToJSON;
+                Response.SendResponse;
+              finally
+                Arr.Free;
+              end;
+            finally
+              Q.Free;
+            end;
+          finally
+            C.Free;
+          end;
+          Exit;
+        end;
+
+        if (PathOrgId > 0) and SameText(Tail, 'api-keys') and SameText(Request.Method, 'POST') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['api_keys:write'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var Name := Body.GetValue<string>('Name','');
+            var Scopes := Body.GetValue<string>('Scopes','');
+            var ExpiresAtStr := Body.GetValue<string>('ExpiresAt','');
+            if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+            if Scopes='' then begin JSONError(400,'Missing Scopes'); Exit; end;
+
+            var HasExp := False;
+            var ExpAt: TDateTime := 0;
+            if ExpiresAtStr <> '' then
+            begin
+              HasExp := TryISO8601ToDate(ExpiresAtStr, ExpAt, True);
+              if not HasExp then begin JSONError(400,'Invalid ExpiresAt'); Exit; end;
+            end;
+
+            var RawKey := 'ddk_' + GenerateOpaqueToken;
+            var KeyHash := HashSha256Hex(RawKey);
+            var ApiKeyId := TApiKeyRepository.CreateKey(PathOrgId, AuthUserId, Name, Scopes, KeyHash, ExpAt, HasExp);
+
+            TAuditLogRepository.WriteEvent(PathOrgId, AuthUserId, 'api_key.create', 'api_key', IntToStr(ApiKeyId), nil, RequestId, ClientIp, UserAgent);
+
+            var Obj := TJSONObject.Create;
+            try
+              Obj.AddPair('ApiKeyId', TJSONNumber.Create(ApiKeyId));
+              Obj.AddPair('ApiKey', RawKey);
+              Obj.AddPair('Name', Name);
+              Obj.AddPair('Scopes', Scopes);
+              if HasExp then Obj.AddPair('ExpiresAt', DateToISO8601(ExpAt, True)) else Obj.AddPair('ExpiresAt', TJSONNull.Create);
+              Response.StatusCode := 201;
+              Response.ContentType := 'application/json';
+              Response.Content := Obj.ToJSON;
+              Response.SendResponse;
+            finally
+              Obj.Free;
+            end;
+          finally
+            Body.Free;
+          end;
+          Exit;
+        end;
+
+        if (PathOrgId > 0) and (Copy(Tail, 1, 9) = 'api-keys/') and SameText(Request.Method, 'DELETE') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['api_keys:write'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var ApiKeyId := StrToInt64Def(Copy(Tail, 10, MaxInt), 0);
+          if ApiKeyId <= 0 then begin JSONError(400,'Invalid api key id'); Exit; end;
+          if not TApiKeyRepository.RevokeKey(PathOrgId, ApiKeyId) then begin JSONError(404,'Not found'); Exit; end;
+
+          TAuditLogRepository.WriteEvent(PathOrgId, AuthUserId, 'api_key.revoke', 'api_key', IntToStr(ApiKeyId), nil, RequestId, ClientIp, UserAgent);
+          Response.StatusCode := 204;
+          Response.ContentType := 'application/json';
+          Response.Content := '';
+          Response.SendResponse;
+          Exit;
+        end;
+
+        // Webhooks
+        if (PathOrgId > 0) and SameText(Tail, 'webhooks') and SameText(Request.Method, 'GET') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['webhooks:read'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var Hooks := TWebhookRepository.ListByOrganization(PathOrgId);
+          try
+            var Arr := TJSONArray.Create;
+            try
+              for var Hk in Hooks do
+              begin
+                var Obj := TJSONObject.Create;
+                Obj.AddPair('WebhookId', TJSONNumber.Create(Hk.Id));
+                Obj.AddPair('Url', Hk.Url);
+                Obj.AddPair('Events', Hk.Events);
+                Obj.AddPair('IsActive', TJSONBool.Create(Hk.IsActive));
+                Arr.AddElement(Obj);
+              end;
+              Response.StatusCode := 200;
+              Response.ContentType := 'application/json';
+              Response.Content := Arr.ToJSON;
+              Response.SendResponse;
+            finally
+              Arr.Free;
+            end;
+          finally
+            Hooks.Free;
+          end;
+          Exit;
+        end;
+
+        if (PathOrgId > 0) and SameText(Tail, 'webhooks') and SameText(Request.Method, 'POST') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['webhooks:write'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var Url := Body.GetValue<string>('Url','');
+            var Events := Body.GetValue<string>('Events','');
+            var Secret := Body.GetValue<string>('Secret','');
+            if Url='' then begin JSONError(400,'Missing Url'); Exit; end;
+            if Events='' then begin JSONError(400,'Missing Events'); Exit; end;
+            if Secret='' then Secret := GenerateOpaqueToken;
+
+            var Hook := TWebhookRepository.CreateWebhook(PathOrgId, Url, Secret, Events);
+            try
+              TAuditLogRepository.WriteEvent(PathOrgId, AuthUserId, 'webhook.create', 'webhook', IntToStr(Hook.Id), nil, RequestId, ClientIp, UserAgent);
+
+              var Obj := TJSONObject.Create;
+              try
+                Obj.AddPair('WebhookId', TJSONNumber.Create(Hook.Id));
+                Obj.AddPair('Url', Hook.Url);
+                Obj.AddPair('Events', Hook.Events);
+                Obj.AddPair('IsActive', TJSONBool.Create(Hook.IsActive));
+                Obj.AddPair('Secret', Hook.Secret);
+                Response.StatusCode := 201;
+                Response.ContentType := 'application/json';
+                Response.Content := Obj.ToJSON;
+                Response.SendResponse;
+              finally
+                Obj.Free;
+              end;
+            finally
+              Hook.Free;
+            end;
+          finally
+            Body.Free;
+          end;
+          Exit;
+        end;
+
+        if (PathOrgId > 0) and (Copy(Tail, 1, 9) = 'webhooks/') and SameText(Request.Method, 'GET') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['webhooks:read'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var WebhookId := StrToInt64Def(Copy(Tail, 10, MaxInt), 0);
+          if WebhookId <= 0 then begin JSONError(400,'Invalid webhook id'); Exit; end;
+          var Hook := TWebhookRepository.GetById(WebhookId);
+          if (Hook=nil) or (Hook.OrganizationId <> PathOrgId) then begin if Hook<>nil then Hook.Free; JSONError(404,'Not found'); Exit; end;
+          try
+            var Obj := TJSONObject.Create;
+            try
+              Obj.AddPair('WebhookId', TJSONNumber.Create(Hook.Id));
+              Obj.AddPair('Url', Hook.Url);
+              Obj.AddPair('Events', Hook.Events);
+              Obj.AddPair('IsActive', TJSONBool.Create(Hook.IsActive));
+              Response.StatusCode := 200;
+              Response.ContentType := 'application/json';
+              Response.Content := Obj.ToJSON;
+              Response.SendResponse;
+            finally
+              Obj.Free;
+            end;
+          finally
+            Hook.Free;
+          end;
+          Exit;
+        end;
+
+        if (PathOrgId > 0) and (Copy(Tail, 1, 9) = 'webhooks/') and SameText(Request.Method, 'DELETE') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['webhooks:write'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var WebhookId := StrToInt64Def(Copy(Tail, 10, MaxInt), 0);
+          if WebhookId <= 0 then begin JSONError(400,'Invalid webhook id'); Exit; end;
+          if not TWebhookRepository.DeleteWebhook(PathOrgId, WebhookId) then begin JSONError(404,'Not found'); Exit; end;
+          TAuditLogRepository.WriteEvent(PathOrgId, AuthUserId, 'webhook.delete', 'webhook', IntToStr(WebhookId), nil, RequestId, ClientIp, UserAgent);
+          Response.StatusCode := 204;
+          Response.ContentType := 'application/json';
+          Response.Content := '';
+          Response.SendResponse;
+          Exit;
+        end;
+
+        // Audit log
+        if (PathOrgId > 0) and SameText(Tail, 'audit-log') and SameText(Request.Method, 'GET') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['audit:read'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var Limit := StrToIntDef(Request.QueryFields.Values['limit'], 100);
+          if Limit <= 0 then Limit := 100;
+          if Limit > 200 then Limit := 200;
+          var BeforeId := StrToInt64Def(Request.QueryFields.Values['beforeId'], 0);
+
+          var C := NewConnection;
+          try
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text := 'select AuditLogID, CreatedAt, UserID, Action, ObjectType, ObjectId, Details, RequestId, IpAddress, UserAgent '
+                          + 'from AuditLogs where OrganizationID=:Org '
+                          + 'and (:BeforeId=0 or AuditLogID < :BeforeId) '
+                          + 'order by AuditLogID desc limit ' + IntToStr(Limit + 1);
+              Q.ParamByName('Org').AsInteger := PathOrgId;
+              Q.ParamByName('BeforeId').AsLargeInt := BeforeId;
+              Q.Open;
+
+              var Arr := TJSONArray.Create;
+              var NextBeforeId: Int64 := 0;
+              try
+                var Count := 0;
+                while (not Q.Eof) and (Count < Limit) do
+                begin
+                  var Obj := TJSONObject.Create;
+                  Obj.AddPair('AuditLogId', TJSONNumber.Create(Q.FieldByName('AuditLogID').AsLargeInt));
+                  Obj.AddPair('CreatedAt', DateToISO8601(Q.FieldByName('CreatedAt').AsDateTime, True));
+                  if not Q.FieldByName('UserID').IsNull then
+                    Obj.AddPair('UserId', TJSONNumber.Create(Q.FieldByName('UserID').AsInteger))
+                  else
+                    Obj.AddPair('UserId', TJSONNull.Create);
+                  Obj.AddPair('Action', Q.FieldByName('Action').AsString);
+                  Obj.AddPair('ObjectType', Q.FieldByName('ObjectType').AsString);
+                  Obj.AddPair('ObjectId', Q.FieldByName('ObjectId').AsString);
+                  Obj.AddPair('Details', Q.FieldByName('Details').AsString);
+                  Obj.AddPair('RequestId', Q.FieldByName('RequestId').AsString);
+                  Obj.AddPair('IpAddress', Q.FieldByName('IpAddress').AsString);
+                  Obj.AddPair('UserAgent', Q.FieldByName('UserAgent').AsString);
+                  Arr.AddElement(Obj);
+                  Inc(Count);
+                  Q.Next;
+                end;
+
+                if not Q.Eof then
+                  NextBeforeId := Q.FieldByName('AuditLogID').AsLargeInt;
+
+                var OutObj := TJSONObject.Create;
+                try
+                  OutObj.AddPair('Items', Arr);
+                  if NextBeforeId > 0 then
+                    OutObj.AddPair('NextBeforeId', TJSONNumber.Create(NextBeforeId))
+                  else
+                    OutObj.AddPair('NextBeforeId', TJSONNull.Create);
+                  Response.StatusCode := 200;
+                  Response.ContentType := 'application/json';
+                  Response.Content := OutObj.ToJSON;
+                  Response.SendResponse;
+                finally
+                  OutObj.Free;
+                end;
+
+              except
+                Arr.Free;
+                raise;
+              end;
+            finally
+              Q.Free;
+            end;
+          finally
+            C.Free;
+          end;
+          Exit;
+        end;
+      end;
     end;
 
     // Plans and Roles
@@ -450,6 +1058,9 @@ begin
       // Enforce auth for org-scoped writes
       if SameText(Request.Method,'GET') then
       begin
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['displays:read'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
         var List := TDisplayRepository.ListByOrganization(OrgId);
         try
           var Arr := TJSONArray.Create;
@@ -474,9 +1085,10 @@ begin
       else if SameText(Request.Method,'POST') then
       begin
         var TokOrg, TokUser: Integer; var TokRole: string;
-        if not RequireJWT(TokOrg, TokUser, TokRole) then Exit;
+        if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
         if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
         if not CheckPlanAllowsDisplay(OrgId) then begin JSONError(402,'Display limit reached for plan'); Exit; end;
+        if TryReplayIdempotency(OrgId) then Exit;
         var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
         try
           if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
@@ -486,7 +1098,10 @@ begin
           var D := TDisplayRepository.CreateDisplay(OrgId, Name, Orientation);
           try
             var Obj := TJSONObject.Create; Obj.AddPair('Id', TJSONNumber.Create(D.Id)); Obj.AddPair('Name', D.Name); Obj.AddPair('Orientation', D.Orientation);
-            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
+            var OutBody := Obj.ToJSON;
+            Obj.Free;
+            StoreIdempotency(OrgId, 201, OutBody);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
           finally D.Free; end;
         finally Body.Free; end;
         Exit;
@@ -523,9 +1138,10 @@ begin
       var OrgIdStr := Copy(NormalizedPath, 16, MaxInt); var Slash := Pos('/', OrgIdStr); if Slash>0 then OrgIdStr := Copy(OrgIdStr,1,Slash-1);
       var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
       var TokOrg, TokUser: Integer; var TokRole: string;
-      if not RequireJWT(TokOrg, TokUser, TokRole) then Exit;
+      if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
       if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
       if not CheckPlanAllowsDisplay(OrgId) then begin JSONError(402,'Display limit reached for plan'); Exit; end;
+      if TryReplayIdempotency(OrgId) then Exit;
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var ProvisioningToken := Body.GetValue<string>('ProvisioningToken',''); if ProvisioningToken='' then begin JSONError(400,'Missing ProvisioningToken'); Exit; end;
@@ -541,7 +1157,10 @@ begin
               U.ParamByName('D').AsInteger := D.Id; U.ParamByName('O').AsInteger := OrgId; U.ParamByName('T').AsString := ProvisioningToken; U.ExecSQL;
             finally U.Free; end;
             var Obj := TJSONObject.Create; Obj.AddPair('Id', TJSONNumber.Create(D.Id)); Obj.AddPair('Name', D.Name); Obj.AddPair('Orientation', D.Orientation);
-            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
+            var OutBody := Obj.ToJSON;
+            Obj.Free;
+            StoreIdempotency(OrgId, 200, OutBody);
+            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
           finally D.Free; end;
         finally C.Free; end;
       finally Body.Free; end;
@@ -557,6 +1176,9 @@ begin
       var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
       if SameText(Request.Method,'GET') then
       begin
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
         var L := TCampaignRepository.ListByOrganization(OrgId);
         try
           var Arr := TJSONArray.Create; try
@@ -578,6 +1200,10 @@ begin
       end
       else if SameText(Request.Method,'POST') then
       begin
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
+        if TryReplayIdempotency(OrgId) then Exit;
         var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
           if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
           var Name := Body.GetValue<string>('Name',''); var Orientation := Body.GetValue<string>('Orientation','');
@@ -585,7 +1211,10 @@ begin
           var Cmp := TCampaignRepository.CreateCampaign(OrgId, Name, Orientation);
           try
             var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Cmp.Id)); O.AddPair('OrganizationId', TJSONNumber.Create(Cmp.OrganizationId)); O.AddPair('Name', Cmp.Name); O.AddPair('Orientation', Cmp.Orientation);
-            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            var OutBody := O.ToJSON;
+            O.Free;
+            StoreIdempotency(OrgId, 201, OutBody);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
           finally Cmp.Free; end;
         finally Body.Free; end; Exit;
       end;
@@ -601,6 +1230,20 @@ begin
       if (Id=0) then begin JSONError(400,'Invalid display id'); Exit; end;
       if Pos('/campaign-assignments', NormalizedPath) > 0 then
       begin
+        var Disp := TDisplayRepository.GetById(Id);
+        if Disp=nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['assignments:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['assignments:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>Disp.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
         if SameText(Request.Method,'GET') then
         begin
           var L := TDisplayCampaignRepository.ListByDisplay(Id);
@@ -625,6 +1268,7 @@ begin
         end
         else if SameText(Request.Method,'POST') then
         begin
+          if TryReplayIdempotency(Disp.OrganizationId) then Exit;
           var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
           try
             if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
@@ -634,10 +1278,17 @@ begin
             var A := TDisplayCampaignRepository.CreateAssignment(Id, CampaignId, IsPrimary);
             try
               var Obj := TJSONObject.Create; Obj.AddPair('Id', TJSONNumber.Create(A.Id)); Obj.AddPair('CampaignId', TJSONNumber.Create(A.CampaignId)); Obj.AddPair('IsPrimary', TJSONBool.Create(A.IsPrimary));
-              Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
+              var OutBody := Obj.ToJSON;
+              Obj.Free;
+              StoreIdempotency(Disp.OrganizationId, 201, OutBody);
+              Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
             finally A.Free; end;
           finally Body.Free; end;
           Exit;
+        end;
+
+        finally
+          Disp.Free;
         end;
       end
       else
@@ -647,6 +1298,9 @@ begin
           var D := TDisplayRepository.GetById(Id);
           if D=nil then begin JSONError(404,'Not found'); Exit; end;
           try
+            var TokOrg, TokUser: Integer; var TokRole: string;
+            if not RequireAuth(['displays:read'], TokOrg, TokUser, TokRole) then Exit;
+            if TokOrg<>D.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
             var Obj := TJSONObject.Create; Obj.AddPair('Id', TJSONNumber.Create(D.Id)); Obj.AddPair('Name', D.Name); Obj.AddPair('Orientation', D.Orientation);
             Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
           finally D.Free; end;
@@ -654,6 +1308,13 @@ begin
         end
         else if SameText(Request.Method,'PUT') then
         begin
+          var D := TDisplayRepository.GetById(Id);
+          if D=nil then begin JSONError(404,'Not found'); Exit; end;
+          try
+            var TokOrg, TokUser: Integer; var TokRole: string;
+            if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
+            if TokOrg<>D.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
           var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
             if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
             var Name := Body.GetValue<string>('Name',''); var Orientation := Body.GetValue<string>('Orientation','');
@@ -665,10 +1326,21 @@ begin
               Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
             finally D.Free; end;
           finally Body.Free; end;
+
+          finally
+            D.Free;
+          end;
           Exit;
         end
         else if SameText(Request.Method,'DELETE') then
         begin
+          var D := TDisplayRepository.GetById(Id);
+          if D=nil then begin JSONError(404,'Not found'); Exit; end;
+          try
+            var TokOrg, TokUser: Integer; var TokRole: string;
+            if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
+            if TokOrg<>D.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+          finally D.Free; end;
           TDisplayRepository.DeleteDisplay(Id);
           Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse; Exit;
         end;
@@ -683,6 +1355,21 @@ begin
         var IdStr := Copy(NormalizedPath, 12, MaxInt);
         var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
         var CampId := StrToIntDef(IdStr,0); if CampId=0 then begin JSONError(400,'Invalid campaign id'); Exit; end;
+
+        var Camp := TCampaignRepository.GetById(CampId);
+        if Camp=nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>Camp.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
         if SameText(Request.Method,'GET') then
         begin
           var L := TCampaignItemRepository.ListByCampaign(CampId);
@@ -701,6 +1388,7 @@ begin
         end
         else if SameText(Request.Method,'POST') then
         begin
+          if TryReplayIdempotency(Camp.OrganizationId) then Exit;
           var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
             if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
             var MediaFileId := Body.GetValue<Integer>('MediaFileId',0);
@@ -710,21 +1398,42 @@ begin
             var Itm := TCampaignItemRepository.CreateItem(CampId, MediaFileId, DisplayOrder, Duration);
             try
               var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Itm.Id)); O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)); O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder)); O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
-              Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+              var OutBody := O.ToJSON;
+              O.Free;
+              StoreIdempotency(Camp.OrganizationId, 201, OutBody);
+              Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
             finally Itm.Free; end;
           finally Body.Free; end; Exit;
+        end;
+
+        finally
+          Camp.Free;
         end;
       end
       else if (SameText(Request.Method, 'GET') or SameText(Request.Method, 'PUT') or SameText(Request.Method, 'DELETE')) then
       begin
         var IdStr := Copy(NormalizedPath, 12, MaxInt);
         var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid campaign id'); Exit; end;
+        var Cmp0 := TCampaignRepository.GetById(Id);
+        if Cmp0=nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>Cmp0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
         if SameText(Request.Method,'GET') then
         begin
-          var Cmp := TCampaignRepository.GetById(Id); if Cmp=nil then begin JSONError(404,'Not found'); Exit; end;
-          try var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Cmp.Id)); O.AddPair('Name', Cmp.Name); O.AddPair('Orientation', Cmp.Orientation);
+          var Cmp := Cmp0;
+          var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Cmp.Id)); O.AddPair('Name', Cmp.Name); O.AddPair('Orientation', Cmp.Orientation);
             Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
-          finally Cmp.Free; end; Exit;
+          Exit;
         end
         else if SameText(Request.Method,'PUT') then
         begin
@@ -743,6 +1452,10 @@ begin
           TCampaignRepository.DeleteCampaign(Id);
           Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse; Exit;
         end;
+
+        finally
+          Cmp0.Free;
+        end;
       end;
     end;
 
@@ -750,12 +1463,28 @@ begin
     begin
       var IdStr := Copy(NormalizedPath, 17, MaxInt);
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid campaign item id'); Exit; end;
+      var Itm0 := TCampaignItemRepository.GetById(Id);
+      if Itm0=nil then begin JSONError(404,'Not found'); Exit; end;
+      var Camp0 := TCampaignRepository.GetById(Itm0.CampaignId);
+      if Camp0=nil then begin Itm0.Free; JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+        end
+        else
+        begin
+          if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>Camp0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
       if SameText(Request.Method,'GET') then
       begin
-        var Itm := TCampaignItemRepository.GetById(Id); if Itm=nil then begin JSONError(404,'Not found'); Exit; end;
-        try var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Itm.Id)); O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)); O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder)); O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
+        var Itm := Itm0;
+        var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Itm.Id)); O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)); O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder)); O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
           Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
-        finally Itm.Free; end; Exit;
+        Exit;
       end
       else if SameText(Request.Method,'PUT') then
       begin
@@ -780,12 +1509,26 @@ begin
         finally C.Free; end;
         Response.StatusCode := 204; Response.SendResponse; Exit;
       end;
+
+      finally
+        Camp0.Free;
+        Itm0.Free;
+      end;
     end;
 
     if (Copy(NormalizedPath, 1, 22) = '/campaign-assignments/') then
     begin
       var IdStr := Copy(NormalizedPath, 23, MaxInt);
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid assignment id'); Exit; end;
+      var A0 := TDisplayCampaignRepository.GetById(Id);
+      if A0=nil then begin JSONError(404,'Not found'); Exit; end;
+      var D0 := TDisplayRepository.GetById(A0.DisplayId);
+      if D0=nil then begin A0.Free; JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['assignments:write'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>D0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
       if SameText(Request.Method,'PUT') then
       begin
         var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
@@ -803,6 +1546,11 @@ begin
         TDisplayCampaignRepository.DeleteAssignment(Id);
         Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse; Exit;
       end;
+
+      finally
+        D0.Free;
+        A0.Free;
+      end;
     end;
 
     // Media files presigned URLs
@@ -819,6 +1567,9 @@ begin
       var Tail := Copy(PathInfo, Length('/organizations/')+1, MaxInt); // {OrgId}/media-files
       var OrgIdStr := Copy(Tail,1, Pos('/',Tail)-1);
       var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['media:read'], TokOrg, TokUser, TokRole) then Exit;
+      if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
       var C := NewConnection; try
         var Q := TFDQuery.Create(nil); try
           Q.Connection := C;
@@ -858,8 +1609,11 @@ begin
     begin
       var IdStr := Copy(PathInfo,14,MaxInt); // after '/media-files/'
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid media id'); Exit; end;
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['media:read'], TokOrg, TokUser, TokRole) then Exit;
       var MF := TMediaFileRepository.GetById(Id); if MF=nil then begin JSONError(404,'Not found'); Exit; end;
       try
+        if TokOrg<>MF.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
         var O := TJSONObject.Create; try
           O.AddPair('Id', TJSONNumber.Create(MF.Id));
           O.AddPair('OrganizationId', TJSONNumber.Create(MF.OrganizationId));
@@ -884,6 +1638,9 @@ begin
       var Tail := Copy(PathInfo, Length('/organizations/')+1, MaxInt);
       var OrgIdStr := Copy(Tail,1, Pos('/',Tail)-1);
       var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['media:write'], TokOrg, TokUser, TokRole) then Exit;
+      if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var FileName := Body.GetValue<string>('FileName','');
@@ -916,6 +1673,8 @@ begin
     begin
       var IdStr := Copy(PathInfo,14,MaxInt);
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid media id'); Exit; end;
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['media:write'], TokOrg, TokUser, TokRole) then Exit;
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var FileName := Body.GetValue<string>('FileName','');
@@ -929,12 +1688,13 @@ begin
           var Q := TFDQuery.Create(nil); try
             Q.Connection := C;
             // Include Orientation in update (compatible with new schema); if legacy DB without column, this will error until migrated.
-            Q.SQL.Text := 'update MediaFiles set FileName=:Name, FileType=:Type, StorageURL=:Url, Orientation=:Orientation, UpdatedAt=NOW() where MediaFileID=:Id returning *';
+            Q.SQL.Text := 'update MediaFiles set FileName=:Name, FileType=:Type, StorageURL=:Url, Orientation=:Orientation, UpdatedAt=NOW() where MediaFileID=:Id and OrganizationID=:Org returning *';
             Q.ParamByName('Name').AsString := FileName;
             Q.ParamByName('Type').AsString := FileType;
             Q.ParamByName('Url').AsString := StorageURL;
             Q.ParamByName('Orientation').AsString := Orientation;
             Q.ParamByName('Id').AsInteger := Id;
+            Q.ParamByName('Org').AsInteger := TokOrg;
             Q.Open;
             if Q.Eof then begin JSONError(404,'Not found'); Exit; end;
             var O := TJSONObject.Create; try
@@ -962,12 +1722,16 @@ begin
     begin
       var IdStr := Copy(PathInfo,14,MaxInt);
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid media id'); Exit; end;
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['media:write'], TokOrg, TokUser, TokRole) then Exit;
       var C := NewConnection; try
         var Q := TFDQuery.Create(nil); try
           Q.Connection := C;
-          Q.SQL.Text := 'delete from MediaFiles where MediaFileID=:Id';
+          Q.SQL.Text := 'delete from MediaFiles where MediaFileID=:Id and OrganizationID=:Org';
           Q.ParamByName('Id').AsInteger := Id;
+          Q.ParamByName('Org').AsInteger := TokOrg;
           Q.ExecSQL;
+          if Q.RowsAffected=0 then begin JSONError(404,'Not found'); Exit; end;
           Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
         finally Q.Free; end;
       finally C.Free; end;
@@ -977,6 +1741,8 @@ begin
     // Upload URL (presign)
     if SameText(PathInfo, '/media-files/upload-url') and SameText(Request.Method, 'POST') then
     begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['media:write'], TokOrg, TokUser, TokRole) then Exit;
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var OrgId := Body.GetValue<Integer>('OrganizationId',0);
@@ -984,6 +1750,7 @@ begin
         var FileType := Body.GetValue<string>('FileType','application/octet-stream');
         var Orientation := Body.GetValue<string>('Orientation','Landscape');
         if (OrgId=0) or (FileName='') then begin JSONError(400,'Missing fields'); Exit; end;
+        if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
         // Use the same default bucket name created by docker compose (minio-setup)
         var Bucket := GetEnv('MINIO_BUCKET','displaydeck-media');
         var InternalEndpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
@@ -1017,8 +1784,11 @@ begin
       var Tail := Copy(PathInfo, 14, MaxInt);
       var IdStr := Copy(Tail, 1, Pos('/', Tail)-1);
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid media id'); Exit; end;
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['media:read'], TokOrg, TokUser, TokRole) then Exit;
       var MF := TMediaFileRepository.GetById(Id); if MF=nil then begin JSONError(404,'Not found'); Exit; end;
       try
+        if TokOrg<>MF.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
         var InternalEndpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
         var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT', InternalEndpoint);
         var Access := GetEnv('MINIO_ACCESS_KEY','minioadmin');
@@ -1064,7 +1834,18 @@ begin
       var IdStr := Copy(PathInfo, 11, MaxInt);
       var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
       var DisplayId := StrToIntDef(IdStr,0); if DisplayId=0 then begin JSONError(400,'Invalid display id'); Exit; end;
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['displays:read'], TokOrg, TokUser, TokRole) then Exit;
       var C := NewConnection; try
+        // Ensure display belongs to authenticated org
+        var QOrg := TFDQuery.Create(nil); try
+          QOrg.Connection := C;
+          QOrg.SQL.Text := 'select OrganizationID from Displays where DisplayID=:D';
+          QOrg.ParamByName('D').AsInteger := DisplayId;
+          QOrg.Open;
+          if QOrg.Eof then begin JSONError(404,'Display not found'); Exit; end;
+          if TokOrg<>QOrg.FieldByName('OrganizationID').AsInteger then begin JSONError(403,'Forbidden'); Exit; end;
+        finally QOrg.Free; end;
         var Q := TFDQuery.Create(nil); try
           Q.Connection := C;
           Q.SQL.Text := 'select pl.*, mf.FileName, mf.FileType, c.Name as CampaignName ' +
@@ -1098,11 +1879,22 @@ begin
       var IdStr := Copy(PathInfo, 11, MaxInt);
       var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
       var DisplayId := StrToIntDef(IdStr,0); if DisplayId=0 then begin JSONError(400,'Invalid display id'); Exit; end;
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var CampaignId := Body.GetValue<Integer>('CampaignId',0); if CampaignId=0 then begin JSONError(400,'Missing CampaignId'); Exit; end;
         // Set only this assignment as primary
         var C := NewConnection; try
+          // Ensure display belongs to org
+          var QOrg := TFDQuery.Create(nil); try
+            QOrg.Connection := C;
+            QOrg.SQL.Text := 'select OrganizationID from Displays where DisplayID=:D';
+            QOrg.ParamByName('D').AsInteger := DisplayId;
+            QOrg.Open;
+            if QOrg.Eof then begin JSONError(404,'Display not found'); Exit; end;
+            if TokOrg<>QOrg.FieldByName('OrganizationID').AsInteger then begin JSONError(403,'Forbidden'); Exit; end;
+          finally QOrg.Free; end;
           var Q := TFDQuery.Create(nil); try
             Q.Connection := C;
             Q.SQL.Text := 'update DisplayCampaigns set IsPrimary=false where DisplayID=:D'; Q.ParamByName('D').AsInteger := DisplayId; Q.ExecSQL;
@@ -1117,7 +1909,10 @@ begin
     // Analytics: list plays with filters
     if SameText(PathInfo, '/analytics/plays') and SameText(Request.Method,'GET') then
     begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['analytics:read'], TokOrg, TokUser, TokRole) then Exit;
       var OrgId := StrToIntDef(Request.QueryFields.Values['organizationId'], 0);
+      if OrgId=0 then OrgId := TokOrg else if OrgId<>TokOrg then begin JSONError(403,'Forbidden'); Exit; end;
       var DisplayId := StrToIntDef(Request.QueryFields.Values['displayId'], 0);
       var CampaignId := StrToIntDef(Request.QueryFields.Values['campaignId'], 0);
       var MediaFileId := StrToIntDef(Request.QueryFields.Values['mediaFileId'], 0);
@@ -1173,7 +1968,10 @@ begin
     // Analytics: summary by media
     if SameText(PathInfo, '/analytics/summary/media') and SameText(Request.Method,'GET') then
     begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['analytics:read'], TokOrg, TokUser, TokRole) then Exit;
       var OrgId := StrToIntDef(Request.QueryFields.Values['organizationId'], 0);
+      if OrgId=0 then OrgId := TokOrg else if OrgId<>TokOrg then begin JSONError(403,'Forbidden'); Exit; end;
       var FromTs := Request.QueryFields.Values['from'];
       var ToTs := Request.QueryFields.Values['to'];
       var C := NewConnection; try
@@ -1206,7 +2004,10 @@ begin
     // Analytics: summary by campaign
     if SameText(PathInfo, '/analytics/summary/campaigns') and SameText(Request.Method,'GET') then
     begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['analytics:read'], TokOrg, TokUser, TokRole) then Exit;
       var OrgId := StrToIntDef(Request.QueryFields.Values['organizationId'], 0);
+      if OrgId=0 then OrgId := TokOrg else if OrgId<>TokOrg then begin JSONError(403,'Forbidden'); Exit; end;
       var FromTs := Request.QueryFields.Values['from'];
       var ToTs := Request.QueryFields.Values['to'];
       var C := NewConnection; try

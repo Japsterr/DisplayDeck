@@ -86,6 +86,10 @@ type
     FFileType: string;
     FOrientation: string;
     FStorageURL: string;
+    FProcessingStatus: string;
+    FProcessingError: string;
+    FValidatedAt: TDateTime;
+    FHasValidatedAt: Boolean;
     FCreatedAt: TDateTime;
     FUpdatedAt: TDateTime;
   public
@@ -95,6 +99,10 @@ type
     property FileType: string read FFileType write FFileType;
     property Orientation: string read FOrientation write FOrientation;
     property StorageURL: string read FStorageURL write FStorageURL;
+    property ProcessingStatus: string read FProcessingStatus write FProcessingStatus;
+    property ProcessingError: string read FProcessingError write FProcessingError;
+    property ValidatedAt: TDateTime read FValidatedAt write FValidatedAt;
+    property HasValidatedAt: Boolean read FHasValidatedAt write FHasValidatedAt;
     property CreatedAt: TDateTime read FCreatedAt write FCreatedAt;
     property UpdatedAt: TDateTime read FUpdatedAt write FUpdatedAt;
   end;
@@ -141,6 +149,10 @@ type
     FLastSeen: TDateTime;
     FCurrentStatus: string;
     FProvisioningToken: string;
+    FLastHeartbeatAt: TDateTime;
+    FAppVersion: string;
+    FDeviceInfoJson: string;
+    FLastIp: string;
     FCreatedAt: TDateTime;
     FUpdatedAt: TDateTime;
   public
@@ -151,6 +163,10 @@ type
     property LastSeen: TDateTime read FLastSeen write FLastSeen;
     property CurrentStatus: string read FCurrentStatus write FCurrentStatus;
     property ProvisioningToken: string read FProvisioningToken write FProvisioningToken;
+    property LastHeartbeatAt: TDateTime read FLastHeartbeatAt write FLastHeartbeatAt;
+    property AppVersion: string read FAppVersion write FAppVersion;
+    property DeviceInfoJson: string read FDeviceInfoJson write FDeviceInfoJson;
+    property LastIp: string read FLastIp write FLastIp;
     property CreatedAt: TDateTime read FCreatedAt write FCreatedAt;
     property UpdatedAt: TDateTime read FUpdatedAt write FUpdatedAt;
   end;
