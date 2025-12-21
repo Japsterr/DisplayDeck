@@ -8,6 +8,7 @@ type
   TDisplayCampaignRepository = class
   public
     class function ListByDisplay(const DisplayId: Integer): TObjectList<TDisplayCampaign>;
+    class function GetById(const Id: Integer): TDisplayCampaign;
     class function CreateAssignment(const DisplayId, CampaignId: Integer; const IsPrimary: Boolean): TDisplayCampaign;
     class function UpdateAssignment(const Id: Integer; const IsPrimary: Boolean): TDisplayCampaign;
     class procedure DeleteAssignment(const Id: Integer);
@@ -55,6 +56,23 @@ begin
         Result.Add(MapAssign(Q));
         Q.Next;
       end;
+    finally Q.Free; end;
+  finally C.Free; end;
+end;
+
+class function TDisplayCampaignRepository.GetById(const Id: Integer): TDisplayCampaign;
+var C: TFDConnection; Q: TFDQuery;
+begin
+  C := NewConnection;
+  try
+    Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := C;
+      Q.SQL.Text := 'select * from DisplayCampaigns where DisplayCampaignID=:Id';
+      Q.ParamByName('Id').AsInteger := Id;
+      Q.Open;
+      if Q.Eof then Exit(nil);
+      Result := MapAssign(Q);
     finally Q.Free; end;
   finally C.Free; end;
 end;

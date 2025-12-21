@@ -21,6 +21,8 @@ Backend API for DisplayDeck, a digital signage SaaS. Linux-first, Dockerized sta
 
 Prereqs: Docker Desktop, Git. For building the server binary, Delphi with Linux toolchain.
 
+If you don’t have the Linux toolchain set up locally anymore, you can use the included Dockerized PAServer instead (see `paserver/README.md`).
+
 1) Clone and enter
 
 ```powershell
@@ -34,6 +36,18 @@ cd DisplayDeck
 c:\DisplayDeck\build_linux.bat
 ```
 
+Alternative (no local Linux toolchain): Dockerized PAServer
+
+- Put `PAServer-Linux-64.tar.gz` into `paserver/` and start PAServer:
+
+```powershell
+docker compose down -v
+docker compose up -d --build paserver
+```
+
+- Configure RAD Studio to connect to PAServer at `127.0.0.1:49999` (password `displaydeck`) and build the Linux64 target.
+- Ensure the output binary exists at `Server/Linux/DisplayDeck.WebBroker`.
+
 3) Bring up the stack (DB, MinIO, server, Swagger UI)
 
 ```powershell
@@ -42,6 +56,13 @@ Copy-Item .env.example .env -Force
 # pin the server image version (defaults to latest if unset)
 $env:SERVER_TAG = '0.1.7'
 docker compose --env-file .env up -d postgres minio server swagger-ui
+```
+
+From a completely fresh slate (no containers/volumes):
+
+```powershell
+docker compose down -v
+docker compose up -d --build
 ```
 
 - API base: http://localhost:2001

@@ -1308,27 +1308,33 @@ begin
         end
         else if SameText(Request.Method,'PUT') then
         begin
-          var D := TDisplayRepository.GetById(Id);
-          if D=nil then begin JSONError(404,'Not found'); Exit; end;
+          var DExisting := TDisplayRepository.GetById(Id);
+          if DExisting=nil then begin JSONError(404,'Not found'); Exit; end;
           try
             var TokOrg, TokUser: Integer; var TokRole: string;
             if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
-            if TokOrg<>D.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+            if TokOrg<>DExisting.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
 
-          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
-            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
-            var Name := Body.GetValue<string>('Name',''); var Orientation := Body.GetValue<string>('Orientation','');
-            if (Name='') or (Orientation='') then begin JSONError(400,'Missing fields'); Exit; end;
-            var D := TDisplayRepository.UpdateDisplay(Id, Name, Orientation);
-            if D=nil then begin JSONError(404,'Not found'); Exit; end;
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
             try
-              var Obj := TJSONObject.Create; Obj.AddPair('Id', TJSONNumber.Create(D.Id)); Obj.AddPair('Name', D.Name); Obj.AddPair('Orientation', D.Orientation);
-              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
-            finally D.Free; end;
-          finally Body.Free; end;
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var Name := Body.GetValue<string>('Name','');
+              var Orientation := Body.GetValue<string>('Orientation','');
+              if (Name='') or (Orientation='') then begin JSONError(400,'Missing fields'); Exit; end;
+
+              var DUpdated := TDisplayRepository.UpdateDisplay(Id, Name, Orientation);
+              if DUpdated=nil then begin JSONError(404,'Not found'); Exit; end;
+              try
+                var Obj := TJSONObject.Create;
+                Obj.AddPair('Id', TJSONNumber.Create(DUpdated.Id));
+                Obj.AddPair('Name', DUpdated.Name);
+                Obj.AddPair('Orientation', DUpdated.Orientation);
+                Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
+              finally DUpdated.Free; end;
+            finally Body.Free; end;
 
           finally
-            D.Free;
+            DExisting.Free;
           end;
           Exit;
         end
