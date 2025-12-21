@@ -3,7 +3,11 @@ $orgId = 0
 if (Test-Path "$PSScriptRoot\last-orgid.txt") { $orgId = Get-Content "$PSScriptRoot\last-orgid.txt" -Raw | ForEach-Object { $_.Trim() } }
 if ($orgId -eq 0) { $orgId = 1 }
 
-$token = Get-Content "$PSScriptRoot\last-token.txt" -Raw | ForEach-Object { $_.Trim() }
+$tokenPath = Join-Path $PSScriptRoot 'last-token.txt'
+if (-not (Test-Path $tokenPath)) {
+	$tokenPath = Join-Path $PSScriptRoot 'last-token.example.txt'
+}
+$token = Get-Content $tokenPath -Raw | ForEach-Object { $_.Trim() }
 Write-Host "Token length: $($token.Length)"
 
 $url = "$BaseUrl/organizations/$orgId/displays"
