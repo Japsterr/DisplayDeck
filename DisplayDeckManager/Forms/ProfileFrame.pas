@@ -51,13 +51,8 @@ implementation
 uses
   System.JSON, FMX.DialogService, uTheme;
 
-// API Base: http://localhost:2001/tms/xdata
-// Endpoints:
-//   GET  /users/{UserId} - Get user profile
-//   PUT  /users/{UserId} - Update user profile
-//   PUT  /users/{UserId}/password - Change password
-//   GET  /organizations/{OrgId} - Get organization details
-//   PUT  /organizations/{OrgId} - Update organization
+// API Base: http://localhost:2001/api
+// Note: Profile endpoints are not wired yet in this client.
 
 procedure TFrame4.Initialize(AUserId, AOrganizationId: Integer; const AUserName, AEmail: string);
 begin
@@ -66,6 +61,32 @@ begin
   edtEmail.Text := AEmail;
   edtFullName.Text := AUserName;
   LoadUserProfile;
+  
+  // Theme styling
+  StyleBackground(RectBackground);
+  StyleCard(RectCard);
+  
+  StyleHeaderLabel(lblTitle);
+  
+  StyleSubHeaderLabel(lblSectionUser);
+  StyleSubHeaderLabel(lblSectionOrganization);
+  StyleSubHeaderLabel(lblSectionSecurity);
+  
+  StyleMutedLabel(lblFullName);
+  StyleMutedLabel(lblEmail);
+  StyleMutedLabel(lblOrgName);
+  StyleMutedLabel(lblSubscription);
+  StyleMutedLabel(lblNewPassword);
+  StyleMutedLabel(lblConfirmPassword);
+  
+  StyleInput(edtFullName);
+  StyleInput(edtEmail);
+  StyleInput(edtOrgName);
+  StyleInput(edtSubscription);
+  StyleInput(edtNewPassword);
+  StyleInput(edtConfirmPassword);
+  
+  StylePrimaryButton(btnSaveProfile);
 end;
 
 procedure TFrame4.LoadUserProfile;

@@ -1,9 +1,6 @@
 services:
   server:
-    image: ghcr.io/japsterr/displaydeck-server:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.server
+    image: ghcr.io/japsterr/displaydeck-server:${SERVER_TAG:-latest}
     container_name: displaydeck-server
     restart: unless-stopped
     environment:

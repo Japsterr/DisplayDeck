@@ -10,23 +10,12 @@ object Frame6: TFrame6
     TabOrder = 0
     object RectBackground: TRectangle
       Align = Client
-      Fill.Kind = Gradient
-      Fill.Gradient.Points = <
-        item
-          Color = xFFFF6B6B
-          Offset = 0.000000000000000000
-        end
-        item
-          Color = xFFEE5A24
-          Offset = 1.000000000000000000
-        end>
-      Fill.Gradient.StartPosition.X = 0.500000000000000000
-      Fill.Gradient.StartPosition.Y = 1.000000000000000000
-      Fill.Gradient.StopPosition.X = 0.499999970197677600
-      Fill.Gradient.StopPosition.Y = 0.000000000000000000
+      Fill.Color = xFFF5F7FA
       Size.Width = 1244.000000000000000000
       Size.Height = 839.000000000000000000
       Size.PlatformDefault = False
+      Stroke.Kind = None
+    end
       object LayoutMain: TLayout
         Align = Client
         Padding.Left = 24.000000000000000000
@@ -50,7 +39,7 @@ object Frame6: TFrame6
             Size.Height = 60.000000000000000000
             Size.PlatformDefault = False
             TextSettings.Font.Size = 24.000000000000000000
-            TextSettings.FontColor = claWhite
+            TextSettings.FontColor = xFF2C3E50
             Text = 'Campaign Management'
             TabOrder = 0
           end

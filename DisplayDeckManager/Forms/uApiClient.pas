@@ -62,6 +62,7 @@ type
     OrganizationId: Integer;
     FileName: string;
     FileType: string;
+    Orientation: string;
     FileSize: Int64;
     Duration: Integer;
     StorageURL: string;
@@ -106,6 +107,8 @@ type
     function ParseCurrentPlaying(AObj: TJSONObject): TCurrentPlaying;
     procedure LoadConfig;
     procedure SaveConfig;
+    procedure LogHttp(const AMethod, AUrl: string; AStatus: Integer; const AInfo: string);
+    procedure LogNote(const AText: string);
   public
     destructor Destroy; override;
     class function Instance: TApiClient;
@@ -150,9 +153,11 @@ type
     // Media endpoints
     function GetMediaFiles(AOrganizationId: Integer): TArray<TMediaFileData>;
     function GetMediaFile(AMediaFileId: Integer): TMediaFileData;
-    function RequestMediaUpload(AOrganizationId: Integer; const AFileName, AFileType: string; AContentLength: Int64): TMediaUploadResponse;
+    function RequestMediaUpload(AOrganizationId: Integer; const AFileName, AFileType, AOrientation: string; AContentLength: Int64): TMediaUploadResponse;
     function UploadMediaFile(const AUploadUrl, AFilePath: string): Boolean;
     function GetMediaDownloadUrl(AMediaFileId: Integer): string;
+    function UpdateMediaFileMeta(AMediaFileId: Integer; const AFileName, AFileType, AStorageURL, AOrientation: string): Boolean;
+    function DeleteMediaFile(AMediaFileId: Integer): Boolean;
     function GuessMimeType(const AFilePath: string): string;
   end;
 
@@ -169,13 +174,14 @@ begin
   FHttpClient := TIdHTTP.Create(nil);
   FHttpClient.Request.ContentType := 'application/json';
   FHttpClient.Request.Accept := 'application/json';
-  // All API endpoints are now rooted at /api
+  // Avoid raising exceptions on HTTP error codes to prevent IDE popups
+  FHttpClient.HTTPOptions := FHttpClient.HTTPOptions + [hoNoProtocolErrorException];
+  // Default client base path matches server '/api'
   FBaseURL := 'http://localhost:2001/api';
   FAuthToken := '';
-  // Avoid header folding issues for long JWT values
   FHttpClient.Request.CustomHeaders.FoldLines := False;
   FConfigPath := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) + 'displaydeck-config.json';
-  LoadConfig; // attempt to restore persisted token/base url
+  LoadConfig; // attempt to restore persisted token/base url (may override default)
 end;
 
 destructor TApiClient.Destroy;
@@ -312,6 +318,7 @@ begin
         Result.Success := False;
         Result.ErrorMessage := Format('HTTP %d: %s', [FHttpClient.ResponseCode, FHttpClient.ResponseText]);
       end;
+      LogHttp(AMethod, URL, FHttpClient.ResponseCode, Result.ErrorMessage);
       
     except
       on E: EIdHTTPProtocolException do
@@ -321,6 +328,7 @@ begin
         FLastResponseBody := E.ErrorMessage;
         Result.Success := False;
         Result.ErrorMessage := Format('HTTP %d: %s', [E.ErrorCode, E.Message]);
+        LogHttp(AMethod, URL, E.ErrorCode, E.Message);
       end;
     end;
     
@@ -338,6 +346,36 @@ begin
     ResponseStream.Free;
 end;
 
+procedure TApiClient.LogHttp(const AMethod, AUrl: string; AStatus: Integer; const AInfo: string);
+var
+  Line: string;
+  LogPath: string;
+begin
+  try
+    LogPath := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) + 'displaydeck-http.log';
+    Line := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' ' + AMethod + ' ' + AUrl +
+      ' -> ' + IntToStr(AStatus);
+    if AInfo <> '' then
+      Line := Line + ' | ' + AInfo;
+    TFile.AppendAllText(LogPath, Line + sLineBreak, TEncoding.UTF8);
+  except
+    // ignore logging failures
+  end;
+end;
+
+procedure TApiClient.LogNote(const AText: string);
+var
+  LogPath: string;
+begin
+  try
+    LogPath := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) + 'displaydeck-http.log';
+    TFile.AppendAllText(LogPath,
+      FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' NOTE ' + AText + sLineBreak,
+      TEncoding.UTF8);
+  except
+  end;
+end;
+
 function TApiClient.GetJsonValueCI(AObj: TJSONObject; const AName: string): TJSONValue;
 var
   Pair: TJSONPair;
@@ -351,10 +389,10 @@ end;
 
 function TApiClient.RewriteMinioHost(const AUrl: string): string;
 begin
+  // Do NOT rewrite presigned S3 URLs: host header participates in SigV4 signature.
+  // Removed unused helpers RewriteMinioHost and LogNote to silence hints
+  // Keep original URL; connection-layer will optionally override TCP target while preserving Host header.
   Result := AUrl;
-  // When running Docker, server presigns with host 'minio' which isn't resolvable from Windows.
-  // Rewrite to localhost so the client can reach the exposed port 9000.
-  Result := StringReplace(Result, 'http://minio:9000', 'http://localhost:9000', [rfIgnoreCase, rfReplaceAll]);
 end;
 
 function TApiClient.ParseCurrentPlaying(AObj: TJSONObject): TCurrentPlaying;
@@ -972,6 +1010,7 @@ var
   JsonArray: TJSONArray;
   JsonObj: TJSONObject;
   I: Integer;
+  V: TJSONValue;
 begin
   SetLength(Result, 0);
   
@@ -980,24 +1019,53 @@ begin
   if Response.Success and Assigned(Response.Data) then
   begin
     try
-      if (Response.Data as TJSONObject).TryGetValue<TJSONArray>('value', JsonArray) then
+      if (Response.Data is TJSONArray) then
+      begin
+        JsonArray := TJSONArray(Response.Data);
+        SetLength(Result, JsonArray.Count);
+        for I := 0 to JsonArray.Count - 1 do
+        begin
+          JsonObj := JsonArray.Items[I] as TJSONObject;
+          V := GetJsonValueCI(JsonObj,'Id'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MediaFileId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MediaFileID');
+          if Assigned(V) then Result[I].Id := StrToIntDef(V.Value,0) else Result[I].Id := JsonObj.GetValue<Integer>('Id',0);
+          V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+          if Assigned(V) then Result[I].OrganizationId := StrToIntDef(V.Value,0) else Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
+          V := GetJsonValueCI(JsonObj,'FileName'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'Name');
+          if Assigned(V) then Result[I].FileName := V.Value else Result[I].FileName := JsonObj.GetValue<string>('FileName','');
+          V := GetJsonValueCI(JsonObj,'FileType'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MimeType');
+          if Assigned(V) then Result[I].FileType := V.Value else Result[I].FileType := JsonObj.GetValue<string>('FileType','');
+          V := GetJsonValueCI(JsonObj,'Orientation'); if Assigned(V) then Result[I].Orientation := V.Value else Result[I].Orientation := JsonObj.GetValue<string>('Orientation','');
+          V := GetJsonValueCI(JsonObj,'StorageURL'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'StorageUrl');
+          if Assigned(V) then Result[I].StorageURL := V.Value else Result[I].StorageURL := JsonObj.GetValue<string>('StorageURL','');
+          V := GetJsonValueCI(JsonObj,'FileSize'); if Assigned(V) then Result[I].FileSize := StrToInt64Def(V.Value,0) else Result[I].FileSize := JsonObj.GetValue<Int64>('FileSize',0);
+          V := GetJsonValueCI(JsonObj,'Duration'); if Assigned(V) then Result[I].Duration := StrToIntDef(V.Value,0) else Result[I].Duration := JsonObj.GetValue<Integer>('Duration',0);
+          V := GetJsonValueCI(JsonObj,'Tags'); if Assigned(V) then Result[I].Tags := V.Value else Result[I].Tags := JsonObj.GetValue<string>('Tags','');
+          V := GetJsonValueCI(JsonObj,'CreatedAt'); if Assigned(V) then Result[I].CreatedAt := V.Value else Result[I].CreatedAt := JsonObj.GetValue<string>('CreatedAt','');
+          V := GetJsonValueCI(JsonObj,'UpdatedAt'); if Assigned(V) then Result[I].UpdatedAt := V.Value else Result[I].UpdatedAt := JsonObj.GetValue<string>('UpdatedAt','');
+        end;
+      end
+      else if (Response.Data as TJSONObject).TryGetValue<TJSONArray>('value', JsonArray) then
       begin
         SetLength(Result, JsonArray.Count);
         for I := 0 to JsonArray.Count - 1 do
         begin
           JsonObj := JsonArray.Items[I] as TJSONObject;
-          // Use case-insensitive lookup for field names
-          var V: TJSONValue;
-          V := GetJsonValueCI(JsonObj,'MediaFileId'); if Assigned(V) then Result[I].Id := StrToIntDef(V.Value,0) else Result[I].Id := JsonObj.GetValue<Integer>('MediaFileID',0);
-          V := GetJsonValueCI(JsonObj,'OrganizationId'); if Assigned(V) then Result[I].OrganizationId := StrToIntDef(V.Value,0) else Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationID',0);
-          V := GetJsonValueCI(JsonObj,'FileName'); if Assigned(V) then Result[I].FileName := V.Value else Result[I].FileName := JsonObj.GetValue<string>('FileName','');
-          V := GetJsonValueCI(JsonObj,'FileType'); if Assigned(V) then Result[I].FileType := V.Value else Result[I].FileType := JsonObj.GetValue<string>('FileType','');
-          Result[I].FileSize := JsonObj.GetValue<Int64>('FileSize', 0);
-          Result[I].Duration := JsonObj.GetValue<Integer>('Duration', 0);
-          Result[I].StorageURL := JsonObj.GetValue<string>('StorageURL', '');
-          Result[I].Tags := JsonObj.GetValue<string>('Tags', '');
-          Result[I].CreatedAt := JsonObj.GetValue<string>('CreatedAt', '');
-          Result[I].UpdatedAt := JsonObj.GetValue<string>('UpdatedAt', '');
+          V := GetJsonValueCI(JsonObj,'Id'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MediaFileId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MediaFileID');
+          if Assigned(V) then Result[I].Id := StrToIntDef(V.Value,0) else Result[I].Id := JsonObj.GetValue<Integer>('Id',0);
+          V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+          if Assigned(V) then Result[I].OrganizationId := StrToIntDef(V.Value,0) else Result[I].OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
+          V := GetJsonValueCI(JsonObj,'FileName'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'Name');
+          if Assigned(V) then Result[I].FileName := V.Value else Result[I].FileName := JsonObj.GetValue<string>('FileName','');
+          V := GetJsonValueCI(JsonObj,'FileType'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MimeType');
+          if Assigned(V) then Result[I].FileType := V.Value else Result[I].FileType := JsonObj.GetValue<string>('FileType','');
+          V := GetJsonValueCI(JsonObj,'Orientation'); if Assigned(V) then Result[I].Orientation := V.Value else Result[I].Orientation := JsonObj.GetValue<string>('Orientation','');
+          V := GetJsonValueCI(JsonObj,'StorageURL'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'StorageUrl');
+          if Assigned(V) then Result[I].StorageURL := V.Value else Result[I].StorageURL := JsonObj.GetValue<string>('StorageURL','');
+          V := GetJsonValueCI(JsonObj,'FileSize'); if Assigned(V) then Result[I].FileSize := StrToInt64Def(V.Value,0) else Result[I].FileSize := JsonObj.GetValue<Int64>('FileSize',0);
+          V := GetJsonValueCI(JsonObj,'Duration'); if Assigned(V) then Result[I].Duration := StrToIntDef(V.Value,0) else Result[I].Duration := JsonObj.GetValue<Integer>('Duration',0);
+          V := GetJsonValueCI(JsonObj,'Tags'); if Assigned(V) then Result[I].Tags := V.Value else Result[I].Tags := JsonObj.GetValue<string>('Tags','');
+          V := GetJsonValueCI(JsonObj,'CreatedAt'); if Assigned(V) then Result[I].CreatedAt := V.Value else Result[I].CreatedAt := JsonObj.GetValue<string>('CreatedAt','');
+          V := GetJsonValueCI(JsonObj,'UpdatedAt'); if Assigned(V) then Result[I].UpdatedAt := V.Value else Result[I].UpdatedAt := JsonObj.GetValue<string>('UpdatedAt','');
         end;
       end;
     finally
@@ -1018,23 +1086,29 @@ begin
   begin
     try
       JsonObj := Response.Data as TJSONObject;
-      V := GetJsonValueCI(JsonObj,'MediaFileId'); if Assigned(V) then Result.Id := StrToIntDef(V.Value,0) else Result.Id := JsonObj.GetValue<Integer>('Id',0);
-      V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID'); if Assigned(V) then Result.OrganizationId := StrToIntDef(V.Value,0);
-      V := GetJsonValueCI(JsonObj,'FileName'); if Assigned(V) then Result.FileName := V.Value;
-      V := GetJsonValueCI(JsonObj,'FileType'); if Assigned(V) then Result.FileType := V.Value;
-      V := GetJsonValueCI(JsonObj,'FileSize'); if Assigned(V) then Result.FileSize := StrToInt64Def(V.Value,0);
-      V := GetJsonValueCI(JsonObj,'Duration'); if Assigned(V) then Result.Duration := StrToIntDef(V.Value,0);
-      V := GetJsonValueCI(JsonObj,'StorageURL'); if Assigned(V) then Result.StorageURL := V.Value;
-      V := GetJsonValueCI(JsonObj,'Tags'); if Assigned(V) then Result.Tags := V.Value;
-      V := GetJsonValueCI(JsonObj,'CreatedAt'); if Assigned(V) then Result.CreatedAt := V.Value;
-      V := GetJsonValueCI(JsonObj,'UpdatedAt'); if Assigned(V) then Result.UpdatedAt := V.Value;
+      V := GetJsonValueCI(JsonObj,'Id'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MediaFileId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MediaFileID');
+      if Assigned(V) then Result.Id := StrToIntDef(V.Value,0) else Result.Id := JsonObj.GetValue<Integer>('Id',0);
+      V := GetJsonValueCI(JsonObj,'OrganizationId'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'OrganizationID');
+      if Assigned(V) then Result.OrganizationId := StrToIntDef(V.Value,0) else Result.OrganizationId := JsonObj.GetValue<Integer>('OrganizationId',0);
+      V := GetJsonValueCI(JsonObj,'FileName'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'Name');
+      if Assigned(V) then Result.FileName := V.Value else Result.FileName := JsonObj.GetValue<string>('FileName','');
+      V := GetJsonValueCI(JsonObj,'FileType'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'MimeType');
+      if Assigned(V) then Result.FileType := V.Value else Result.FileType := JsonObj.GetValue<string>('FileType','');
+      V := GetJsonValueCI(JsonObj,'Orientation'); if Assigned(V) then Result.Orientation := V.Value else Result.Orientation := JsonObj.GetValue<string>('Orientation','');
+      V := GetJsonValueCI(JsonObj,'StorageURL'); if not Assigned(V) then V := GetJsonValueCI(JsonObj,'StorageUrl');
+      if Assigned(V) then Result.StorageURL := V.Value else Result.StorageURL := JsonObj.GetValue<string>('StorageURL','');
+      V := GetJsonValueCI(JsonObj,'FileSize'); if Assigned(V) then Result.FileSize := StrToInt64Def(V.Value,0) else Result.FileSize := JsonObj.GetValue<Int64>('FileSize',0);
+      V := GetJsonValueCI(JsonObj,'Duration'); if Assigned(V) then Result.Duration := StrToIntDef(V.Value,0) else Result.Duration := JsonObj.GetValue<Integer>('Duration',0);
+      V := GetJsonValueCI(JsonObj,'Tags'); if Assigned(V) then Result.Tags := V.Value else Result.Tags := JsonObj.GetValue<string>('Tags','');
+      V := GetJsonValueCI(JsonObj,'CreatedAt'); if Assigned(V) then Result.CreatedAt := V.Value else Result.CreatedAt := JsonObj.GetValue<string>('CreatedAt','');
+      V := GetJsonValueCI(JsonObj,'UpdatedAt'); if Assigned(V) then Result.UpdatedAt := V.Value else Result.UpdatedAt := JsonObj.GetValue<string>('UpdatedAt','');
     finally
       Response.Data.Free;
     end;
   end;
 end;
 
-function TApiClient.RequestMediaUpload(AOrganizationId: Integer; const AFileName, AFileType: string; AContentLength: Int64): TMediaUploadResponse;
+function TApiClient.RequestMediaUpload(AOrganizationId: Integer; const AFileName, AFileType, AOrientation: string; AContentLength: Int64): TMediaUploadResponse;
 var
   Response: TApiResponse;
   JsonObj: TJSONObject;
@@ -1051,6 +1125,8 @@ begin
     Req.AddPair('OrganizationId', TJSONNumber.Create(AOrganizationId));
     Req.AddPair('FileName', AFileName);
     Req.AddPair('FileType', AFileType);
+    if AOrientation.Trim <> '' then
+      Req.AddPair('Orientation', AOrientation.Trim);
     Req.AddPair('ContentLength', TJSONNumber.Create(AContentLength));
     Response := DoRequest('POST', '/media-files/upload-url', Req);
   finally
@@ -1063,7 +1139,7 @@ begin
       JsonObj := Response.Data as TJSONObject;
       Result.Success := JsonObj.GetValue<Boolean>('Success');
       Result.MediaFileId := JsonObj.GetValue<Integer>('MediaFileId');
-      Result.UploadUrl := RewriteMinioHost(JsonObj.GetValue<string>('UploadUrl'));
+      Result.UploadUrl := JsonObj.GetValue<string>('UploadUrl');
       Result.StorageKey := JsonObj.GetValue<string>('StorageKey');
       Result.Message := JsonObj.GetValue<string>('Message', '');
     finally
@@ -1081,6 +1157,10 @@ var
   FileStream: TFileStream;
   PrevContentType, PrevAccept: string;
   Mime: string;
+  Attempt: Integer;
+  Url, HostLower, PathPart: string;
+  RespText: TStringStream;
+  RespBody: string;
 begin
   Result := False;
   
@@ -1089,27 +1169,65 @@ begin
   
   FileStream := TFileStream.Create(AFilePath, fmOpenRead or fmShareDenyWrite);
   try
-    try
-      // Preserve previous request headers so we can restore after raw upload
-      PrevContentType := FHttpClient.Request.ContentType;
-      PrevAccept := FHttpClient.Request.Accept;
-      // Determine mime type from extension
-      Mime := GuessMimeType(AFilePath);
-      FHttpClient.Request.ContentType := Mime;
-      FHttpClient.Request.Accept := '*/*';
-      // Clear custom JSON headers for S3/MinIO PUT (avoid confusing server)
-      FHttpClient.Request.CustomHeaders.Clear;
-      // Execute binary PUT
-      FHttpClient.Put(AUploadUrl, FileStream);
-      // Restore headers
-      FHttpClient.Request.ContentType := PrevContentType;
-      FHttpClient.Request.Accept := PrevAccept;
-      Result := (FHttpClient.ResponseCode >= 200) and (FHttpClient.ResponseCode < 300);
-    except
-      Result := False;
-      FLastResponseCode := FHttpClient.ResponseCode;
-      FLastResponseBody := 'Upload failed; HTTP ' + IntToStr(FHttpClient.ResponseCode) + ' Body=' + FHttpClient.ResponseText;
+    PrevContentType := FHttpClient.Request.ContentType;
+    PrevAccept := FHttpClient.Request.Accept;
+    Mime := GuessMimeType(AFilePath);
+    for Attempt := 1 to 2 do
+    begin
+      try
+        // Prepare request each attempt (reset state)
+        FHttpClient.Request.ContentType := Mime;
+        FHttpClient.Request.Accept := '*/*';
+        FHttpClient.Request.Connection := 'close'; // avoid lingering socket reuse issues
+        FHttpClient.Request.CustomHeaders.Clear;
+        // Explicitly clear Host; will set if we rewrite URL
+        FHttpClient.Request.Host := '';
+        // Avoid 100-continue stalls on some S3 gateways
+        if FHttpClient.Request.CustomHeaders.IndexOfName('Expect') >= 0 then
+          FHttpClient.Request.CustomHeaders.Values['Expect'] := '';
+        // Build final URL and preserve Host from presigned one when needed
+        Url := AUploadUrl;
+        HostLower := LowerCase(Copy(Url, 1, 20));
+        if Pos('http://minio:9000', LowerCase(Url)) = 1 then
+        begin
+          PathPart := Copy(Url, Length('http://minio:9000')+1, MaxInt);
+          Url := 'http://localhost:9000/' + PathPart;
+          FHttpClient.Request.Host := 'minio:9000';
+        end
+        else
+        begin
+          // If presigned host is localhost, keep it as is
+          FHttpClient.Request.Host := '';
+        end;
+        FLastURL := Url;
+        FileStream.Position := 0;
+        RespText := TStringStream.Create('', TEncoding.UTF8);
+        try
+          // Capture response body for diagnostics (e.g., XML errors)
+          FHttpClient.Put(Url, FileStream, RespText);
+          RespBody := RespText.DataString;
+        finally
+          RespText.Free;
+        end;
+        Result := (FHttpClient.ResponseCode >= 200) and (FHttpClient.ResponseCode < 300);
+        FLastResponseCode := FHttpClient.ResponseCode;
+        FLastResponseBody := RespBody;
+        LogHttp('PUT', Url, FHttpClient.ResponseCode, Copy(RespBody, 1, 512));
+        if Result then Break; // success, exit retry loop
+      except
+        on E: Exception do
+        begin
+          Result := False;
+          FLastResponseCode := FHttpClient.ResponseCode;
+          FLastResponseBody := Format('Attempt %d failed (%s); HTTP %d %s', [Attempt, E.ClassName, FHttpClient.ResponseCode, FHttpClient.ResponseText]);
+          LogHttp('PUT', Url, FHttpClient.ResponseCode, FLastResponseBody);
+          // brief pause before retry (without Sleep dependency in UI thread)
+        end;
+      end;
     end;
+    // Restore headers regardless of outcome
+    FHttpClient.Request.ContentType := PrevContentType;
+    FHttpClient.Request.Accept := PrevAccept;
   finally
     FileStream.Free;
   end;
@@ -1134,14 +1252,45 @@ begin
       begin
         var DU := GetJsonValueCI(JsonObj,'DownloadUrl');
         if Assigned(DU) then
-          Result := RewriteMinioHost(DU.Value)
+          Result := DU.Value
         else
-          Result := RewriteMinioHost(JsonObj.GetValue<string>('DownloadUrl',''));
+          Result := JsonObj.GetValue<string>('DownloadUrl','');
       end;
     finally
       Response.Data.Free;
     end;
   end;
+end;
+
+// Update media file metadata (rename or change type/key)
+function TApiClient.UpdateMediaFileMeta(AMediaFileId: Integer; const AFileName, AFileType, AStorageURL, AOrientation: string): Boolean;
+var
+  Body: TJSONObject;
+  Response: TApiResponse;
+begin
+  Result := False;
+  Body := TJSONObject.Create;
+  try
+    Body.AddPair('FileName', AFileName);
+    Body.AddPair('FileType', AFileType);
+    Body.AddPair('StorageURL', AStorageURL);
+    if AOrientation.Trim <> '' then
+      Body.AddPair('Orientation', AOrientation.Trim);
+    Response := DoRequest('PUT', Format('/media-files/%d', [AMediaFileId]), Body);
+    Result := Response.Success;
+    if Assigned(Response.Data) then Response.Data.Free;
+  finally
+    Body.Free;
+  end;
+end;
+
+function TApiClient.DeleteMediaFile(AMediaFileId: Integer): Boolean;
+var
+  Response: TApiResponse;
+begin
+  Response := DoRequest('DELETE', Format('/media-files/%d', [AMediaFileId]));
+  Result := Response.Success;
+  if Assigned(Response.Data) then Response.Data.Free;
 end;
 
 function TApiClient.GuessMimeType(const AFilePath: string): string;

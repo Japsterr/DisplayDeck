@@ -6,7 +6,7 @@ uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
   FMX.Objects, FMX.Layouts, FMX.Edit, FMX.Controls.Presentation, uApiClient,
-  FMX.DialogService.Sync;
+  FMX.DialogService.Sync, uTheme;
 
 type
   // Event type for when login succeeds
@@ -42,11 +42,50 @@ type
     { Public declarations }
     property OnLoginSuccess: TLoginSuccessEvent read FOnLoginSuccess write FOnLoginSuccess;
     property OnRegisterRequest: TRegisterRequestEvent read FOnRegisterRequest write FOnRegisterRequest;
+    procedure Initialize;
   end;
 
 implementation
 
 {$R *.fmx}
+
+procedure TFrame1.Initialize;
+begin
+  // Gradient background for visual interest - VIBRANT & DARK
+  RectBackground.Fill.Kind := TBrushKind.Gradient;
+  RectBackground.Fill.Gradient.StartPosition.Point := TPointF.Create(0, 0);
+  RectBackground.Fill.Gradient.StopPosition.Point := TPointF.Create(1, 1);
+  RectBackground.Fill.Gradient.Color := $FF0F172A; // Slate 900 (Dark)
+  RectBackground.Fill.Gradient.Color1 := $FF2563EB; // Blue 600 (Vibrant)
+  
+  StyleCard(RectCard);
+  // Center the card
+  LayoutCenter.Align := TAlignLayout.Center;
+  RectCard.Width := 420; // Slightly wider
+  RectCard.Height := 480; // Slightly taller
+  
+  StyleHeaderLabel(lblTitle);
+  lblTitle.TextAlign := TTextAlign.Center;
+  lblTitle.TextSettings.FontColor := ColorPrimary; // Make title pop
+  lblTitle.StyledSettings := lblTitle.StyledSettings - [TStyledSetting.FontColor];
+  
+  StyleInput(edEmail);
+  StyleInput(edPassword);
+  StylePrimaryButton(btnLogin);
+  btnLogin.Height := 50; // Even taller button
+  btnLogin.Margins.Top := 20;
+  
+  // Style register link
+  lblRegister.TextSettings.FontColor := $FFFFFFFF; // White text on dark bg (if outside card) or Primary if inside
+  // Wait, lblRegister is inside LayoutContent which is inside RectCard?
+  // Let's check structure. RectCard contains LayoutContent.
+  // So lblRegister is on the White Card. So it should be Primary.
+  lblRegister.TextSettings.FontColor := ColorPrimary;
+  lblRegister.StyledSettings := lblRegister.StyledSettings - [TStyledSetting.FontColor];
+  lblRegister.Cursor := crHandPoint;
+  lblRegister.HitTest := True;
+  lblRegister.TextAlign := TTextAlign.Center;
+end;
 
 procedure TFrame1.btnLoginClick(Sender: TObject);
 var

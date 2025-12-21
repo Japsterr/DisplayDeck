@@ -98,16 +98,49 @@ begin
   FSelectedMediaId := 0;
   ClearForm;
   LoadMediaFiles;
+  
+  // Ensure background fills the frame
+  if Assigned(RectBackground) then
+    RectBackground.Align := TAlignLayout.Contents;
+
   StyleBackground(RectBackground);
   StyleCard(RectListCard);
   StyleCard(RectDetailCard);
-  StyleHeaderLabel(lblDetailTitle);
+  
+  // Make the Detail Panel pop with a colored border
+  RectDetailCard.Stroke.Color := ColorPrimary;
+  RectDetailCard.Stroke.Thickness := 2;
+
+  // Typography & Buttons
+  StyleHeaderLabel(lblTitle);
+  lblTitle.TextSettings.FontColor := ColorPrimary; // Colored main header
+  lblTitle.StyledSettings := lblTitle.StyledSettings - [TStyledSetting.FontColor];
+  
+  StyleSubHeaderLabel(lblDetailTitle);
+  
   StyleMutedLabel(lblFileName);
   StyleMutedLabel(lblFileType);
   StyleMutedLabel(lblFileSize);
   StyleMutedLabel(lblDuration);
   StyleMutedLabel(lblTags);
   StyleMutedLabel(lblOrientation);
+  StyleMutedLabel(lblPreview);
+
+  StyleInput(edtFileName);
+  StyleInput(edtFileType);
+  StyleInput(edtFileSize);
+  StyleInput(edtDuration);
+  StyleInput(edtTags);
+  
+  StylePrimaryButton(btnUploadMedia);
+  StylePrimaryButton(btnSaveMedia);
+  StyleDangerButton(btnDeleteMedia);
+  
+  // Ensure layout responsiveness
+  LayoutDetail.Align := TAlignLayout.Right;
+  LayoutDetail.Width := 350; // Fixed width for detail panel
+  LayoutListView.Align := TAlignLayout.Client;
+  
   // Populate orientation choices
   cbbOrientation.Items.Clear;
   cbbOrientation.Items.Add('Landscape');
@@ -501,32 +534,39 @@ var
 begin
   Card := TRectangle.Create(FThumbFlow);
   Card.Parent := FThumbFlow;
-  Card.Width := 180;
-  Card.Height := 180;
-  Card.Fill.Color := $FFFFFFFF;
-  Card.Stroke.Kind := TBrushKind.None;
-  Card.XRadius := 12;
-  Card.YRadius := 12;
+  Card.Width := 200; // Increased size
+  Card.Height := 240;
+  StyleCard(Card); // Apply theme styling (shadow, border, color)
+  
   Card.Tag := M.Id;
   Card.HitTest := True;
   Card.Cursor := crHandPoint;
   Card.OnClick := OnCardClick;
+  Card.Margins.Rect := TRectF.Create(10, 10, 10, 10); // Add spacing between cards
 
   Img := TImage.Create(Card);
   Img.Parent := Card;
   Img.Align := TAlignLayout.Top;
-  Img.Height := 130;
+  Img.Height := 160; // Taller image area
   Img.WrapMode := TImageWrapMode.Fit;
-  Img.Bitmap.Clear($FFF0F0F0);
+  Img.Bitmap.Clear($00000000); // Transparent start
+  Img.HitTest := False;
 
   Lbl := TLabel.Create(Card);
   Lbl.Parent := Card;
-  Lbl.Align := TAlignLayout.Bottom;
+  Lbl.Align := TAlignLayout.Client; // Fill remaining space
   Lbl.Text := M.FileName;
-  Lbl.Height := 40;
-  Lbl.TextSettings.Font.Size := 12;
+  Lbl.TextSettings.Font.Size := FONT_SIZE_BODY;
+  Lbl.TextSettings.FontColor := ColorText;
+  Lbl.StyledSettings := Lbl.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
   Lbl.Trimming := TTextTrimming.Character;
-  Lbl.WordWrap := False;
+  Lbl.WordWrap := True;
+  Lbl.TextAlign := TTextAlign.Center;
+  Lbl.VertTextAlign := TTextAlign.Leading;
+  Lbl.HitTest := False;
+  Lbl.Margins.Top := 8;
+  Lbl.Margins.Left := 8;
+  Lbl.Margins.Right := 8;
 
   IsImage := M.FileType.ToLower.StartsWith('image/');
   if IsImage then
@@ -535,6 +575,7 @@ begin
     if Url <> '' then
     begin
       Http := TIdHTTP.Create(nil);
+      MS := nil;
       try
         Http.Request.Accept := '*/*';
         MS := TMemoryStream.Create;

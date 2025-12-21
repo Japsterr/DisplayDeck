@@ -6,7 +6,7 @@ uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants, 
   FMX.Types, FMX.Graphics, FMX.Controls, FMX.Forms, FMX.Dialogs, FMX.StdCtrls,
   FMX.Edit, FMX.Controls.Presentation, FMX.Objects, FMX.Layouts, uApiClient,
-  FMX.DialogService.Sync;
+  FMX.DialogService.Sync, uTheme;
 
 type
   // Event types
@@ -46,11 +46,32 @@ type
     { Public declarations }
     property OnRegisterSuccess: TRegisterSuccessEvent read FOnRegisterSuccess write FOnRegisterSuccess;
     property OnLoginRequest: TLoginRequestEvent read FOnLoginRequest write FOnLoginRequest;
+    procedure Initialize;
   end;
 
 implementation
 
 {$R *.fmx}
+
+procedure TFrame2.Initialize;
+begin
+  StyleBackground(RectBackground);
+  StyleCard(RectCard);
+  StyleHeaderLabel(lblTitle);
+  
+  StyleInput(edOrganizationName);
+  StyleInput(edEmail);
+  StyleInput(edPassword);
+  StyleInput(edPasswordConfirm);
+  
+  StylePrimaryButton(btnRegister);
+  
+  // Style login link
+  lblLogin.TextSettings.FontColor := ColorPrimary;
+  lblLogin.StyledSettings := lblLogin.StyledSettings - [TStyledSetting.FontColor];
+  lblLogin.Cursor := crHandPoint;
+  lblLogin.HitTest := True;
+end;
 
 procedure TFrame2.btnRegisterClick(Sender: TObject);
 var

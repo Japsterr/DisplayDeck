@@ -82,13 +82,25 @@ begin
   ClearDetails;
   EnableDetailPanel(False);
   LoadCampaigns;
+  
   // Theme styling
   StyleBackground(RectBackground);
   StyleCard(RectListCard);
   StyleCard(RectDetailCard);
-  StyleHeaderLabel(lblDetailTitle);
+  
+  StyleHeaderLabel(lblTitle);
+  StyleSubHeaderLabel(lblDetailTitle);
+  
   StyleMutedLabel(lblNameLabel);
   StyleMutedLabel(lblOrientationLabel);
+  
+  StyleInput(edtName);
+  
+  StylePrimaryButton(btnAddCampaign);
+  StylePrimaryButton(btnSave);
+  StylePrimaryButton(btnManageMedia);
+  StylePrimaryButton(btnAssignDisplays);
+  StyleDangerButton(btnDelete);
 end;
 
 procedure TFrame6.LoadCampaigns;

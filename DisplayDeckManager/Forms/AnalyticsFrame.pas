@@ -45,19 +45,38 @@ implementation
 {$R *.fmx}
 
 uses
-  System.JSON, uApiClient, System.DateUtils;
+  System.JSON, uApiClient, System.DateUtils, uTheme;
 
-// API Base: http://localhost:2001/tms/xdata
-// Endpoints:
-//   GET /organizations/{OrgId}/analytics/summary - Get overall statistics
-//   GET /organizations/{OrgId}/analytics/campaigns - Get campaign performance data
-//   GET /organizations/{OrgId}/analytics/displays - Get display usage statistics
-//   GET /organizations/{OrgId}/analytics/media - Get media file analytics
+// API Base: http://localhost:2001/api
+// Note: This frame currently derives simple stats by calling the existing list endpoints
+// (displays/campaigns) rather than the dedicated analytics endpoints.
 
 procedure TFrame8.Initialize(AOrganizationId: Integer);
 begin
   FOrganizationId := AOrganizationId;
   LoadAnalytics;
+  
+  // Theme styling
+  StyleBackground(RectBackground);
+  StyleCard(RectStatCard1);
+  StyleCard(RectStatCard2);
+  StyleCard(RectStatCard3);
+  StyleCard(RectChartCard);
+  
+  StyleHeaderLabel(lblTitle);
+  StyleSubHeaderLabel(lblChartTitle);
+  
+  StyleMutedLabel(lblStat1Title);
+  StyleMutedLabel(lblStat2Title);
+  StyleMutedLabel(lblStat3Title);
+  
+  // Make values pop
+  StyleHeaderLabel(lblStat1Value);
+  StyleHeaderLabel(lblStat2Value);
+  StyleHeaderLabel(lblStat3Value);
+  lblStat1Value.TextSettings.FontColor := ColorPrimary;
+  lblStat2Value.TextSettings.FontColor := ColorPrimary;
+  lblStat3Value.TextSettings.FontColor := ColorPrimary;
 end;
 
 procedure TFrame8.LoadAnalytics;

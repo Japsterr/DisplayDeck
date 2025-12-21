@@ -116,21 +116,29 @@ begin
   FPlayingTimer := TTimer.Create(Self);
   FPlayingTimer.Interval := 20000; // 20 seconds
   FPlayingTimer.OnTimer := PlayingTimerTick;
-  // Apply simple theme tweaks to match mockups
+  
+  // Theme styling
   StyleBackground(RectBackground);
   StyleCard(RectListCard);
   StyleCard(RectDetailCard);
-  StyleHeaderLabel(lblDetailTitle);
+  
+  StyleHeaderLabel(lblTitle);
+  StyleSubHeaderLabel(lblDetailTitle);
+  
   StyleMutedLabel(lblNameLabel);
   StyleMutedLabel(lblOrientationLabel);
   StyleMutedLabel(lblStatusLabel);
   StyleMutedLabel(lblLastSeenLabel);
   StyleMutedLabel(lblProvisioningLabel);
-  StylePrimaryButton(btnSave); WireButtonHover(btnSave);
-  StyleDangerButton(btnDelete); WireButtonHover(btnDelete);
-  StylePrimaryButton(btnPairDisplay); WireButtonHover(btnPairDisplay);
-  StylePrimaryButton(btnSetPrimary); WireButtonHover(btnSetPrimary);
-  StylePrimaryButton(btnRefreshPlaying); WireButtonHover(btnRefreshPlaying);
+  StyleMutedLabel(lblCurrentPlayingLabel);
+  
+  StyleInput(edtName);
+  
+  StylePrimaryButton(btnSave);
+  StyleDangerButton(btnDelete);
+  StylePrimaryButton(btnPairDisplay);
+  StylePrimaryButton(btnSetPrimary);
+  StylePrimaryButton(btnRefreshPlaying);
 end;
 
 procedure TFrame5.PopulateOrientationCombo;

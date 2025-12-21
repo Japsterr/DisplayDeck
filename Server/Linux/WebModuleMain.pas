@@ -347,7 +347,7 @@ begin
       finally Body.Free; end;
       Exit;
     end;
-    if DebugEnabled and SameText(Request.PathInfo, '/auth/debug-verify') and SameText(Request.Method, 'POST') then
+    if DebugEnabled and SameText(NormalizedPath, '/auth/debug-verify') and SameText(Request.Method, 'POST') then
     begin
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
       try
@@ -379,7 +379,7 @@ begin
     end;
 
     // Plans and Roles
-    if SameText(Request.PathInfo, '/plans') and SameText(Request.Method, 'GET') then
+    if SameText(NormalizedPath, '/plans') and SameText(Request.Method, 'GET') then
     begin
       // Return all active plans
       var C := NewConnection; try
@@ -404,7 +404,7 @@ begin
       finally C.Free; end;
       Exit;
     end;
-    if SameText(Request.PathInfo, '/roles') and SameText(Request.Method, 'GET') then
+    if SameText(NormalizedPath, '/roles') and SameText(Request.Method, 'GET') then
     begin
       var Arr := TJSONArray.Create; try
         Arr.Add('Owner'); Arr.Add('ContentManager'); Arr.Add('Viewer');
@@ -507,7 +507,11 @@ begin
             Q.ParamByName('H').AsString := HardwareId; Q.ParamByName('T').AsString := Info.Token; Q.ExecSQL;
           finally Q.Free; end;
         finally C.Free; end;
-        var Obj := TJSONObject.Create; Obj.AddPair('ProvisioningToken', Info.Token); Obj.AddPair('ExpiresInSeconds', TJSONNumber.Create(600));
+        var Obj := TJSONObject.Create; 
+        Obj.AddPair('ProvisioningToken', Info.Token); 
+        Obj.AddPair('ExpiresInSeconds', TJSONNumber.Create(600));
+        Obj.AddPair('QrCodeData', 'displaydeck://claim/' + Info.Token);
+        Obj.AddPair('Instructions', 'Scan this QR code with the DisplayDeck mobile app to pair this display.');
         Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
       finally Body.Free; end;
       Exit;
@@ -588,14 +592,14 @@ begin
     end;
 
     // Displays
-    if (Copy(Request.PathInfo, 1, 10) = '/displays/') then
+    if (Copy(NormalizedPath, 1, 10) = '/displays/') then
     begin
-      var Tail := Copy(Request.PathInfo, 11, MaxInt);
+      var Tail := Copy(NormalizedPath, 11, MaxInt);
       var NextSlash := Pos('/', Tail);
       var IdStr := Tail; if NextSlash>0 then IdStr := Copy(Tail,1,NextSlash-1);
       var Id := StrToIntDef(IdStr,0);
       if (Id=0) then begin JSONError(400,'Invalid display id'); Exit; end;
-      if Pos('/campaign-assignments', Request.PathInfo) > 0 then
+      if Pos('/campaign-assignments', NormalizedPath) > 0 then
       begin
         if SameText(Request.Method,'GET') then
         begin
@@ -672,11 +676,11 @@ begin
     end;
 
     // Campaigns and items
-    if (Copy(Request.PathInfo, 1, 11) = '/campaigns/') then
+    if (Copy(NormalizedPath, 1, 11) = '/campaigns/') then
     begin
-      if Pos('/items', Request.PathInfo) > 0 then
+      if Pos('/items', NormalizedPath) > 0 then
       begin
-        var IdStr := Copy(Request.PathInfo, 12, MaxInt);
+        var IdStr := Copy(NormalizedPath, 12, MaxInt);
         var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
         var CampId := StrToIntDef(IdStr,0); if CampId=0 then begin JSONError(400,'Invalid campaign id'); Exit; end;
         if SameText(Request.Method,'GET') then
@@ -713,7 +717,7 @@ begin
       end
       else if (SameText(Request.Method, 'GET') or SameText(Request.Method, 'PUT') or SameText(Request.Method, 'DELETE')) then
       begin
-        var IdStr := Copy(Request.PathInfo, 12, MaxInt);
+        var IdStr := Copy(NormalizedPath, 12, MaxInt);
         var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid campaign id'); Exit; end;
         if SameText(Request.Method,'GET') then
         begin
@@ -742,9 +746,9 @@ begin
       end;
     end;
 
-    if (Copy(Request.PathInfo, 1, 16) = '/campaign-items/') then
+    if (Copy(NormalizedPath, 1, 16) = '/campaign-items/') then
     begin
-      var IdStr := Copy(Request.PathInfo, 17, MaxInt);
+      var IdStr := Copy(NormalizedPath, 17, MaxInt);
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid campaign item id'); Exit; end;
       if SameText(Request.Method,'GET') then
       begin
@@ -778,9 +782,9 @@ begin
       end;
     end;
 
-    if (Copy(Request.PathInfo, 1, 22) = '/campaign-assignments/') then
+    if (Copy(NormalizedPath, 1, 22) = '/campaign-assignments/') then
     begin
-      var IdStr := Copy(Request.PathInfo, 23, MaxInt);
+      var IdStr := Copy(NormalizedPath, 23, MaxInt);
       var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid assignment id'); Exit; end;
       if SameText(Request.Method,'PUT') then
       begin
@@ -829,6 +833,8 @@ begin
               O.AddPair('OrganizationId', TJSONNumber.Create(Q.FieldByName('OrganizationID').AsInteger));
               O.AddPair('FileName', Q.FieldByName('FileName').AsString);
               O.AddPair('FileType', Q.FieldByName('FileType').AsString);
+              if Q.FindField('Orientation') <> nil then
+                O.AddPair('Orientation', Q.FieldByName('Orientation').AsString);
               O.AddPair('StorageURL', Q.FieldByName('StorageURL').AsString);
               O.AddPair('CreatedAt', Q.FieldByName('CreatedAt').AsString);
               O.AddPair('UpdatedAt', Q.FieldByName('UpdatedAt').AsString);
@@ -859,6 +865,7 @@ begin
           O.AddPair('OrganizationId', TJSONNumber.Create(MF.OrganizationId));
           O.AddPair('FileName', MF.FileName);
           O.AddPair('FileType', MF.FileType);
+          O.AddPair('Orientation', MF.Orientation);
           O.AddPair('StorageURL', MF.StorageURL);
           O.AddPair('CreatedAt', DateTimeToStr(MF.CreatedAt));
           O.AddPair('UpdatedAt', DateTimeToStr(MF.UpdatedAt));
@@ -881,15 +888,17 @@ begin
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var FileName := Body.GetValue<string>('FileName','');
         var FileType := Body.GetValue<string>('FileType','application/octet-stream');
+        var Orientation := Body.GetValue<string>('Orientation','Landscape');
         var StorageURL := Body.GetValue<string>('StorageURL','');
         if (FileName='') or (StorageURL='') then begin JSONError(400,'Missing FileName or StorageURL'); Exit; end;
-        var MF := TMediaFileRepository.CreateMedia(OrgId, FileName, FileType, StorageURL);
+        var MF := TMediaFileRepository.CreateMedia(OrgId, FileName, FileType, Orientation, StorageURL);
         try
           var O := TJSONObject.Create; try
             O.AddPair('Id', TJSONNumber.Create(MF.Id));
             O.AddPair('OrganizationId', TJSONNumber.Create(MF.OrganizationId));
             O.AddPair('FileName', MF.FileName);
             O.AddPair('FileType', MF.FileType);
+            O.AddPair('Orientation', MF.Orientation);
             O.AddPair('StorageURL', MF.StorageURL);
             O.AddPair('CreatedAt', DateTimeToStr(MF.CreatedAt));
             O.AddPair('UpdatedAt', DateTimeToStr(MF.UpdatedAt));
@@ -912,15 +921,19 @@ begin
         var FileName := Body.GetValue<string>('FileName','');
         var FileType := Body.GetValue<string>('FileType','');
         var StorageURL := Body.GetValue<string>('StorageURL','');
-        if FileName='' then begin JSONError(400,'Missing FileName'); Exit; end;
+        var Orientation := Body.GetValue<string>('Orientation','');
+        // Require Orientation if column is present (>=0.1.7) to allow explicit update
+        if (FileName='') or (Orientation='') then begin JSONError(400,'Missing FileName or Orientation'); Exit; end;
         // Simple update using SQL
         var C := NewConnection; try
           var Q := TFDQuery.Create(nil); try
             Q.Connection := C;
-            Q.SQL.Text := 'update MediaFiles set FileName=:Name, FileType=:Type, StorageURL=:Url, UpdatedAt=NOW() where MediaFileID=:Id returning *';
+            // Include Orientation in update (compatible with new schema); if legacy DB without column, this will error until migrated.
+            Q.SQL.Text := 'update MediaFiles set FileName=:Name, FileType=:Type, StorageURL=:Url, Orientation=:Orientation, UpdatedAt=NOW() where MediaFileID=:Id returning *';
             Q.ParamByName('Name').AsString := FileName;
             Q.ParamByName('Type').AsString := FileType;
             Q.ParamByName('Url').AsString := StorageURL;
+            Q.ParamByName('Orientation').AsString := Orientation;
             Q.ParamByName('Id').AsInteger := Id;
             Q.Open;
             if Q.Eof then begin JSONError(404,'Not found'); Exit; end;
@@ -929,6 +942,8 @@ begin
               O.AddPair('OrganizationId', TJSONNumber.Create(Q.FieldByName('OrganizationID').AsInteger));
               O.AddPair('FileName', Q.FieldByName('FileName').AsString);
               O.AddPair('FileType', Q.FieldByName('FileType').AsString);
+              if Q.FindField('Orientation') <> nil then
+                O.AddPair('Orientation', Q.FieldByName('Orientation').AsString);
               O.AddPair('StorageURL', Q.FieldByName('StorageURL').AsString);
               O.AddPair('CreatedAt', Q.FieldByName('CreatedAt').AsString);
               O.AddPair('UpdatedAt', Q.FieldByName('UpdatedAt').AsString);
@@ -967,6 +982,7 @@ begin
         var OrgId := Body.GetValue<Integer>('OrganizationId',0);
         var FileName := Body.GetValue<string>('FileName','');
         var FileType := Body.GetValue<string>('FileType','application/octet-stream');
+        var Orientation := Body.GetValue<string>('Orientation','Landscape');
         if (OrgId=0) or (FileName='') then begin JSONError(400,'Missing fields'); Exit; end;
         // Use the same default bucket name created by docker compose (minio-setup)
         var Bucket := GetEnv('MINIO_BUCKET','displaydeck-media');
@@ -979,12 +995,13 @@ begin
         var Params: TS3PresignParams; Params.Endpoint:=PublicEndpoint; Params.Region:=Region; Params.Bucket:=Bucket; Params.ObjectKey:=Key; Params.AccessKey:=Access; Params.SecretKey:=Secret; Params.Method:='PUT'; Params.ExpiresSeconds:=900;
         var Url: string; if not BuildS3PresignedUrl(Params, Url) then begin JSONError(500,'Failed to generate URL'); Exit; end;
         var StorageURL := PublicEndpoint.TrimRight(['/']) + '/' + Bucket + '/' + Key;
-        var MF := TMediaFileRepository.CreateMedia(OrgId, FileName, FileType, StorageURL);
+        var MF := TMediaFileRepository.CreateMedia(OrgId, FileName, FileType, Orientation, StorageURL);
         try
           var Obj := TJSONObject.Create;
           Obj.AddPair('MediaFileId', TJSONNumber.Create(MF.Id));
           Obj.AddPair('UploadUrl', Url);
           Obj.AddPair('StorageKey', Key);
+          Obj.AddPair('Orientation', MF.Orientation);
           Obj.AddPair('Success', TJSONBool.Create(True));
           Obj.AddPair('Message', '');
           Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
@@ -1262,7 +1279,7 @@ begin
       finally Body.Free; end;
       Exit;
     end;
-    if SameText(Request.PathInfo, '/device/logs') and SameText(Request.Method, 'POST') then
+    if SameText(PathInfo, '/device/logs') and SameText(Request.Method, 'POST') then
     begin
       // Accept and ack; production would persist device logs in a dedicated table
       var Obj := TJSONObject.Create; Obj.AddPair('Success', TJSONBool.Create(True)); Obj.AddPair('Message','accepted');
@@ -1270,7 +1287,7 @@ begin
     end;
 
     // Playback logs
-    if SameText(Request.PathInfo, '/playback-logs') and SameText(Request.Method, 'POST') then
+    if SameText(PathInfo, '/playback-logs') and SameText(Request.Method, 'POST') then
     begin
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;

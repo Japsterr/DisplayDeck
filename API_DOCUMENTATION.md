@@ -1,149 +1,139 @@
 # DisplayDeck REST API Documentation
 
-This document describes the verified friendly REST endpoints exposed by the DisplayDeck backend. These were exercised in live smoke tests and are ready for client integration.
+This document describes the REST endpoints exposed by the DisplayDeck backend.
 
-Base URL: http://localhost:2001/tms/xdata
+Base URL: `http://localhost:2001/api`
 
-Content-Type: application/json
+Content-Type: `application/json`
 
-Authentication: Some endpoints may later require JWT; current smoke tests used open endpoints where available.
+Authentication: Most endpoints require `Authorization: Bearer <token>` header.
 
-Timestamp format: For any TDateTime fields in JSON requests, use "yyyy-MM-ddTHH:mm:ss" (no timezone suffix). Example: "2025-10-14T18:46:30".
+Timestamp format: "yyyy-MM-ddTHH:mm:ss" (ISO 8601).
 
 ---
 
 ## Health
 
-- GET /health → { "value": "OK" }
+- `GET /health` → `{ "value": "OK" }`
 
 ---
 
 ## Auth
 
-- POST /auth/register
-  - Request: { "Email", "Password", "OrganizationName" }
-  - Response: { "Success", "Token", "User", "Message" }
+- `POST /auth/register`
+  - Request: `{ "Email": "...", "Password": "...", "OrganizationName": "..." }`
+  - Response: `{ "Success": true, "Token": "...", "User": { ... } }`
 
-- POST /auth/login
-  - Request: { "Email", "Password" }
-  - Response: { "Success", "Token", "User" }
+- `POST /auth/login`
+  - Request: `{ "Email": "...", "Password": "..." }`
+  - Response: `{ "Success": true, "Token": "...", "User": { ... } }`
+
+---
+
+## Device Pairing
+
+- `POST /device/provisioning/token`
+  - Request: `{ "HardwareId": "unique-device-id" }`
+  - Response: 
+    ```json
+    { 
+      "ProvisioningToken": "PROV-...", 
+      "ExpiresInSeconds": 600, 
+      "QrCodeData": "displaydeck://claim/PROV-...", 
+      "Instructions": "Scan this QR code with the DisplayDeck mobile app to pair this display." 
+    }
+    ```
+
+- `POST /organizations/{OrganizationId}/displays/claim`
+  - Request: `{ "ProvisioningToken": "PROV-...", "Name": "New Display", "Orientation": "Landscape" }`
+  - Response: `{ "Id": 123, "Name": "New Display", "Orientation": "Landscape" }`
 
 ---
 
 ## Plans and Roles
 
-- GET /plans → array of plans (Free, Starter, Business, ...)
-- GET /roles → ["Owner","ContentManager","Viewer"]
+- `GET /plans` → Array of plans
+- `GET /roles` → `["Owner", "ContentManager", "Viewer"]`
 
 ---
 
 ## Organizations
 
-- GET /organizations → { "value": [ TOrganization, ... ] }
-- POST /organizations → TOrganization
-- GET /organizations/{id} → TOrganization
-- GET /organizations/{OrganizationId}/subscription → subscription details
-
-TOrganization shape (key fields): { Id, Name, CreatedAt, UpdatedAt }
+- `GET /organizations` → `{ "value": [ { "Id": 1, "Name": "..." }, ... ] }`
+- `POST /organizations` → `{ "Id": 1, "Name": "..." }`
+- `GET /organizations/{id}` → `{ "Id": 1, "Name": "..." }`
+- `GET /organizations/{OrganizationId}/subscription` → Subscription details
 
 ---
 
 ## Displays
 
-- GET /organizations/{OrganizationId}/displays → { "value": [ TDisplay, ... ] }
-- POST /organizations/{OrganizationId}/displays → TDisplay
-  - Required: OrganizationId, Name, Orientation, CurrentStatus, ProvisioningToken
-- GET /displays/{Id} → TDisplay
-- PUT /displays/{Id} → TDisplay
-  - Required fields for update: Id, Name, Orientation, CurrentStatus
-- DELETE /displays/{Id} → 204 No Content
-
-TDisplay shape (key fields): { Id, OrganizationId, Name, Orientation, LastSeen, CurrentStatus, ProvisioningToken, CreatedAt, UpdatedAt }
+- `GET /organizations/{OrganizationId}/displays` → `{ "value": [ { "Id": 1, "Name": "...", ... }, ... ] }`
+- `POST /organizations/{OrganizationId}/displays`
+  - Request: `{ "Name": "...", "Orientation": "Landscape" }`
+  - Response: `{ "Id": 1, ... }`
+- `GET /displays/{Id}`
+- `PUT /displays/{Id}`
+- `DELETE /displays/{Id}`
 
 ---
 
 ## Campaigns
 
-- GET /organizations/{OrganizationId}/campaigns → { "value": [ TCampaign, ... ] }
-- POST /organizations/{OrganizationId}/campaigns → TCampaign
-  - Required: OrganizationId, Name, Orientation
-- GET /campaigns/{Id} → TCampaign
-- PUT /campaigns/{Id} → TCampaign (Id, Name, Orientation)
-- DELETE /campaigns/{Id} → 204 No Content
-
-TCampaign: { Id, OrganizationId, Name, Orientation, CreatedAt, UpdatedAt }
+- `GET /organizations/{OrganizationId}/campaigns` → `{ "value": [ ... ] }`
+- `POST /organizations/{OrganizationId}/campaigns`
+- `GET /campaigns/{Id}`
+- `PUT /campaigns/{Id}`
+- `DELETE /campaigns/{Id}`
 
 ---
 
 ## Campaign Items
 
-- GET /campaigns/{CampaignId}/items → { "value": [ TCampaignItem, ... ] }
-- POST /campaigns/{CampaignId}/items → TCampaignItem (CampaignId, MediaFileId, DisplayOrder, Duration)
-- GET /campaign-items/{Id} → TCampaignItem
-- PUT /campaign-items/{Id} → TCampaignItem (Id, MediaFileId, DisplayOrder, Duration)
-- DELETE /campaign-items/{Id} → 204 No Content
-
-TCampaignItem: { Id, CampaignId, MediaFileId, DisplayOrder, Duration }
+- `GET /campaigns/{CampaignId}/items`
+- `POST /campaigns/{CampaignId}/items`
+- `GET /campaign-items/{Id}`
+- `PUT /campaign-items/{Id}`
+- `DELETE /campaign-items/{Id}`
 
 ---
 
-## Display Assignments (Display-Campaigns)
+## Display Assignments
 
-- GET /displays/{DisplayId}/campaign-assignments → { "value": [ TDisplayCampaign, ... ] }
-- POST /displays/{DisplayId}/campaign-assignments → TDisplayCampaign (DisplayId, CampaignId, IsPrimary)
-- PUT /campaign-assignments/{Id} → TDisplayCampaign (Id, IsPrimary)
-- DELETE /campaign-assignments/{Id} → 204 No Content
-
-TDisplayCampaign: { Id, DisplayId, CampaignId, IsPrimary }
+- `GET /displays/{DisplayId}/campaign-assignments`
+- `POST /displays/{DisplayId}/campaign-assignments`
+- `PUT /campaign-assignments/{Id}`
+- `DELETE /campaign-assignments/{Id}`
+- `POST /displays/{DisplayId}/set-primary`
+  - Request: `{ "CampaignId": 123 }`
 
 ---
 
 ## Media Files
 
-- POST /media-files/upload-url → { MediaFileId, UploadUrl, StorageKey, Success, Message }
-- GET /media-files/{MediaFileId}/download-url → { DownloadUrl, Success, Message }
-
-Note: Upload directly to MinIO using UploadUrl; server records MediaFileId and StorageKey.
-
----
-
-## Device
-
-- POST /device/config
-  - Request: { "ProvisioningToken": "PROV-12345" }
-  - Response: { "Success", "Device": TDisplay, "Campaigns": [ TCampaign, ... ], "Message" }
-
-- POST /device/logs
-  - Request: { "DisplayId": number, "LogType": string, "Message": string, "Timestamp": "yyyy-MM-ddTHH:mm:ss" }
-  - Response: { "Success": true, "Message": "Log received successfully" }
-
-Timestamp guidance: Use "yyyy-MM-ddTHH:mm:ss". Other forms like Z-suffixed ISO or /Date(ms)/ are not accepted by the current TDateTime JSON parser.
+- `GET /organizations/{OrganizationId}/media-files`
+- `POST /media-files/upload-url`
+  - Request: `{ "OrganizationId": 1, "FileName": "...", "FileType": "...", "Orientation": "Landscape" }`
+  - Response: `{ "MediaFileId": 1, "UploadUrl": "...", "StorageKey": "...", "Success": true }`
+- `GET /media-files/{Id}/download-url`
+- `PUT /media-files/{Id}`
+- `DELETE /media-files/{Id}`
 
 ---
 
-## Playback Logs
+## Device Configuration (for Displays)
 
-- POST /playback-logs → 204 No Content
-  - Request: { "DisplayId": number, "MediaFileId": number, "CampaignId": number, "PlaybackTimestamp": "yyyy-MM-ddTHH:mm:ss" }
+- `POST /device/config`
+  - Request: `{ "ProvisioningToken": "..." }`
+  - Response: `{ "Success": true, "Device": { ... }, "Campaigns": [ ... ] }`
 
----
-
-## Error format
-
-Errors use this envelope:
-
-{ "error": { "code": "...", "message": "..." } }
-
-Common errors: Unauthorized, Forbidden, NotFound, ValidationError, ServerError.
+- `POST /device/logs`
+- `POST /playback-logs`
 
 ---
 
-## Data model references (from schema)
+## Analytics
 
-- Plans: { PlanID, Name, Price, MaxDisplays, MaxCampaigns, MaxMediaStorageGB, IsActive }
-- Subscriptions: { SubscriptionID, OrganizationID, PlanID, Status, CurrentPeriodEnd, TrialEndDate, ... }
-- MediaFiles: { MediaFileID, OrganizationID, FileName, FileType, StorageURL, ... }
-- Displays: { DisplayID, OrganizationID, Name, Orientation, LastSeen, CurrentStatus, ProvisioningToken, ... }
-- Campaigns, CampaignItems, DisplayCampaigns, PlaybackLogs as described above.
-
-See `schema.sql` for full table definitions.
+- `GET /analytics/plays`
+- `GET /analytics/summary/media`
+- `GET /analytics/summary/campaigns`

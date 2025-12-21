@@ -23,8 +23,6 @@ paths:
   /auth/login:
     post:
       summary: Login
-      security:
-        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -42,8 +40,6 @@ paths:
   /auth/register:
     post:
       summary: Register
-      security:
-        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -199,8 +195,8 @@ paths:
             schema:
               $ref: '#/components/schemas/DisplayCreate'
       responses:
-        '200':
-          description: OK
+        '201':
+          description: Created
           content:
             application/json:
               schema:
@@ -505,8 +501,8 @@ paths:
             schema:
               $ref: '#/components/schemas/DisplayCampaign'
       responses:
-        '200':
-          description: OK
+        '201':
+          description: Created
           content:
             application/json:
               schema:
@@ -569,257 +565,106 @@ paths:
               schema:
                 $ref: '#/components/schemas/UploadUrlResponse'
 
+  /organizations/{OrganizationId}/media-files:
+    get:
+      summary: List media files for organization
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items: { $ref: '#/components/schemas/MediaFile' }
+    post:
+      summary: Create media metadata (direct)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MediaFileCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaFile' }
+
+  /media-files/{Id}:
+    get:
+      summary: Get media file by id
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaFile' }
+    put:
+      summary: Update media file
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MediaFileUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaFile' }
+    delete:
+      summary: Delete media file
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204': { description: No Content }
+
   /media-files/{MediaFileId}/download-url:
-      /organizations/{OrganizationId}/media-files:
-        get:
-          summary: List media files for organization
-          security:
-            - BearerAuth: []
-          parameters:
-            - name: OrganizationId
-              in: path
-              required: true
-              schema: { type: integer }
-          responses:
-            '200':
-              description: OK
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      value:
-                        type: array
-                        items: { $ref: '#/components/schemas/MediaFile' }
-        post:
-          summary: Create media metadata (direct)
-          security:
-            - BearerAuth: []
-          parameters:
-            - name: OrganizationId
-              in: path
-              required: true
-              schema: { type: integer }
-          requestBody:
-            required: true
-            content:
-              application/json:
-                schema: { $ref: '#/components/schemas/MediaFileCreate' }
-          responses:
-            '201':
-              description: Created
-              content:
-                application/json:
-                  schema: { $ref: '#/components/schemas/MediaFile' }
-
-      /media-files/{Id}:
-        get:
-          summary: Get media file by id
-          security:
-            - BearerAuth: []
-          parameters:
-            - name: Id
-              in: path
-              required: true
-              schema: { type: integer }
-          responses:
-            '200':
-              description: OK
-              content:
-                application/json:
-                  schema: { $ref: '#/components/schemas/MediaFile' }
-        put:
-          summary: Update media file
-          security:
-            - BearerAuth: []
-          parameters:
-            - name: Id
-              in: path
-              required: true
-              schema: { type: integer }
-          requestBody:
-            required: true
-            content:
-              application/json:
-                schema: { $ref: '#/components/schemas/MediaFileUpdate' }
-          responses:
-            '200':
-              description: OK
-              content:
-                application/json:
-                  schema: { $ref: '#/components/schemas/MediaFile' }
-        delete:
-          summary: Delete media file
-          security:
-            - BearerAuth: []
-          parameters:
-            - name: Id
-              in: path
-              required: true
-              schema: { type: integer }
-          responses:
-            '204': { description: No Content }
-
-      /displays/{Id}/current-playing:
-        get:
-          summary: Get current playing media on display
-          security:
-            - BearerAuth: []
-          parameters:
-            - name: Id
-              in: path
-              required: true
-              schema: { type: integer }
-          responses:
-            '200':
-              description: OK
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      DisplayId: { type: integer }
-                      CampaignId: { type: integer }
-                      MediaFileId: { type: integer }
-                      PlaybackTimestamp: { type: string, format: date-time }
-                      StartedAt: { type: string, format: date-time }
-                      MediaFileName: { type: string }
-                      MediaFileType: { type: string }
-                      CampaignName: { type: string }
-            '404': { description: No playback yet }
-
-      /displays/{Id}/set-primary:
-        post:
-          summary: Set primary campaign for display
-          security:
-            - BearerAuth: []
-          parameters:
-            - name: Id
-              in: path
-              required: true
-              schema: { type: integer }
-          requestBody:
-            required: true
-            content:
-              application/json:
-                schema:
-                  type: object
-                  properties:
-                    CampaignId: { type: integer }
-                  required: [CampaignId]
-          responses:
-            '204': { description: No Content }
-
-      /analytics/plays:
-        get:
-          summary: List playback logs with filters
-          parameters:
-            - in: query
-              name: organizationId
-              schema: { type: integer }
-            - in: query
-              name: displayId
-              schema: { type: integer }
-            - in: query
-              name: campaignId
-              schema: { type: integer }
-            - in: query
-              name: mediaFileId
-              schema: { type: integer }
-            - in: query
-              name: from
-              schema: { type: string, format: date-time }
-            - in: query
-              name: to
-              schema: { type: string, format: date-time }
-          responses:
-            '200':
-              description: OK
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      value:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            DisplayId: { type: integer }
-                            CampaignId: { type: integer }
-                            MediaFileId: { type: integer }
-                            PlaybackTimestamp: { type: string, format: date-time }
-                            DisplayName: { type: string }
-                            CampaignName: { type: string }
-                            MediaFileName: { type: string }
-
-      /analytics/summary/media:
-        get:
-          summary: Playback summary grouped by media file
-          parameters:
-            - in: query
-              name: organizationId
-              schema: { type: integer }
-            - in: query
-              name: from
-              schema: { type: string, format: date-time }
-            - in: query
-              name: to
-              schema: { type: string, format: date-time }
-          responses:
-            '200':
-              description: OK
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      value:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            MediaFileId: { type: integer }
-                            MediaFileName: { type: string }
-                            Plays: { type: integer }
-
-      /analytics/summary/campaigns:
-        get:
-          summary: Playback summary grouped by campaign
-          parameters:
-            - in: query
-              name: organizationId
-              schema: { type: integer }
-            - in: query
-              name: from
-              schema: { type: string, format: date-time }
-            - in: query
-              name: to
-              schema: { type: string, format: date-time }
-          responses:
-            '200':
-              description: OK
-              content:
-                application/json:
-                  schema:
-                    type: object
-                    properties:
-                      value:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            CampaignId: { type: integer }
-                            CampaignName: { type: string }
-                            Plays: { type: integer }
     get:
       summary: Get presigned download URL
+      security:
+        - BearerAuth: []
       parameters:
         - name: MediaFileId
           in: path
           required: true
-          schema:
-            type: integer
+          schema: { type: integer }
       responses:
         '200':
           description: OK
@@ -827,6 +672,206 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DownloadUrlResponse'
+
+  /displays/{Id}/current-playing:
+    get:
+      summary: Get current playing media on display
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  DisplayId: { type: integer }
+                  CampaignId: { type: integer }
+                  MediaFileId: { type: integer }
+                  PlaybackTimestamp: { type: string, format: date-time }
+                  StartedAt: { type: string, format: date-time }
+                  MediaFileName: { type: string }
+                  MediaFileType: { type: string }
+                  CampaignName: { type: string }
+        '404': { description: No playback yet }
+
+  /displays/{Id}/set-primary:
+    post:
+      summary: Set primary campaign for display
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                CampaignId: { type: integer }
+              required: [CampaignId]
+      responses:
+        '204': { description: No Content }
+
+  /analytics/plays:
+    get:
+      summary: List playback logs with filters
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: organizationId
+          schema: { type: integer }
+        - in: query
+          name: displayId
+          schema: { type: integer }
+        - in: query
+          name: campaignId
+          schema: { type: integer }
+        - in: query
+          name: mediaFileId
+          schema: { type: integer }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        DisplayId: { type: integer }
+                        CampaignId: { type: integer }
+                        MediaFileId: { type: integer }
+                        PlaybackTimestamp: { type: string, format: date-time }
+                        DisplayName: { type: string }
+                        CampaignName: { type: string }
+                        MediaFileName: { type: string }
+
+  /analytics/summary/media:
+    get:
+      summary: Playback summary grouped by media file
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: organizationId
+          schema: { type: integer }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        MediaFileId: { type: integer }
+                        MediaFileName: { type: string }
+                        Plays: { type: integer }
+
+  /analytics/summary/campaigns:
+    get:
+      summary: Playback summary grouped by campaign
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: organizationId
+          schema: { type: integer }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        CampaignId: { type: integer }
+                        CampaignName: { type: string }
+                        Plays: { type: integer }
+
+  /device/provisioning/token:
+    post:
+      summary: Create a short-lived provisioning token for pairing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceProvisioningTokenRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceProvisioningTokenResponse'
+
+  /organizations/{OrganizationId}/displays/claim:
+    post:
+      summary: Claim a provisioning token and create a display under an organization
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisplayClaimRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisplayClaimResponse'
 
   /device/config:
     post:
@@ -884,6 +929,7 @@ components:
         OrganizationId: { type: integer }
         FileName: { type: string }
         FileType: { type: string }
+        Orientation: { type: string, description: "Landscape or Portrait" }
         StorageURL: { type: string }
         CreatedAt: { type: string, format: date-time }
         UpdatedAt: { type: string, format: date-time }
@@ -1019,6 +1065,7 @@ components:
         OrganizationId: { type: integer }
         FileName: { type: string }
         FileType: { type: string }
+        Orientation: { type: string, description: "Landscape or Portrait" }
         ContentLength: { type: integer }
     UploadUrlResponse:
       type: object
@@ -1034,6 +1081,31 @@ components:
         DownloadUrl: { type: string }
         Success: { type: boolean }
         Message: { type: string }
+    DeviceProvisioningTokenRequest:
+      type: object
+      properties:
+        HardwareId: { type: string }
+      required: [HardwareId]
+    DeviceProvisioningTokenResponse:
+      type: object
+      properties:
+        ProvisioningToken: { type: string }
+        ExpiresInSeconds: { type: integer }
+        QrCodeData: { type: string }
+        Instructions: { type: string }
+    DisplayClaimRequest:
+      type: object
+      properties:
+        ProvisioningToken: { type: string }
+        Name: { type: string }
+        Orientation: { type: string, description: "Landscape or Portrait" }
+      required: [ProvisioningToken]
+    DisplayClaimResponse:
+      type: object
+      properties:
+        Id: { type: integer }
+        Name: { type: string }
+        Orientation: { type: string }
     DeviceConfigRequest:
       type: object
       properties:

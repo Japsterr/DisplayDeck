@@ -7,7 +7,7 @@ uses uEntities, FireDAC.Comp.Client;
 type
   TMediaFileRepository = class
   public
-    class function CreateMedia(const OrgId: Integer; const FileName, FileType, StorageURL: string): TMediaFile;
+    class function CreateMedia(const OrgId: Integer; const FileName, FileType, Orientation, StorageURL: string): TMediaFile;
     class function GetById(const Id: Integer): TMediaFile;
   end;
 
@@ -35,12 +35,13 @@ begin
   Result.OrganizationId := Q.FieldByName('OrganizationID').AsInteger;
   Result.FileName := Q.FieldByName('FileName').AsString;
   Result.FileType := Q.FieldByName('FileType').AsString;
+  Result.Orientation := Q.FieldByName('Orientation').AsString;
   Result.StorageURL := Q.FieldByName('StorageURL').AsString;
   Result.CreatedAt := Q.FieldByName('CreatedAt').AsDateTime;
   Result.UpdatedAt := Q.FieldByName('UpdatedAt').AsDateTime;
 end;
 
-class function TMediaFileRepository.CreateMedia(const OrgId: Integer; const FileName, FileType, StorageURL: string): TMediaFile;
+class function TMediaFileRepository.CreateMedia(const OrgId: Integer; const FileName, FileType, Orientation, StorageURL: string): TMediaFile;
 var C: TFDConnection; Q: TFDQuery;
 begin
   C := NewConnection;
@@ -48,10 +49,11 @@ begin
     Q := TFDQuery.Create(nil);
     try
       Q.Connection := C;
-      Q.SQL.Text := 'insert into MediaFiles (OrganizationID, FileName, FileType, StorageURL) values (:Org,:Name,:Type,:Url) returning *';
+      Q.SQL.Text := 'insert into MediaFiles (OrganizationID, FileName, FileType, Orientation, StorageURL) values (:Org,:Name,:Type,:Orient,:Url) returning *';
       Q.ParamByName('Org').AsInteger := OrgId;
       Q.ParamByName('Name').AsString := FileName;
       Q.ParamByName('Type').AsString := FileType;
+      Q.ParamByName('Orient').AsString := Orientation;
       Q.ParamByName('Url').AsString := StorageURL;
       Q.Open;
       Result := MapMedia(Q);

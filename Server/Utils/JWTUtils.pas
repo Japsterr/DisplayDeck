@@ -21,8 +21,14 @@ end;
 
 function Base64UrlEncode(const Bytes: TBytes): string;
 var S: string;
+    Encoder: TBase64Encoding;
 begin
-  S := TNetEncoding.Base64.EncodeBytesToString(Bytes);
+  Encoder := TBase64Encoding.Create(0);
+  try
+    S := Encoder.EncodeBytesToString(Bytes);
+  finally
+    Encoder.Free;
+  end;
   // Remove any line breaks that some encoders insert
   S := S.Replace(#13, '').Replace(#10, '');
   // Convert to base64url
@@ -31,12 +37,19 @@ end;
 
 function Base64UrlDecode(const S: string): TBytes;
 var Padded: string;
+    Encoder: TBase64Encoding;
 begin
   // Remove any accidental line breaks/whitespace
   Padded := S.Replace(#13,'').Replace(#10,'').Replace(' ', '');
   while (Length(Padded) mod 4) <> 0 do Padded := Padded + '=';
   Padded := Padded.Replace('-','+').Replace('_','/');
-  Result := TNetEncoding.Base64.DecodeStringToBytes(Padded);
+  
+  Encoder := TBase64Encoding.Create(0);
+  try
+    Result := Encoder.DecodeStringToBytes(Padded);
+  finally
+    Encoder.Free;
+  end;
 end;
 
 function CreateJWT(const Header, Payload: TJSONObject; const Secret: string): string;

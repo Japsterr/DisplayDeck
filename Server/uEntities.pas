@@ -84,6 +84,7 @@ type
     FOrganizationId: Integer;
     FFileName: string;
     FFileType: string;
+    FOrientation: string;
     FStorageURL: string;
     FCreatedAt: TDateTime;
     FUpdatedAt: TDateTime;
@@ -92,6 +93,7 @@ type
     property OrganizationId: Integer read FOrganizationId write FOrganizationId;
     property FileName: string read FFileName write FFileName;
     property FileType: string read FFileType write FFileType;
+    property Orientation: string read FOrientation write FOrientation;
     property StorageURL: string read FStorageURL write FStorageURL;
     property CreatedAt: TDateTime read FCreatedAt write FCreatedAt;
     property UpdatedAt: TDateTime read FUpdatedAt write FUpdatedAt;

@@ -10,18 +10,7 @@ object Frame5: TFrame5
     TabOrder = 0
     object RectBackground: TRectangle
       Align = Client
-      Fill.Kind = Gradient
-      Fill.Gradient.Points = <
-        item
-          Color = xFF3498DB
-          Offset = 0.000000000000000000
-        end
-        item
-          Color = xFF2980B9
-          Offset = 1.000000000000000000
-        end>
-      Fill.Gradient.StartPosition.X = 0.500000000000000000
-      Fill.Gradient.StopPosition.X = 0.500000000000000000
+      Fill.Color = xFFF5F7FA
       Size.Width = 1244.000000000000000000
       Size.Height = 839.000000000000000000
       Size.PlatformDefault = False

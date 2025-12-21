@@ -22,6 +22,10 @@ OSXARM64/
 # Object files
 *.dcu
 *.obj
+*.o
+
+# Logs
+*.log
 
 # Other generated files
 *.map
@@ -34,9 +38,7 @@ OSXARM64/
 *.~*
 *.stat
 
-# TMS Business Core
-*.aurelius
-*.xdata
+
 
 # VS Code
 .vscode/
@@ -48,6 +50,11 @@ OSXARM64/
 
 # Environment secrets
 .env
+
+# Local client state
+displaydeck-config.json
+displaydeck-http.log
+tests/last-token.txt
 
 # Build outputs and binaries
 Server/Linux/Release/

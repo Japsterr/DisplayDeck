@@ -1,4 +1,4 @@
-object Frame9: TFrame9
+﻿object Frame9: TFrame9
   Size.Width = 1244.000000000000000000
   Size.Height = 839.000000000000000000
   Size.PlatformDefault = False
@@ -10,19 +10,7 @@ object Frame9: TFrame9
     TabOrder = 0
     object RectBackground: TRectangle
       Align = Client
-      Fill.Kind = Gradient
-      Fill.Gradient.Points = <
-        item
-          Color = xFF95A5A6
-          Offset = 0.000000000000000000
-        end
-        item
-          Color = xFF7F8C8D
-          Offset = 1.000000000000000000
-        end>
-      Fill.Gradient.StartPosition.X = 0.500000000000000000
-      Fill.Gradient.StartPosition.Y = 1.000000000000000000
-      Fill.Gradient.StopPosition.X = 0.500000000000000000
+      Fill.Color = xFFF5F7FA
       Size.Width = 1244.000000000000000000
       Size.Height = 839.000000000000000000
       Size.PlatformDefault = False
@@ -42,11 +30,15 @@ object Frame9: TFrame9
         Align = Center
         Fill.Color = claWhite
         Size.Width = 800.000000000000000000
-        Size.Height = 650.000000000000000000
+        Size.Height = 750.000000000000000000
         Size.PlatformDefault = False
         Stroke.Kind = None
         XRadius = 12.000000000000000000
         YRadius = 12.000000000000000000
+        object ShadowEffect1: TShadowEffect
+          Softness = 0.400000005960464500
+          Opacity = 0.100000001490116100
+        end
         object LayoutCardContent: TLayout
           Align = Client
           Padding.Left = 40.000000000000000000
@@ -54,7 +46,7 @@ object Frame9: TFrame9
           Padding.Right = 40.000000000000000000
           Padding.Bottom = 40.000000000000000000
           Size.Width = 800.000000000000000000
-          Size.Height = 650.000000000000000000
+          Size.Height = 750.000000000000000000
           Size.PlatformDefault = False
           TabOrder = 0
           object lblTitle: TLabel
@@ -66,6 +58,7 @@ object Frame9: TFrame9
             Size.Height = 40.000000000000000000
             Size.PlatformDefault = False
             TextSettings.Font.Size = 24.000000000000000000
+            TextSettings.Font.Style = [fsBold]
             TextSettings.FontColor = xFF2C3E50
             Text = 'Application Settings'
             TabOrder = 0
@@ -74,26 +67,24 @@ object Frame9: TFrame9
             Align = Client
             Margins.Top = 16.000000000000000000
             Size.Width = 720.000000000000000000
-            Size.Height = 446.000000000000000000
+            Size.Height = 546.000000000000000000
             Size.PlatformDefault = False
             TabOrder = 1
-            Viewport.Width = 720.000000000000000000
-            Viewport.Height = 502.000000000000000000
             object LayoutForm: TLayout
               Align = Top
               Size.Width = 720.000000000000000000
-              Size.Height = 860.000000000000000000
+              Size.Height = 1100.000000000000000000
               Size.PlatformDefault = False
               TabOrder = 0
               object lblSectionGeneral: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 8.000000000000000000
-                Position.Y = 8.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 30.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.Font.Style = [fsBold]
                 TextSettings.FontColor = xFF2C3E50
                 Text = 'General Settings'
                 TabOrder = 0
@@ -102,7 +93,6 @@ object Frame9: TFrame9
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 54.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
@@ -119,9 +109,8 @@ object Frame9: TFrame9
                   'German')
                 ItemIndex = 0
                 Margins.Top = 4.000000000000000000
-                Position.Y = 78.000000000000000000
                 Size.Width = 720.000000000000000000
-                Size.Height = 40.000000000000000000
+                Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
                 TabOrder = 2
               end
@@ -129,7 +118,6 @@ object Frame9: TFrame9
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 134.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
@@ -143,23 +131,20 @@ object Frame9: TFrame9
                 TabOrder = 4
                 KeyboardType = NumberPad
                 Text = '30'
-                TextSettings.Font.Size = 14.000000000000000000
-                Position.Y = 158.000000000000000000
                 Margins.Top = 4.000000000000000000
                 Size.Width = 720.000000000000000000
-                Size.Height = 40.000000000000000000
+                Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
-                StyledSettings = [Family, Style]
               end
               object lblSectionNotifications: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 32.000000000000000000
-                Position.Y = 230.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 30.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.Font.Style = [fsBold]
                 TextSettings.FontColor = xFF2C3E50
                 Text = 'Notifications'
                 TabOrder = 5
@@ -168,47 +153,41 @@ object Frame9: TFrame9
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 276.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
                 TabOrder = 6
                 Text = 'Enable email notifications'
-                TextSettings.Font.Size = 14.000000000000000000
               end
               object chkDisplayOfflineAlerts: TCheckBox
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 8.000000000000000000
-                Position.Y = 316.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
                 TabOrder = 7
                 Text = 'Alert when displays go offline'
-                TextSettings.Font.Size = 14.000000000000000000
               end
               object chkCampaignEndAlerts: TCheckBox
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 8.000000000000000000
-                Position.Y = 356.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
                 TabOrder = 8
                 Text = 'Alert when campaigns are ending'
-                TextSettings.Font.Size = 14.000000000000000000
               end
               object lblSectionAPI: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 32.000000000000000000
-                Position.Y = 420.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 30.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.Font.Style = [fsBold]
                 TextSettings.FontColor = xFF2C3E50
                 Text = 'API Configuration'
                 TabOrder = 9
@@ -217,7 +196,6 @@ object Frame9: TFrame9
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 466.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
@@ -229,113 +207,159 @@ object Frame9: TFrame9
                 Touch.InteractiveGestures = [LongTap, DoubleTap]
                 Align = Top
                 TabOrder = 11
-                Text = 'http://localhost:2001/tms/xdata'
-                TextSettings.Font.Size = 14.000000000000000000
-                Position.Y = 490.000000000000000000
+                Text = 'http://localhost:2001/api'
                 Margins.Top = 4.000000000000000000
                 Size.Width = 720.000000000000000000
-                Size.Height = 40.000000000000000000
+                Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
+              end
+              object btnApplyApiEndpoint: TButton
+                Align = Top
+                Margins.Top = 8.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 32.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 12
+                Text = 'Apply Endpoint'
+                OnClick = btnApplyApiEndpointClick
+              end
+              object btnClearToken: TButton
+                Align = Top
+                Margins.Top = 8.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 32.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 13
+                Text = 'Clear Auth Token'
+                OnClick = btnClearTokenClick
+              end
+              object lblSectionTheme: TLabel
+                Align = Top
                 StyledSettings = [Family, Style]
+                Margins.Top = 32.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 30.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.Font.Style = [fsBold]
+                TextSettings.FontColor = xFF2C3E50
+                Text = 'Theme'
+                TabOrder = 14
+              end
+              object chkDarkMode: TCheckBox
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 32.000000000000000000
+                Size.PlatformDefault = False
+                TabOrder = 15
+                Text = 'Dark Mode'
+                OnChange = chkDarkModeChange
+              end
+              object lblFontScale: TLabel
+                Align = Top
+                StyledSettings = [Family, Style]
+                Margins.Top = 16.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 20.000000000000000000
+                Size.PlatformDefault = False
+                TextSettings.FontColor = xFF7F8C8D
+                Text = 'Font Scale (e.g. 1.0)'
+                TabOrder = 16
+              end
+              object edtFontScale: TEdit
+                Touch.InteractiveGestures = [LongTap, DoubleTap]
+                Align = Top
+                TabOrder = 17
+                Text = '1.0'
+                Margins.Top = 4.000000000000000000
+                Size.Width = 720.000000000000000000
+                Size.Height = 32.000000000000000000
+                Size.PlatformDefault = False
+                OnExit = edtFontScaleExit
               end
               object lblSectionDebug: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 32.000000000000000000
-                Position.Y = 534.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 30.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.Font.Size = 16.000000000000000000
+                TextSettings.Font.Style = [fsBold]
                 TextSettings.FontColor = xFF2C3E50
                 Text = 'Network Debug'
-                TabOrder = 12
+                TabOrder = 18
               end
               object lblLastRequestUrl: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 580.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'Last Request URL'
-                TabOrder = 13
+                TabOrder = 19
               end
               object edtLastRequestUrl: TEdit
                 Touch.InteractiveGestures = [LongTap, DoubleTap]
                 Align = Top
-                TabOrder = 14
-                TextSettings.Font.Size = 14.000000000000000000
-                Position.Y = 604.000000000000000000
+                TabOrder = 20
                 Margins.Top = 4.000000000000000000
                 Size.Width = 720.000000000000000000
-                Size.Height = 40.000000000000000000
+                Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
-                StyledSettings = [Family, Style]
               end
               object lblLastStatus: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 648.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'Last Status Code'
-                TabOrder = 15
+                TabOrder = 21
               end
               object edtLastStatus: TEdit
                 Touch.InteractiveGestures = [LongTap, DoubleTap]
                 Align = Top
-                TabOrder = 16
-                TextSettings.Font.Size = 14.000000000000000000
-                Position.Y = 672.000000000000000000
+                TabOrder = 22
                 Margins.Top = 4.000000000000000000
                 Size.Width = 720.000000000000000000
-                Size.Height = 40.000000000000000000
+                Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
-                StyledSettings = [Family, Style]
               end
               object lblLastBody: TLabel
                 Align = Top
                 StyledSettings = [Family, Style]
                 Margins.Top = 16.000000000000000000
-                Position.Y = 716.000000000000000000
                 Size.Width = 720.000000000000000000
                 Size.Height = 20.000000000000000000
                 Size.PlatformDefault = False
                 TextSettings.FontColor = xFF7F8C8D
                 Text = 'Last Response Body (truncated)'
-                TabOrder = 17
+                TabOrder = 23
               end
               object edtLastBody: TEdit
                 Touch.InteractiveGestures = [LongTap, DoubleTap]
                 Align = Top
-                TabOrder = 18
-                TextSettings.Font.Size = 14.000000000000000000
-                Position.Y = 740.000000000000000000
+                TabOrder = 24
                 Margins.Top = 4.000000000000000000
                 Size.Width = 720.000000000000000000
-                Size.Height = 40.000000000000000000
+                Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
-                StyledSettings = [Family, Style]
               end
               object btnRefreshDebug: TButton
                 Align = Top
-                StyledSettings = [Family, Style]
-                Position.Y = 784.000000000000000000
                 Margins.Top = 12.000000000000000000
                 Size.Width = 720.000000000000000000
-                Size.Height = 40.000000000000000000
+                Size.Height = 32.000000000000000000
                 Size.PlatformDefault = False
-                TabOrder = 19
+                TabOrder = 25
                 Text = 'Refresh Debug Info'
-                TextSettings.Font.Size = 14.000000000000000000
-                TextSettings.FontColor = xFF2C3E50
-                TextSettings.Trimming = None
                 OnClick = btnRefreshDebugClick
               end
             end
@@ -343,37 +367,27 @@ object Frame9: TFrame9
           object LayoutButtons: TLayout
             Align = Bottom
             Margins.Top = 16.000000000000000000
-            Position.X = 40.000000000000000000
-            Position.Y = 558.000000000000000000
             Size.Width = 720.000000000000000000
             Size.Height = 52.000000000000000000
             Size.PlatformDefault = False
             TabOrder = 2
             object btnSaveSettings: TButton
               Align = Right
-              StyledSettings = [Family, Style]
               Position.X = 612.000000000000000000
               Size.Width = 108.000000000000000000
               Size.Height = 52.000000000000000000
               Size.PlatformDefault = False
               TabOrder = 0
               Text = 'Save Settings'
-              TextSettings.Font.Size = 14.000000000000000000
-              TextSettings.FontColor = xFF2C3E50
-              TextSettings.Trimming = None
               OnClick = btnSaveSettingsClick
             end
             object btnResetDefaults: TButton
               Align = Left
-              StyledSettings = [Family, Style]
               Size.Width = 140.000000000000000000
               Size.Height = 52.000000000000000000
               Size.PlatformDefault = False
               TabOrder = 1
               Text = 'Reset to Defaults'
-              TextSettings.Font.Size = 14.000000000000000000
-              TextSettings.FontColor = xFF95A5A6
-              TextSettings.Trimming = None
               OnClick = btnResetDefaultsClick
             end
           end

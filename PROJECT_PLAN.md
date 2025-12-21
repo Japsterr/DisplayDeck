@@ -2,27 +2,17 @@
 
 > Status update — 2025-10-16
 >
-> We pivoted from TMS XData/Sparkle to vanilla Delphi WebBroker + Indy for Linux container deployment. The current Linux server implements a minimal set of endpoints and stubs the rest with HTTP 501 to expose the full API surface early. Swagger/OpenAPI reflects the complete design, but not all routes are implemented yet.
+> The server is Delphi WebBroker + Indy (Linux) with FireDAC + PostgreSQL and MinIO for media.
+> Swagger UI serves the OpenAPI v3 spec from `docs/openapi.yaml`.
 >
-> Implemented now (WebBroker/Indy + FireDAC):
-> - GET /health
-> - /organizations: GET (list), POST (create)
-> - /organizations/{id}: GET (by id)
->
-> Stubbed (return 501 Not Implemented):
+> Key implemented endpoints include:
 > - Auth: /auth/login, /auth/register
-> - Plans and Roles: /plans, /roles
-> - Displays: /organizations/{id}/displays (GET/POST), /displays/{id} (GET/PUT/DELETE), /displays/{id}/campaign-assignments (GET/POST)
-> - Campaigns & Items: /campaigns/{id} (GET/PUT/DELETE), /campaigns/{id}/items (GET/POST), /campaign-items/{id} (GET/PUT/DELETE), /campaign-assignments/{id} (PUT/DELETE)
-> - Media (MinIO presign): /media-files/upload-url (POST), /media-files/{id}/download-url (GET)
-> - Device: /device/config (POST), /device/logs (POST)
-> - Playback logs: /playback-logs (POST)
->
-> Containerization status:
-> - Dockerized services: Postgres, MinIO, Swagger UI, and the server are up; OpenAPI YAML is served by Swagger UI.
-> - Linux build compiles from CLI; server image builds and runs. Remaining endpoints will be implemented iteratively.
->
-> Note: The original Task 4 checkboxes below refer to an earlier XData-based approach. That scope is superseded by the WebBroker implementation plan above. We will re-track progress per endpoint as they are implemented.
+> - Orgs: /organizations (GET/POST), /organizations/{id} (GET)
+> - Displays: /organizations/{orgId}/displays (GET/POST), /displays/{id} (GET/PUT/DELETE)
+> - Campaigns: /organizations/{orgId}/campaigns (GET/POST), /campaigns/{id} (GET/PUT/DELETE)
+> - Assignments: /displays/{id}/campaign-assignments (GET/POST), /campaign-assignments/{id} (PUT/DELETE)
+> - Media: /organizations/{orgId}/media-files (GET/POST), /media-files/{id} (GET/PUT/DELETE), /media-files/upload-url, /media-files/{id}/download-url
+> - Device/logging: /device/config, /device/logs, /playback-logs
 
 ## 1. Project Vision
 
@@ -63,7 +53,7 @@ To create a modern, flexible, and multi-tenant SaaS platform for digital signage
 ## 3. Technology Stack
 
 *   **Language:** Delphi (Object Pascal)
-*   **API Framework:** TMS XData (with Swagger/OpenAPI support)
+*   **API Framework:** Delphi WebBroker + Indy
 *   **Data Access:** FireDAC (direct SQL, no ORM)
 *   **Database:** PostgreSQL (running in Docker)
 *   **Object Storage:** MinIO (S3-compatible, running in Docker)
@@ -81,10 +71,10 @@ This roadmap is divided into phases to manage development effectively.
     *   [X] Create `docker-compose.yml` for PostgreSQL and MinIO services.
     *   [X] Create initial database schema script (`schema.sql`).
 *   [X] **Task 2:** Create the initial Delphi project structure and establish database connectivity.
-    *   [X] Create the `TMS XData VCL Server` project.
+    *   [X] Create the initial server project.
     *   [X] Commit initial project files to the Git repository.
     *   [X] Successfully connect the Delphi server to the PostgreSQL database.
-*   [X] **Task 3:** Define core data models (Entities) using pure Delphi classes (moved from TMS Aurelius to FireDAC).
+*   [X] **Task 3:** Define core data models (Entities) using pure Delphi classes (moved from ORM-based mapping to FireDAC).
     *   [X] `TOrganization`, `TUser`
     *   [X] `TPlan`, `TSubscription`
     *   [X] `TMediaFile`, `TCampaign`, `TCampaignItem`
@@ -105,14 +95,14 @@ This roadmap is divided into phases to manage development effectively.
     * [X] Authentication (`/auth/register`, `/auth/login`) - JWT-based with password hashing
     * [X] Media Upload Workflow (using pre-signed URLs with MinIO) - Pre-signed URL generation
     * [X] Device-specific endpoints (`/device/config`, `/device/logs`) - Configuration and logging endpoints
-    * **Note:** All Task 4 services implemented and compiling successfully, but XData service registration issue preventing API endpoint access (404 errors)
+    
 
 ### Phase 2: Deployment & Infrastructure
 
 *   [ ] **Task 5:** Prepare for Linux deployment.
     *   [ ] Create `Dockerfile` for the PAServer.
     *   [ ] Configure Delphi IDE with a Linux Connection Profile.
-    *   [ ] Create the `TMS XData Web Application` project targeting Apache/Linux.
+    *   [ ] Keep the Linux build pipeline and Docker packaging up to date.
 *   [ ] **Task 6:** Containerize the API for production.
     *   [ ] Create `Dockerfile` for the final API server (Apache + .so module).
 *   [ ] **Task 7:** Implement a robust database migration strategy.
@@ -131,25 +121,6 @@ This roadmap is divided into phases to manage development effectively.
 *   [ ] **Task 13:** Build out the analytics dashboard in the web admin panel.
 *   [ ] **Task 14:** Implement the advanced scheduling features (recurring schedules, etc.).
 
-### API Routing Fix Plan (Completed)
+### API Notes
 
-1.  Consolidated service registration using implementation-unit initialization.
-    - Each service implementation now calls `RegisterServiceType(TMyService)` in its `initialization` section.
-    - Interfaces keep `RegisterServiceType(TypeInfo(IMyService))` to ensure contracts are published.
-
-2.  Attribute routing flattened at interface level.
-    - Added `[Route('')]` to service interfaces to provide friendly paths like `/health` and `/organizations`.
-    - No component-level `Options` configuration was required/used.
-
-3.  Simplified server container.
-    - Removed ad-hoc middleware; rely on XData services for health and other endpoints.
-
-4.  Rebuilt and verified.
-    - Performed clean build, stopped existing process, started new binary.
-    - Verified:
-      - `GET /tms/xdata/health` → 200 `{ "value": "OK" }`.
-      - `GET /tms/xdata/organizations` → 200 JSON array (e.g., demo row present).
-
-5.  Aligned Organization service to FireDAC (no Aurelius).
-    - Rewrote `OrganizationServiceImplementation` to use FireDAC queries for list/get/create.
-    - Eliminated access violation caused by previous Aurelius usage.
+The repository previously contained a legacy server/client prototype. Those artifacts were removed to reduce confusion; the supported API is the WebBroker REST API documented in `docs/openapi.yaml`.

@@ -4,7 +4,7 @@ interface
 
 uses
   System.SysUtils, System.UITypes, System.Types, System.Math, FMX.Types, FMX.Objects, FMX.StdCtrls, FMX.Graphics,
-  FMX.ListBox;
+  FMX.ListBox, FMX.Effects, FMX.Edit, FMX.Controls;
 
 type
   TThemeMode = (tmLight, tmDark);
@@ -13,45 +13,49 @@ var
   // Theme state
   CurrentThemeMode: TThemeMode = tmLight;
   // Typography (scalable)
-  FONT_SIZE_HEADER: Single = 20;
+  FONT_SIZE_HEADER: Single = 24;
+  FONT_SIZE_SUBHEADER: Single = 18;
   FONT_SIZE_BODY: Single = 14;
   FONT_SIZE_MUTED: Single = 12;
   FONT_SCALE: Single = 1.0;
 
-// Light palette
+// Light palette - "Million Dollar" Modern SaaS Look
 const
-  L_BG          = $FFE5E7EB;
-  L_NAV_BG      = $FFCBD5E1; // light slate for navigation
-  L_NAV_ACTIVE  = $FF2563EB;
-  L_NAV_HOVER   = $FF1D4ED8;
+  L_BG          = $FFF0F4F8; // Cool Slate/Blue tint - not just white
+  L_NAV_BG      = $FF0F172A; // Slate 900 (Rich Dark Blue/Black)
+  L_NAV_ACTIVE  = $FFFFFFFF;
+  L_NAV_HOVER   = $FF334155; // Slate 700
   L_CARD        = $FFFFFFFF;
-  L_CARD_BORDER = $FFD1D5DB;
-  L_TEXT        = $FF1F2937;
-  L_MUTED       = $FF6B7280;
-  L_PRIMARY     = $FF2563EB;
-  L_DANGER      = $FFEF4444;
+  L_CARD_BORDER = $FFCBD5E1; // Slate 300 - more visible border
+  L_TEXT        = $FF1E293B; // Slate 800
+  L_MUTED       = $FF64748B; // Slate 500
+  L_PRIMARY     = $FF2563EB; // Blue 600 - Stronger, more vibrant
+  L_DANGER      = $FFEF4444; // Red 500
 
 // Dark palette
-  D_BG          = $FF111827; // near-black slate
-  D_NAV_BG      = $FF1F2937; // darker nav
-  D_NAV_ACTIVE  = $FF3B82F6;
-  D_NAV_HOVER   = $FF2563EB;
-  D_CARD        = $FF1F2937; // dark card
-  D_CARD_BORDER = $FF374151; // subtle border
-  D_TEXT        = $FFF3F4F6; // light text
-  D_MUTED       = $FF9CA3AF; // muted light
-  D_PRIMARY     = $FF3B82F6; // slightly lighter blue
-  D_DANGER      = $FFF87171; // lighter red
+  D_BG          = $FF18191A; // Dark mode bg
+  D_NAV_BG      = $FF242526; // Dark mode nav
+  D_NAV_ACTIVE  = $FF2D88FF; // Blue accent
+  D_NAV_HOVER   = $FF3A3B3C; // Hover state
+  D_CARD        = $FF242526; // Dark card
+  D_CARD_BORDER = $FF3E4042; // Dark border
+  D_TEXT        = $FFE4E6EB; // Light text
+  D_MUTED       = $FFB0B3B8; // Muted text
+  D_PRIMARY     = $FF2D88FF; // Blue accent
+  D_DANGER      = $FFF02849; // Red accent
 
 procedure StyleCard(Rect: TRectangle);
 procedure StylePrimaryButton(Btn: TButton);
 procedure StyleDangerButton(Btn: TButton);
 procedure StyleHeaderLabel(Lbl: TLabel);
+procedure StyleSubHeaderLabel(Lbl: TLabel);
 procedure StyleMutedLabel(Lbl: TLabel);
+procedure StyleInput(Edt: TEdit);
 procedure StyleBackground(Rect: TRectangle);
 procedure StyleNavBackground(Rect: TRectangle);
 procedure StyleMenuItem(Item: TListBoxItem; Active: Boolean);
 procedure WireButtonHover(Btn: TButton; const BaseColor: TAlphaColor = 0);
+procedure AddShadow(Control: TControl);
 procedure SetThemeMode(const AMode: TThemeMode);
 function  GetThemeMode: TThemeMode;
 procedure SetTypographyScale(const AScale: Single);
@@ -136,7 +140,8 @@ end;
 procedure SetTypographyScale(const AScale: Single);
 begin
   FONT_SCALE := EnsureRange(AScale, 0.85, 1.25);
-  FONT_SIZE_HEADER := 20 * FONT_SCALE;
+  FONT_SIZE_HEADER := 24 * FONT_SCALE;
+  FONT_SIZE_SUBHEADER := 18 * FONT_SCALE;
   FONT_SIZE_BODY := 14 * FONT_SCALE;
   FONT_SIZE_MUTED := 12 * FONT_SCALE;
 end;
@@ -167,6 +172,34 @@ begin
   Result := (a shl 24) or (r shl 16) or (g shl 8) or b;
 end;
 
+procedure AddShadow(Control: TControl);
+var
+  Effect: TShadowEffect;
+  I: Integer;
+begin
+  if Control = nil then Exit;
+  Effect := nil;
+  // Check if shadow already exists
+  for I := 0 to Control.ChildrenCount - 1 do
+    if Control.Children[I] is TShadowEffect then
+    begin
+      Effect := TShadowEffect(Control.Children[I]);
+      Break;
+    end;
+
+  if Effect = nil then
+  begin
+    Effect := TShadowEffect.Create(Control);
+    Effect.Parent := Control;
+  end;
+
+  // Apply theme properties - Stronger, softer shadow for "pop"
+  Effect.Softness := 0.4; // Sharper shadow
+  Effect.Opacity := 0.3;  // Darker shadow
+  Effect.Distance := 8;   // More "lift"
+  Effect.Direction := 90; // Straight down
+end;
+
 procedure StyleBackground(Rect: TRectangle);
 begin
   if Rect = nil then Exit;
@@ -191,12 +224,13 @@ begin
     Item.TextSettings.FontColor := ColorNavActive;
     Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
     Item.Opacity := 1.0;
+    // Add a subtle indicator or background change if possible, but for now just text
   end
   else
   begin
-    Item.TextSettings.FontColor := ColorMuted;
+    Item.TextSettings.FontColor := $FF9CA3AF; // Gray 400
     Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
-    Item.Opacity := 0.85;
+    Item.Opacity := 1.0;
   end;
 end;
 
@@ -208,20 +242,21 @@ begin
   Rect.Stroke.Kind := TBrushKind.Solid;
   Rect.Stroke.Color := ColorCardBorder;
   Rect.Stroke.Thickness := 1;
-  Rect.XRadius := 12;
-  Rect.YRadius := 12;
+  Rect.XRadius := 16; // More rounded
+  Rect.YRadius := 16;
   Rect.Opacity := 1;
+  AddShadow(Rect);
 end;
 
 procedure StylePrimaryButton(Btn: TButton);
 begin
   if Btn = nil then Exit;
   Btn.TextSettings.FontColor := TAlphaColorRec.White;
-  Btn.StyledSettings := Btn.StyledSettings - [TStyledSetting.FontColor];
+  Btn.StyledSettings := Btn.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
   Btn.TextSettings.Font.Size := FONT_SIZE_BODY;
-  Btn.StyledSettings := Btn.StyledSettings - [TStyledSetting.Size];
   Btn.StylesData['background'] := ColorPrimary;
   Btn.Tag := Integer(ColorPrimary);
+  // Try to make it rounded if style supports it, otherwise rely on stylebook
   WireButtonHover(Btn);
 end;
 
@@ -241,6 +276,15 @@ begin
   Lbl.TextSettings.Font.Size := FONT_SIZE_HEADER;
   Lbl.TextSettings.FontColor := ColorText;
   Lbl.StyledSettings := Lbl.StyledSettings - [TStyledSetting.Size, TStyledSetting.FontColor];
+  Lbl.TextSettings.Font.Style := [TFontStyle.fsBold];
+end;
+
+procedure StyleSubHeaderLabel(Lbl: TLabel);
+begin
+  if Lbl = nil then Exit;
+  Lbl.TextSettings.Font.Size := FONT_SIZE_SUBHEADER;
+  Lbl.TextSettings.FontColor := ColorText;
+  Lbl.StyledSettings := Lbl.StyledSettings - [TStyledSetting.Size, TStyledSetting.FontColor];
 end;
 
 procedure StyleMutedLabel(Lbl: TLabel);
@@ -248,7 +292,15 @@ begin
   if Lbl = nil then Exit;
   Lbl.TextSettings.Font.Size := FONT_SIZE_MUTED;
   Lbl.TextSettings.FontColor := ColorMuted;
-  Lbl.StyledSettings := Lbl.StyledSettings - [TStyledSetting.FontColor];
+  Lbl.StyledSettings := Lbl.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+end;
+
+procedure StyleInput(Edt: TEdit);
+begin
+  if Edt = nil then Exit;
+  Edt.TextSettings.FontColor := ColorText;
+  Edt.TextSettings.Font.Size := FONT_SIZE_BODY;
+  Edt.StyledSettings := Edt.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
 end;
 
 type

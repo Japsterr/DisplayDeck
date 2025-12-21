@@ -20,9 +20,9 @@ var Body: TJSONObject; Path: string;
 begin
   Body := TJSONObject.Create;
   try
-    Body.AddPair('DisplayId', TJSONNumber.Create(DisplayId));
     Body.AddPair('CampaignId', TJSONNumber.Create(CampaignId));
-    Path := Format('/organizations/%d/assignments', [OrgId]);
+    Body.AddPair('IsPrimary', TJSONBool.Create(True));
+    Path := Format('/displays/%d/campaign-assignments', [DisplayId]);
     ApiClient.PostJson(Path, Body);
   finally
     Body.Free;
