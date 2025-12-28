@@ -13,6 +13,7 @@ services:
       - server
       - minio
       - swagger-ui
+      - website
 
   # PostgreSQL Database Service
   postgres:
@@ -75,7 +76,10 @@ services:
 
   # DisplayDeck API server
   server:
-    image: ghcr.io/japsterr/displaydeck-server:${SERVER_TAG:-latest}
+    # image: ghcr.io/japsterr/displaydeck-server:${SERVER_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     container_name: displaydeck-server
     restart: unless-stopped
     environment:
@@ -98,6 +102,20 @@ services:
       - postgres
       - minio
       - minio-setup
+
+  # DisplayDeck Website (Next.js)
+  website:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api
+    container_name: displaydeck-website
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: /api
 
 volumes:
   postgres_data:

@@ -1,0 +1,232 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Monitor, Megaphone, AlertCircle, Activity } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { formatDistanceToNow } from "date-fns";
+
+interface Display {
+  Id: number;
+  Name: string;
+  CurrentStatus: string;
+  LastSeen: string;
+}
+
+interface Campaign {
+  Id: number;
+  Name: string;
+}
+
+interface AuditLog {
+  AuditLogId: number;
+  Action: string;
+  Details: string;
+  CreatedAt: string;
+}
+
+export default function DashboardPage() {
+  const router = useRouter();
+  const [stats, setStats] = useState({
+    totalDisplays: 0,
+    activeCampaigns: 0,
+    offlineDisplays: 0,
+    systemStatus: "Checking...",
+  });
+  const [displays, setDisplays] = useState<Display[]>([]);
+  const [recentActivity, setRecentActivity] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const userStr = localStorage.getItem("user");
+
+        if (!token || !userStr) {
+          // If no user info, try to fetch it or just redirect
+          // For now, if we have a token but no user, we might be in a weird state.
+          // But let's assume if token exists we might be okay, but we need OrgId.
+          // If we can't get OrgId, we can't fetch data.
+          if (!userStr) {
+             console.error("No user info found in localStorage");
+             // Optional: Fetch user profile if endpoint existed
+             router.push("/login");
+             return;
+          }
+          router.push("/login");
+          return;
+        }
+
+        const user = JSON.parse(userStr);
+        const orgId = user.OrganizationId;
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+
+        const headers = {
+          "X-Auth-Token": token || "",
+        };
+
+        // Fetch Displays
+        const displaysRes = await fetch(`${apiUrl}/organizations/${orgId}/displays`, { headers });
+        if (displaysRes.status === 401) {
+            router.push("/login");
+            return;
+        }
+        const displaysData = await displaysRes.json();
+        const displaysList: Display[] = displaysData.value || [];
+
+        // Fetch Campaigns
+        const campaignsRes = await fetch(`${apiUrl}/organizations/${orgId}/campaigns`, { headers });
+        const campaignsData = await campaignsRes.json();
+        const campaignsList: Campaign[] = campaignsData.value || [];
+
+        // Fetch Audit Log
+        const auditRes = await fetch(`${apiUrl}/organizations/${orgId}/audit-log?limit=5`, { headers });
+        const auditData = await auditRes.json();
+        const auditList: AuditLog[] = auditData.Items || [];
+
+        // Check System Health
+        let healthStatus = "Healthy";
+        try {
+            const healthRes = await fetch(`${apiUrl}/health`);
+            if (!healthRes.ok) healthStatus = "Degraded";
+        } catch (e) {
+            healthStatus = "Offline";
+        }
+
+        // Calculate Stats
+        const offlineCount = displaysList.filter(d => d.CurrentStatus === "Offline").length;
+
+        setStats({
+          totalDisplays: displaysList.length,
+          activeCampaigns: campaignsList.length,
+          offlineDisplays: offlineCount,
+          systemStatus: healthStatus,
+        });
+
+        setDisplays(displaysList.slice(0, 5)); // Show top 5
+        setRecentActivity(auditList);
+
+      } catch (error) {
+        console.error("Failed to fetch dashboard data", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [router]);
+
+  if (loading) {
+    return <div className="p-8 text-center">Loading dashboard...</div>;
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Displays</CardTitle>
+            <Monitor className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalDisplays}</div>
+            <p className="text-xs text-muted-foreground">
+              Registered devices
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Campaigns</CardTitle>
+            <Megaphone className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.activeCampaigns}</div>
+            <p className="text-xs text-muted-foreground">
+              Total campaigns
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Offline Displays</CardTitle>
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.offlineDisplays}</div>
+            <p className="text-xs text-muted-foreground">
+              Needs attention
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">System Status</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.systemStatus}</div>
+            <p className="text-xs text-muted-foreground">
+              API Connection
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <Card className="col-span-4">
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-8">
+              {recentActivity.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">No recent activity</div>
+              ) : (
+                recentActivity.map((log) => (
+                  <div key={log.AuditLogId} className="flex items-center">
+                    <div className="ml-4 space-y-1">
+                      <p className="text-sm font-medium leading-none">{log.Action}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {log.Details}
+                      </p>
+                    </div>
+                    <div className="ml-auto font-medium text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(log.CreatedAt), { addSuffix: true })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="col-span-3">
+          <CardHeader>
+            <CardTitle>Display Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-8">
+              {displays.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">No displays found</div>
+              ) : (
+                displays.map((display) => (
+                  <div key={display.Id} className="flex items-center">
+                    <div className="ml-4 space-y-1">
+                      <p className="text-sm font-medium leading-none">{display.Name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {display.CurrentStatus} • Last seen {formatDistanceToNow(new Date(display.LastSeen), { addSuffix: true })}
+                      </p>
+                    </div>
+                    <div className={`ml-auto font-medium ${display.CurrentStatus === 'Online' ? 'text-green-500' : 'text-red-500'}`}>
+                      {display.CurrentStatus}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

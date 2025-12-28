@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.8 - 2025-12-28
+
+- **Campaign Editor**:
+  - Added full playlist management UI.
+  - Drag-and-drop reordering of campaign items.
+  - Media library sidebar for easy addition of content.
+  - Duration editing for each item.
+- **Campaign Grid Improvements**:
+  - Added "Media Items" count column.
+  - Added "Status" column showing active/inactive state and display count.
+  - Added "Assign to Displays" dialog for quick activation.
+- **Infrastructure**:
+  - Updated `website` container to support React 19.
+  - Fixed `npm` peer dependency issues in Docker build (`--legacy-peer-deps`).
+  - Restarted Nginx to resolve DNS caching issues ("Bad Gateway").
+
 ## 0.1.7 - 2025-11-10
 
 - Orientation support for media files end-to-end

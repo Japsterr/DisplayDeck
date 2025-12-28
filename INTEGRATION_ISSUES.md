@@ -13,6 +13,16 @@ This note summarizes the current “server ↔ OpenAPI ↔ tests ↔ clients” 
   - server behavior for `201` create responses and public `/auth/*` endpoints.
 - **XData-era artifacts removed**: the old XData/Sparkle-style server/client prototypes and stale `/tms/xdata` URL references were removed.
 - **Production Deployment Prep**: Docker Compose configurations for production with Nginx reverse proxy are being finalized.
+- **Website Integration**: Added Next.js frontend (`website/`) to the stack, served via Nginx on `displaydeck.co.za`.
+- **CORS Handling**: Configured Nginx to handle CORS for `api.displaydeck.co.za` allowing requests from the website.
+
+## Recent Fixes (Dec 28, 2025)
+
+- **Docker Build**: Switched `server` to local build (avoiding GHCR auth issues) and updated `website` to Node 20 (Next.js 15 requirement).
+- **Next.js Output**: Enabled `standalone` output in `next.config.ts` for optimized Docker images.
+- **React 19 Compatibility**:
+  - Issue: `npm ci` failed due to peer dependency conflicts between React 19 and `@hello-pangea/dnd` (which expects React 18).
+  - Fix: Updated `website/Dockerfile` to use `npm ci --legacy-peer-deps`.
 
 ## Remaining integration risks / inconsistencies
 

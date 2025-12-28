@@ -22,7 +22,7 @@ var
 
 implementation
 
-// No DFM used; we configure routes manually in DefaultHandlerAction
+{$R *.dfm}
 
 uses
   System.Generics.Collections, System.StrUtils, System.Net.URLClient, Web.WebReq,
@@ -33,6 +33,7 @@ uses
   CampaignRepository,
   CampaignItemRepository,
   DisplayCampaignRepository,
+  ScheduleRepository,
   MediaFileRepository,
   UserRepository,
   RefreshTokenRepository,
@@ -55,20 +56,21 @@ var
   Action: TWebActionItem;
 begin
   inherited Create(AOwner);
-  // Since no DFM is used, create a default action that delegates to our handler
+  // Create a default action that delegates to our handler
   Action := Actions.Add;
   Action.Name := 'Default';
   Action.Default := True;
   Action.OnAction := DefaultHandlerAction;
 end;
 
+
+
 procedure TWebModule1.DefaultHandlerAction(Sender: TObject; Request: TWebRequest; Response: TWebResponse; var Handled: Boolean);
 var
   RequestId: string;
   ClientIp: string;
   UserAgent: string;
-    DisplayCampaignRepository,
-    ScheduleRepository,
+  IdempotencyKey: string;
   AuthApiKeyId: Int64;
   AuthKind: string;
   // Local helper to reply 501 for yet-to-be-implemented endpoints
@@ -250,7 +252,6 @@ var
       RawToken := Request.GetFieldByName('X-Auth-Token');
       if RawToken='' then RawToken := Request.GetFieldByName('x-auth-token');
       if RawToken='' then RawToken := Request.GetFieldByName('X_AUTH_TOKEN');
-      System.Generics.Collections,
       if RawToken.StartsWith('Bearer ') then RawToken := RawToken.Substring(7);
     end;
 
@@ -332,6 +333,89 @@ var
       finally Q.Free; end;
     finally C.Free; end;
   end;
+
+  function TryParseHm(const S: string; out Minutes: Integer): Boolean;
+  begin
+    Result := False;
+    Minutes := 0;
+    var P := Pos(':', S);
+    if P <= 0 then Exit;
+    var HH := StrToIntDef(Copy(S, 1, P-1), -1);
+    var MM := StrToIntDef(Copy(S, P+1, 2), -1);
+    if (HH < 0) or (HH > 23) or (MM < 0) or (MM > 59) then Exit;
+    Minutes := HH * 60 + MM;
+    Result := True;
+  end;
+
+  function MatchesRecurring(const Pattern: string; const NowUtc: TDateTime): Boolean;
+  begin
+    // If no pattern, no additional restriction.
+    Result := True;
+    if Pattern.Trim = '' then Exit;
+
+    // Only implement JSON recurrence for now; unknown formats are treated as non-restrictive.
+    var J := TJSONObject.ParseJSONValue(Pattern) as TJSONObject;
+    if J = nil then Exit(True);
+    try
+      // Days-of-week filter: 0=Sun..6=Sat
+      var DaysOk := True;
+      var DaysVal := J.GetValue('daysOfWeek');
+      if (DaysVal <> nil) and (DaysVal is TJSONArray) then
+      begin
+        DaysOk := False;
+        var Dow := DayOfWeek(NowUtc); // 1=Sun..7=Sat
+        var Dow0 := Dow - 1; // 0..6
+        for var V in TJSONArray(DaysVal) do
+          if StrToIntDef(V.Value, -1) = Dow0 then
+          begin
+            DaysOk := True;
+            Break;
+          end;
+      end;
+      if not DaysOk then Exit(False);
+
+      // Time-of-day window filter
+      var StartLocal := '';
+      var EndLocal := '';
+      var SV := J.GetValue('startLocal');
+      if (SV <> nil) and (not (SV is TJSONNull)) then StartLocal := SV.Value;
+      var EV := J.GetValue('endLocal');
+      if (EV <> nil) and (not (EV is TJSONNull)) then EndLocal := EV.Value;
+
+      if (StartLocal.Trim = '') and (EndLocal.Trim = '') then Exit(True);
+
+      var StartMin: Integer;
+      var EndMin: Integer;
+      if (StartLocal.Trim <> '') and (not TryParseHm(StartLocal.Trim, StartMin)) then Exit(True);
+      if (EndLocal.Trim <> '') and (not TryParseHm(EndLocal.Trim, EndMin)) then Exit(True);
+
+      var NowMin := HourOf(NowUtc) * 60 + MinuteOf(NowUtc);
+
+      // If only one bound provided, treat as open-ended.
+      if (StartLocal.Trim <> '') and (EndLocal.Trim = '') then
+        Exit(NowMin >= StartMin);
+      if (StartLocal.Trim = '') and (EndLocal.Trim <> '') then
+        Exit(NowMin <= EndMin);
+
+      // Both bounds provided.
+      if EndMin >= StartMin then
+        Result := (NowMin >= StartMin) and (NowMin <= EndMin)
+      else
+        // window spans midnight
+        Result := (NowMin >= StartMin) or (NowMin <= EndMin);
+    finally
+      J.Free;
+    end;
+  end;
+
+  function IsScheduleActive(const S: TSchedule; const NowUtc: TDateTime): Boolean;
+  begin
+    Result := True;
+    if (S.StartTime <> 0) and (NowUtc < S.StartTime) then Exit(False);
+    if (S.EndTime <> 0) and (NowUtc > S.EndTime) then Exit(False);
+    if not MatchesRecurring(S.RecurringPattern, NowUtc) then Exit(False);
+  end;
+
 begin
   RequestId := '';
   ClientIp := '';
@@ -2250,87 +2334,7 @@ begin
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var ProvisioningToken := Body.GetValue<string>('ProvisioningToken',''); if ProvisioningToken='' then begin JSONError(400,'Missing ProvisioningToken'); Exit; end;
 
-        function TryParseHm(const S: string; out Minutes: Integer): Boolean;
-        begin
-          Result := False;
-          Minutes := 0;
-          var P := Pos(':', S);
-          if P <= 0 then Exit;
-          var HH := StrToIntDef(Copy(S, 1, P-1), -1);
-          var MM := StrToIntDef(Copy(S, P+1, 2), -1);
-          if (HH < 0) or (HH > 23) or (MM < 0) or (MM > 59) then Exit;
-          Minutes := HH * 60 + MM;
-          Result := True;
-        end;
 
-        function MatchesRecurring(const Pattern: string; const NowUtc: TDateTime): Boolean;
-        begin
-          // If no pattern, no additional restriction.
-          Result := True;
-          if Pattern.Trim = '' then Exit;
-
-          // Only implement JSON recurrence for now; unknown formats are treated as non-restrictive.
-          var J := TJSONObject.ParseJSONValue(Pattern) as TJSONObject;
-          if J = nil then Exit(True);
-          try
-            // Days-of-week filter: 0=Sun..6=Sat
-            var DaysOk := True;
-            var DaysVal := J.GetValue('daysOfWeek');
-            if (DaysVal <> nil) and (DaysVal is TJSONArray) then
-            begin
-              DaysOk := False;
-              var Dow := DayOfWeek(NowUtc); // 1=Sun..7=Sat
-              var Dow0 := Dow - 1; // 0..6
-              for var V in TJSONArray(DaysVal) do
-                if StrToIntDef(V.Value, -1) = Dow0 then
-                begin
-                  DaysOk := True;
-                  Break;
-                end;
-            end;
-            if not DaysOk then Exit(False);
-
-            // Time-of-day window filter
-            var StartLocal := '';
-            var EndLocal := '';
-            var SV := J.GetValue('startLocal');
-            if (SV <> nil) and (not (SV is TJSONNull)) then StartLocal := SV.Value;
-            var EV := J.GetValue('endLocal');
-            if (EV <> nil) and (not (EV is TJSONNull)) then EndLocal := EV.Value;
-
-            if (StartLocal.Trim = '') and (EndLocal.Trim = '') then Exit(True);
-
-            var StartMin: Integer;
-            var EndMin: Integer;
-            if (StartLocal.Trim <> '') and (not TryParseHm(StartLocal.Trim, StartMin)) then Exit(True);
-            if (EndLocal.Trim <> '') and (not TryParseHm(EndLocal.Trim, EndMin)) then Exit(True);
-
-            var NowMin := HourOf(NowUtc) * 60 + MinuteOf(NowUtc);
-
-            // If only one bound provided, treat as open-ended.
-            if (StartLocal.Trim <> '') and (EndLocal.Trim = '') then
-              Exit(NowMin >= StartMin);
-            if (StartLocal.Trim = '') and (EndLocal.Trim <> '') then
-              Exit(NowMin <= EndMin);
-
-            // Both bounds provided.
-            if EndMin >= StartMin then
-              Result := (NowMin >= StartMin) and (NowMin <= EndMin)
-            else
-              // window spans midnight
-              Result := (NowMin >= StartMin) or (NowMin <= EndMin);
-          finally
-            J.Free;
-          end;
-        end;
-
-        function IsScheduleActive(const S: TSchedule; const NowUtc: TDateTime): Boolean;
-        begin
-          Result := True;
-          if (S.StartTime <> 0) and (NowUtc < S.StartTime) then Exit(False);
-          if (S.EndTime <> 0) and (NowUtc > S.EndTime) then Exit(False);
-          if not MatchesRecurring(S.RecurringPattern, NowUtc) then Exit(False);
-        end;
 
         // Lookup display by ProvisioningToken
         var C := NewConnection; try

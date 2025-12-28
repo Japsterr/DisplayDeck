@@ -10,12 +10,17 @@ Backend API for DisplayDeck, a digital signage SaaS. Linux-first, Dockerized sta
 
 ## Stack
 
-- Language: Delphi (Object Pascal)
-- Server: Delphi WebBroker + Indy (Linux console app)
-- DB: PostgreSQL (Docker)
-- Object storage: MinIO (S3-compatible, Docker)
-- Auth: JWT (HS256)
-- Docs: OpenAPI 3.0 at `docs/openapi.yaml` served by Swagger UI container
+- **Backend**:
+  - Language: Delphi (Object Pascal)
+  - Server: Delphi WebBroker + Indy (Linux console app)
+  - DB: PostgreSQL (Docker)
+  - Object storage: MinIO (S3-compatible, Docker)
+  - Auth: JWT (HS256)
+  - Docs: OpenAPI 3.0 at `docs/openapi.yaml` served by Swagger UI container
+- **Frontend (Website/Dashboard)**:
+  - Framework: Next.js 16 (React 19)
+  - UI: Tailwind CSS, Shadcn UI
+  - Drag & Drop: @hello-pangea/dnd
 
 ## Quick start (local)
 
@@ -256,6 +261,11 @@ docker push <your-dockerhub-username>/displaydeck-server:latest
 - The server image is Debian-based and already includes required runtime libs (libpq, SSL, krb5, etc.).
 
 ## Troubleshooting
+
+- **Website Build Errors (React 19)**:
+  - The project uses React 19, which may cause peer dependency conflicts with some libraries (like `@hello-pangea/dnd`).
+  - The `Dockerfile` for the website uses `npm ci --legacy-peer-deps` to resolve this.
+  - If running locally, use `npm install --legacy-peer-deps`.
 
 - 404/preview issues in Media Library after upgrades:
 	- If media records exist but the underlying object was never uploaded or has been removed from MinIO, thumbnails and previews may fail.

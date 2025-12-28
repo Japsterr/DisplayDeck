@@ -1,9 +1,9 @@
 # DisplayDeck Project Plan
 
-> Status update — 2025-10-16
+> Status update — 2025-12-28
 >
 > The server is Delphi WebBroker + Indy (Linux) with FireDAC + PostgreSQL and MinIO for media.
-> Swagger UI serves the OpenAPI v3 spec from `docs/openapi.yaml`.
+> The web dashboard (Next.js) is live and provides campaign management, media uploads, and display assignments.
 >
 > Key implemented endpoints include:
 > - Auth: /auth/login, /auth/register
@@ -111,7 +111,13 @@ This roadmap is divided into phases to manage development effectively.
 
 ### Phase 3: Client Development
 
-*   [ ] **Task 9:** Develop a simple web-based admin panel for managing the system.
+*   [X] **Task 9:** Develop a simple web-based admin panel for managing the system.
+    *   [X] Dashboard Home (Stats)
+    *   [X] Campaign Management (Create, Edit, Delete)
+    *   [X] Playlist Editor (Drag-and-Drop, Duration, Media Binding)
+    *   [X] Display Management (List, Status)
+    *   [X] Campaign Assignment (Assign campaigns to displays)
+    *   [X] Media Library (Upload, View, Delete)
 *   [ ] **Task 10:** Develop the Android TV display client.
 *   [ ] **Task 11:** Develop the reusable Delphi VCL/FMX display client component.
 
