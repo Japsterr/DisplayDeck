@@ -144,6 +144,8 @@ Swagger UI is served from the `swagger-ui` container and points to `docs/openapi
 
 ## Production Deployment
 
+### Option A: VPS (Standard)
+
 To deploy on a VPS with your domain (`displaydeck.co.za`):
 
 1.  **DNS Setup**: Point the following A records to your server's IP:
@@ -178,6 +180,29 @@ To deploy on a VPS with your domain (`displaydeck.co.za`):
     -   Docs: `http://docs.displaydeck.co.za`
 
     *Note: The provided configuration uses HTTP on port 80. For HTTPS, you should configure SSL certificates (e.g., using Certbot) in the `nginx/nginx.conf` file.*
+
+### Option B: Home Hosting (Cloudflare Tunnel)
+
+If you are hosting from a home PC (dynamic IP, no open ports), use **Cloudflare Tunnel**.
+
+1.  **Cloudflare Setup**:
+    -   Move your domain's nameservers to Cloudflare (Free).
+    -   Go to **Zero Trust > Access > Tunnels**.
+    -   Create a new tunnel and get the `TUNNEL_TOKEN`.
+    -   In the Public Hostnames tab, map your subdomains:
+        -   `api.displaydeck.co.za` -> `http://server:2001`
+        -   `minio.displaydeck.co.za` -> `http://minio:9000`
+        -   `console.displaydeck.co.za` -> `http://minio:9001`
+        -   `docs.displaydeck.co.za` -> `http://swagger-ui:8080`
+
+2.  **Run**:
+    Set your token in `.env` (`TUNNEL_TOKEN=...`) and run:
+
+    ```powershell
+    docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.tunnel.yml up -d
+    ```
+
+    This starts the stack + the secure tunnel. No port forwarding required.
 
 ## Publishing the container image
 
