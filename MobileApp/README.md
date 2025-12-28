@@ -4,7 +4,9 @@ Cross-platform FMX app (Android-first) to manage DisplayDeck: login/register, li
 
 ## Prereqs
 - RAD Studio with FMX (Community/Professional or higher) and Android SDK configured
-- Set API base URL in `MobileApp/Config/uAppConfig.pas` (default is Android emulator host loopback `http://10.0.2.2:2001`)
+- Set API base URL in `MobileApp/Config/uAppConfig.pas`:
+  - Local Emulator: `http://10.0.2.2:2001`
+  - Production: `http://api.displaydeck.co.za`
 
 ## Project
 - `MobileApp/DisplayDeckMobile.dpr`

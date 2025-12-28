@@ -135,6 +135,7 @@ begin
   StylePrimaryButton(btnUploadMedia);
   StylePrimaryButton(btnSaveMedia);
   StyleDangerButton(btnDeleteMedia);
+  StyleSecondaryButton(btnClearMedia);
   
   // Ensure layout responsiveness
   LayoutDetail.Align := TAlignLayout.Right;

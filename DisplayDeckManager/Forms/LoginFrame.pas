@@ -26,8 +26,11 @@ type
     LayoutSpacer2: TLayout;
     edPassword: TEdit;
     LayoutSpacer3: TLayout;
-    btnLogin: TButton;
+    RectLoginBtn: TRectangle;
+    LblLoginBtn: TLabel;
     LayoutSpacer4: TLayout;
+    RectLoginError: TRectangle;
+    LblLoginError: TLabel;
     lblRegister: TLabel;
     LayoutBottom: TLayout;
     procedure btnLoginClick(Sender: TObject);
@@ -52,11 +55,7 @@ implementation
 procedure TFrame1.Initialize;
 begin
   // Gradient background for visual interest - VIBRANT & DARK
-  RectBackground.Fill.Kind := TBrushKind.Gradient;
-  RectBackground.Fill.Gradient.StartPosition.Point := TPointF.Create(0, 0);
-  RectBackground.Fill.Gradient.StopPosition.Point := TPointF.Create(1, 1);
-  RectBackground.Fill.Gradient.Color := $FF0F172A; // Slate 900 (Dark)
-  RectBackground.Fill.Gradient.Color1 := $FF2563EB; // Blue 600 (Vibrant)
+  StyleGradientBackground(RectBackground);
   
   StyleCard(RectCard);
   // Center the card
@@ -71,9 +70,41 @@ begin
   
   StyleInput(edEmail);
   StyleInput(edPassword);
-  StylePrimaryButton(btnLogin);
-  btnLogin.Height := 50; // Even taller button
-  btnLogin.Margins.Top := 20;
+  // Use a style-independent button surface (rectangle + label)
+  RectLoginBtn.Fill.Kind := TBrushKind.Solid;
+  RectLoginBtn.Fill.Color := ColorPrimary;
+  RectLoginBtn.Stroke.Kind := TBrushKind.None;
+  RectLoginBtn.XRadius := 10;
+  RectLoginBtn.YRadius := 10;
+  RectLoginBtn.Height := 50;
+  RectLoginBtn.Margins.Top := 20;
+  RectLoginBtn.Cursor := crHandPoint;
+  RectLoginBtn.HitTest := True;
+  LblLoginBtn.TextSettings.FontColor := TAlphaColorRec.White;
+  LblLoginBtn.StyledSettings := LblLoginBtn.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+  LblLoginBtn.TextSettings.Font.Size := 16;
+  LblLoginBtn.TextSettings.Font.Style := [TFontStyle.fsBold];
+  LblLoginBtn.TextSettings.HorzAlign := TTextAlign.Center;
+  LblLoginBtn.TextSettings.VertAlign := TTextAlign.Center;
+  LblLoginBtn.HitTest := False;
+  LblLoginBtn.Text := 'Login';
+
+  // Inline error callout (themed)
+  if Assigned(RectLoginError) then
+  begin
+    RectLoginError.Fill.Kind := TBrushKind.Solid;
+    RectLoginError.Fill.Color := $FFFEE2E2; // Red 100
+    RectLoginError.Stroke.Kind := TBrushKind.None;
+    RectLoginError.XRadius := 10;
+    RectLoginError.YRadius := 10;
+    RectLoginError.Visible := False;
+  end;
+  if Assigned(LblLoginError) then
+  begin
+    LblLoginError.TextSettings.FontColor := $FF991B1B; // Red 800
+    LblLoginError.StyledSettings := LblLoginError.StyledSettings - [TStyledSetting.FontColor];
+    LblLoginError.WordWrap := True;
+  end;
   
   // Style register link
   lblRegister.TextSettings.FontColor := $FFFFFFFF; // White text on dark bg (if outside card) or Primary if inside
@@ -95,9 +126,13 @@ begin
   if not ValidateInput then
     Exit;
 
-  // Disable button to prevent double-clicks
-  btnLogin.Enabled := False;
-  btnLogin.Text := 'Logging in...';
+  if Assigned(RectLoginError) then
+    RectLoginError.Visible := False;
+
+  // Prevent double-clicks without relying on styled disabled state.
+  RectLoginBtn.HitTest := False;
+  RectLoginBtn.Opacity := 0.92;
+  LblLoginBtn.Text := 'Logging in...';
   
   try
     // Call API to authenticate
@@ -105,9 +140,6 @@ begin
     
     if LoginResult.Success then
     begin
-      // Show success message
-      ShowMessage('Login successful! Welcome back.');
-      
       // Clear password field for security
       edPassword.Text := '';
       
@@ -121,15 +153,17 @@ begin
     begin
       // Show error message
       ShowError(LoginResult.Message);
-      btnLogin.Enabled := True;
-      btnLogin.Text := 'Login';
+      RectLoginBtn.HitTest := True;
+      RectLoginBtn.Opacity := 1.0;
+      LblLoginBtn.Text := 'Login';
     end;
   except
     on E: Exception do
     begin
       ShowError('Login failed: ' + E.Message);
-      btnLogin.Enabled := True;
-      btnLogin.Text := 'Login';
+      RectLoginBtn.HitTest := True;
+      RectLoginBtn.Opacity := 1.0;
+      LblLoginBtn.Text := 'Login';
     end;
   end;
 end;
@@ -182,6 +216,14 @@ end;
 
 procedure TFrame1.ShowError(const AMessage: string);
 begin
+  if Assigned(LblLoginError) and Assigned(RectLoginError) then
+  begin
+    LblLoginError.Text := AMessage;
+    RectLoginError.Visible := True;
+    Exit;
+  end;
+
+  // Fallback
   TDialogServiceSync.MessageDialog(AMessage, TMsgDlgType.mtError, [TMsgDlgBtn.mbOK], TMsgDlgBtn.mbOK, 0);
 end;
 

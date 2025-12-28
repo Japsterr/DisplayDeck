@@ -1,4 +1,4 @@
-# DisplayDeck integration status (Dec 21, 2025)
+# DisplayDeck integration status (Dec 28, 2025)
 
 This note summarizes the current “server ↔ OpenAPI ↔ tests ↔ clients” alignment and the remaining integration risks.
 
@@ -12,6 +12,7 @@ This note summarizes the current “server ↔ OpenAPI ↔ tests ↔ clients” 
   - the PowerShell scripts under `tests/`
   - server behavior for `201` create responses and public `/auth/*` endpoints.
 - **XData-era artifacts removed**: the old XData/Sparkle-style server/client prototypes and stale `/tms/xdata` URL references were removed.
+- **Production Deployment Prep**: Docker Compose configurations for production with Nginx reverse proxy are being finalized.
 
 ## Remaining integration risks / inconsistencies
 
@@ -22,9 +23,7 @@ This note summarizes the current “server ↔ OpenAPI ↔ tests ↔ clients” 
 2) **Presigned MinIO URL host/signature behavior (medium risk)**
 - SigV4 presigned URLs depend on the host/header used during signing.
 - If a client “rewrites” `http://minio:9000/...` to `http://localhost:9000/...`, the signature can become invalid.
-- Recommendation:
-  - Server should sign URLs using a hostname that clients can actually resolve (env-configured, e.g. `MINIO_PUBLIC_ENDPOINT`).
-  - If local dev needs `minio`, document adding a hosts entry or use a reverse proxy.
+- **Mitigation**: In production, `MINIO_PUBLIC_ENDPOINT` should be set to the actual domain (e.g., `https://minio.displaydeck.co.za`).
 
 3) **Client configuration drift (low/medium risk)**
 - Clients persist base URL/token state locally; this can mask environment issues (e.g., one client points at `/api`, another at root).
@@ -41,11 +40,9 @@ This note summarizes the current “server ↔ OpenAPI ↔ tests ↔ clients” 
 
 ## Suggested next steps (practical)
 
-- Add a short “**Base URL + Auth**” section to the main README that states:
-  - Base URL examples
-  - `/api` prefix support
-  - required auth header format
-- If you want the OpenAPI spec to be a stricter contract, we can:
+- [x] Add a short “**Base URL + Auth**” section to the main README.
+- [ ] If you want the OpenAPI spec to be a stricter contract, we can:
   - add/verify `security` requirements per-path (not just globally)
   - add response schemas for common error bodies (401/403/404)
   - ensure every path used by tests has an operationId and documented request bodies.
+

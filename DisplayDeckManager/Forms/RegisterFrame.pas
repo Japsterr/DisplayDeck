@@ -30,8 +30,11 @@ type
     LayoutSpacer4: TLayout;
     edPasswordConfirm: TEdit;
     LayoutSpacer5: TLayout;
-    btnRegister: TButton;
+    RectRegisterBtn: TRectangle;
+    LblRegisterBtn: TLabel;
     LayoutSpacer6: TLayout;
+    RectRegisterError: TRectangle;
+    LblRegisterError: TLabel;
     lblLogin: TLabel;
     LayoutBottom: TLayout;
     procedure btnRegisterClick(Sender: TObject);
@@ -55,22 +58,66 @@ implementation
 
 procedure TFrame2.Initialize;
 begin
-  StyleBackground(RectBackground);
+  // Match Login screen styling for a consistent auth experience
+  StyleGradientBackground(RectBackground);
+
   StyleCard(RectCard);
+  LayoutCenter.Align := TAlignLayout.Center;
+  RectCard.Width := 420;
+  RectCard.Height := 620;
+
   StyleHeaderLabel(lblTitle);
+  lblTitle.TextAlign := TTextAlign.Center;
+  lblTitle.TextSettings.FontColor := ColorPrimary;
+  lblTitle.StyledSettings := lblTitle.StyledSettings - [TStyledSetting.FontColor];
   
   StyleInput(edOrganizationName);
   StyleInput(edEmail);
   StyleInput(edPassword);
   StyleInput(edPasswordConfirm);
-  
-  StylePrimaryButton(btnRegister);
+
+  // Use a style-independent button surface (rectangle + label)
+  RectRegisterBtn.Fill.Kind := TBrushKind.Solid;
+  RectRegisterBtn.Fill.Color := ColorPrimary;
+  RectRegisterBtn.Stroke.Kind := TBrushKind.None;
+  RectRegisterBtn.XRadius := 10;
+  RectRegisterBtn.YRadius := 10;
+  RectRegisterBtn.Height := 50;
+  RectRegisterBtn.Margins.Top := 10;
+  RectRegisterBtn.Cursor := crHandPoint;
+  RectRegisterBtn.HitTest := True;
+  LblRegisterBtn.TextSettings.FontColor := TAlphaColorRec.White;
+  LblRegisterBtn.StyledSettings := LblRegisterBtn.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+  LblRegisterBtn.TextSettings.Font.Size := 16;
+  LblRegisterBtn.TextSettings.Font.Style := [TFontStyle.fsBold];
+  LblRegisterBtn.TextSettings.HorzAlign := TTextAlign.Center;
+  LblRegisterBtn.TextSettings.VertAlign := TTextAlign.Center;
+  LblRegisterBtn.HitTest := False;
+  LblRegisterBtn.Text := 'Create Account';
+
+  // Inline error callout (themed)
+  if Assigned(RectRegisterError) then
+  begin
+    RectRegisterError.Fill.Kind := TBrushKind.Solid;
+    RectRegisterError.Fill.Color := $FFFEE2E2; // Red 100
+    RectRegisterError.Stroke.Kind := TBrushKind.None;
+    RectRegisterError.XRadius := 10;
+    RectRegisterError.YRadius := 10;
+    RectRegisterError.Visible := False;
+  end;
+  if Assigned(LblRegisterError) then
+  begin
+    LblRegisterError.TextSettings.FontColor := $FF991B1B; // Red 800
+    LblRegisterError.StyledSettings := LblRegisterError.StyledSettings - [TStyledSetting.FontColor];
+    LblRegisterError.WordWrap := True;
+  end;
   
   // Style login link
   lblLogin.TextSettings.FontColor := ColorPrimary;
   lblLogin.StyledSettings := lblLogin.StyledSettings - [TStyledSetting.FontColor];
   lblLogin.Cursor := crHandPoint;
   lblLogin.HitTest := True;
+  lblLogin.TextAlign := TTextAlign.Center;
 end;
 
 procedure TFrame2.btnRegisterClick(Sender: TObject);
@@ -81,9 +128,13 @@ begin
   if not ValidateInput then
     Exit;
 
-  // Disable button to prevent double-clicks
-  btnRegister.Enabled := False;
-  btnRegister.Text := 'Creating account...';
+  if Assigned(RectRegisterError) then
+    RectRegisterError.Visible := False;
+
+  // Prevent double-clicks without relying on styled disabled state.
+  RectRegisterBtn.HitTest := False;
+  RectRegisterBtn.Opacity := 0.92;
+  LblRegisterBtn.Text := 'Creating account...';
   
   try
     // Call API to register
@@ -92,9 +143,6 @@ begin
     
     if RegisterResult.Success then
     begin
-      // Show success confirmation to user
-      ShowMessage('Account created successfully! Logging you in...');
-      
       // Clear password fields for security
       edPassword.Text := '';
       edPasswordConfirm.Text := '';
@@ -110,15 +158,17 @@ begin
     begin
       // Show error message
       ShowError(RegisterResult.Message);
-      btnRegister.Enabled := True;
-      btnRegister.Text := 'Create Account';
+      RectRegisterBtn.HitTest := True;
+      RectRegisterBtn.Opacity := 1.0;
+      LblRegisterBtn.Text := 'Create Account';
     end;
   except
     on E: Exception do
     begin
       ShowError('Registration failed: ' + E.Message);
-      btnRegister.Enabled := True;
-      btnRegister.Text := 'Create Account';
+      RectRegisterBtn.HitTest := True;
+      RectRegisterBtn.Opacity := 1.0;
+      LblRegisterBtn.Text := 'Create Account';
     end;
   end;
 end;
@@ -203,6 +253,14 @@ end;
 
 procedure TFrame2.ShowError(const AMessage: string);
 begin
+  if Assigned(LblRegisterError) and Assigned(RectRegisterError) then
+  begin
+    LblRegisterError.Text := AMessage;
+    RectRegisterError.Visible := True;
+    Exit;
+  end;
+
+  // Fallback
   TDialogServiceSync.MessageDialog(AMessage, TMsgDlgType.mtError, [TMsgDlgBtn.mbOK], TMsgDlgBtn.mbOK, 0);
 end;
 

@@ -108,6 +108,15 @@ cd tests
 
 Expected result: the script reports PUT/GET 200 and `Media upload/download SUCCESS`.
 
+## Base URL + Auth
+
+- **Base URL**: The server supports both root-level and `/api` prefixed routes.
+  - Local: `http://localhost:2001` or `http://localhost:2001/api`
+  - Production: `http://api.displaydeck.co.za` or `http://api.displaydeck.co.za/api`
+- **Authentication**:
+  - All protected endpoints require a JWT.
+  - Header: `Authorization: Bearer <token>`
+
 ## API overview
 
 Key routes (full spec in `docs/openapi.yaml`):
@@ -133,23 +142,42 @@ Swagger UI is served from the `swagger-ui` container and points to `docs/openapi
 - Start it: `docker compose up -d swagger-ui`
 - Open: http://localhost:8080
 
-## Out-of-the-box deployment
+## Production Deployment
 
-If you prefer to run without building locally, use the production compose override and a prebuilt image:
+To deploy on a VPS with your domain (`displaydeck.co.za`):
 
-1) Copy `.env.example` to `.env` and set a strong `JWT_SECRET`.
-2) Use `docker-compose.prod.yml` (references a prebuilt image):
+1.  **DNS Setup**: Point the following A records to your server's IP:
+    -   `api.displaydeck.co.za`
+    -   `minio.displaydeck.co.za`
+    -   `console.displaydeck.co.za`
+    -   `docs.displaydeck.co.za`
 
-```powershell
-docker compose --env-file .env -f docker-compose.prod.yml up -d
-```
+2.  **Environment**:
+    -   Copy `.env.example` to `.env`.
+    -   Set a strong `JWT_SECRET`.
+    -   Set `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` to strong values.
+    -   Set `SERVER_TAG` to the desired version (e.g., `latest` or `0.1.7`).
 
-Note: Until you publish the image to a registry, you can still run locally by building it:
+3.  **Run**:
+    Use the production compose file which includes an Nginx reverse proxy:
 
-```powershell
-docker compose build server
-docker compose up -d server
-```
+    ```powershell
+    docker compose --env-file .env -f docker-compose.prod.yml up -d
+    ```
+
+    This will start:
+    -   **Nginx** (listening on port 80, routing by hostname)
+    -   **Server** (internal port 2001)
+    -   **MinIO** (internal ports 9000/9001)
+    -   **Postgres** (internal port 5432)
+    -   **Swagger UI** (internal port 8080)
+
+4.  **Access**:
+    -   API: `http://api.displaydeck.co.za`
+    -   MinIO Console: `http://console.displaydeck.co.za`
+    -   Docs: `http://docs.displaydeck.co.za`
+
+    *Note: The provided configuration uses HTTP on port 80. For HTTPS, you should configure SSL certificates (e.g., using Certbot) in the `nginx/nginx.conf` file.*
 
 ## Publishing the container image
 

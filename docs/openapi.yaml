@@ -656,6 +656,118 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignItem'
 
+  /campaigns/{CampaignId}/schedules:
+    get:
+      summary: List schedules for campaign
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: CampaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Schedule'
+    post:
+      summary: Create schedule for campaign
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: CampaignId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleUpsert'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+
+  /schedules/{Id}:
+    get:
+      summary: Get schedule by id
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+    put:
+      summary: Update schedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleUpsert'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+    delete:
+      summary: Delete schedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+
   /campaign-items/{Id}:
     get:
       summary: Get campaign item by id
@@ -1287,6 +1399,30 @@ components:
         DisplayOrder: { type: integer }
         Duration: { type: integer }
       required: [MediaFileId]
+
+    Schedule:
+      type: object
+      properties:
+        Id: { type: integer }
+        CampaignId: { type: integer }
+        StartTime: { type: string, format: date-time, nullable: true }
+        EndTime: { type: string, format: date-time, nullable: true }
+        RecurringPattern:
+          type: string
+          nullable: true
+          description: |
+            Optional recurrence definition. Stored verbatim.
+
+            Recommended format (JSON):
+            {"tz":"UTC","daysOfWeek":[1,2,3,4,5],"startLocal":"09:00","endLocal":"17:00"}
+
+            daysOfWeek: 0=Sun..6=Sat
+    ScheduleUpsert:
+      type: object
+      properties:
+        StartTime: { type: string, format: date-time, nullable: true }
+        EndTime: { type: string, format: date-time, nullable: true }
+        RecurringPattern: { type: string, nullable: true }
     Subscription:
       type: object
       properties:

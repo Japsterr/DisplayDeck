@@ -43,6 +43,7 @@ type
     FCurrentOrgId: Integer;
     FCurrentOrgName: string;
     FAuthToken: string;
+    FContentBg: TRectangle;
     procedure LoadLoginFrame;
     procedure LoadRegisterFrame;
     procedure LoadDashboardFrame;
@@ -76,8 +77,35 @@ implementation
 
 {$R *.fmx}
 
+uses
+  System.IniFiles, uAppSettings;
+
 procedure TForm1.FormCreate(Sender: TObject);
 begin
+  // Load theme settings as early as possible so Login/Register frames initialize with correct colors.
+  try
+    var IniFile := TIniFile.Create(GetSettingsIniPath);
+    try
+      SetTypographyScale(IniFile.ReadFloat('Theme', 'FontScale', 1.0));
+      var PresetName := IniFile.ReadString('Theme', 'Preset', '');
+      var Preset: TThemePreset;
+      if (PresetName <> '') and TryParseThemePreset(PresetName, Preset) then
+        SetThemePreset(Preset, False)
+      else
+      begin
+        // Backward compatibility
+        if IniFile.ReadBool('Theme', 'DarkMode', False) then
+          SetThemePreset(tpDarkBlue, False)
+        else
+          SetThemePreset(tpLightBlue, False);
+      end;
+    finally
+      IniFile.Free;
+    end;
+  except
+    // Ignore settings load issues; defaults are fine.
+  end;
+
   // Initialize fields to prevent garbage values
   FCurrentUserId := 0;
   FCurrentOrgId := 0;
@@ -117,13 +145,13 @@ begin
   if Assigned(NavRect) then StyleNavBackground(NavRect);
   
   // Ensure main content area has a background (fixes "white UI" issue)
-  var ContentBg := TRectangle.Create(Self);
-  ContentBg.Parent := LayoutContent;
-  ContentBg.Align := TAlignLayout.Contents;
-  ContentBg.Fill.Kind := TBrushKind.Solid;
-  ContentBg.Fill.Color := ColorBg; // Use theme background
-  ContentBg.Stroke.Kind := TBrushKind.None;
-  ContentBg.SendToBack;
+  FContentBg := TRectangle.Create(Self);
+  FContentBg.Parent := LayoutContent;
+  FContentBg.Align := TAlignLayout.Contents;
+  FContentBg.Fill.Kind := TBrushKind.Solid;
+  FContentBg.Fill.Color := ColorBg; // Use theme background
+  FContentBg.Stroke.Kind := TBrushKind.None;
+  FContentBg.SendToBack;
 
   // Style menu items: first one active by default
   for var i := 0 to lstMenu.Items.Count - 1 do
@@ -134,6 +162,9 @@ begin
   end;
   // Register callback for live dark/light mode changes
   RegisterThemeChangedCallback(ApplyGlobalTheme);
+
+  // Apply startup theme to navigation/menu/background immediately.
+  ApplyGlobalTheme;
 end;
 
 procedure TForm1.ClearCurrentFrame;
@@ -182,6 +213,10 @@ procedure TForm1.ApplyGlobalTheme;
 var
   NavRect: TRectangle;
 begin
+  // Restyle main content background
+  if Assigned(FContentBg) then
+    FContentBg.Fill.Color := ColorBg;
+
   // Restyle navigation background
   NavRect := Rectangle1;
   if Assigned(NavRect) then StyleNavBackground(NavRect);
@@ -193,7 +228,6 @@ begin
   begin
     if FCurrentFrame is TDashboardFrame then // Dashboard
     begin
-      var D := TDashboardFrame(FCurrentFrame);
       // StyleBackground(D.RectBackground); // Removed in new design
       // StyleCard(D.RectQuickActions); // Removed in new design
       // StyleCard(D.RectCardDisplays); // Removed in new design
@@ -235,6 +269,10 @@ begin
       StyleHeaderLabel(SF.lblTitle);
     end;
   end;
+
+  // Ensure all buttons in the admin UI remain readable, regardless of FMX style templates.
+  EnsureButtonsReadable(LayoutNavigation);
+  EnsureButtonsReadable(LayoutContent);
 end;
 
 procedure TForm1.LoadLoginFrame;

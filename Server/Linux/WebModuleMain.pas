@@ -67,7 +67,8 @@ var
   RequestId: string;
   ClientIp: string;
   UserAgent: string;
-  IdempotencyKey: string;
+    DisplayCampaignRepository,
+    ScheduleRepository,
   AuthApiKeyId: Int64;
   AuthKind: string;
   // Local helper to reply 501 for yet-to-be-implemented endpoints
@@ -249,6 +250,7 @@ var
       RawToken := Request.GetFieldByName('X-Auth-Token');
       if RawToken='' then RawToken := Request.GetFieldByName('x-auth-token');
       if RawToken='' then RawToken := Request.GetFieldByName('X_AUTH_TOKEN');
+      System.Generics.Collections,
       if RawToken.StartsWith('Bearer ') then RawToken := RawToken.Substring(7);
     end;
 
@@ -1275,6 +1277,20 @@ begin
             var CampaignId := Body.GetValue<Integer>('CampaignId',0);
             var IsPrimary := Body.GetValue<Boolean>('IsPrimary',True);
             if CampaignId=0 then begin JSONError(400,'Missing CampaignId'); Exit; end;
+
+            // Enforce orientation match (displays have no gyro; campaigns must fit)
+            var Cmp := TCampaignRepository.GetById(CampaignId);
+            if Cmp=nil then begin JSONError(404,'Campaign not found'); Exit; end;
+            try
+              if (Cmp.Orientation<>'') and (Disp.Orientation<>'') and (not SameText(Cmp.Orientation, Disp.Orientation)) then
+              begin
+                JSONError(400, 'Campaign orientation does not match display orientation');
+                Exit;
+              end;
+            finally
+              Cmp.Free;
+            end;
+
             var A := TDisplayCampaignRepository.CreateAssignment(Id, CampaignId, IsPrimary);
             try
               var Obj := TJSONObject.Create; Obj.AddPair('Id', TJSONNumber.Create(A.Id)); Obj.AddPair('CampaignId', TJSONNumber.Create(A.CampaignId)); Obj.AddPair('IsPrimary', TJSONBool.Create(A.IsPrimary));
@@ -1356,7 +1372,102 @@ begin
     // Campaigns and items
     if (Copy(NormalizedPath, 1, 11) = '/campaigns/') then
     begin
-      if Pos('/items', NormalizedPath) > 0 then
+      if Pos('/schedules', NormalizedPath) > 0 then
+      begin
+        // /campaigns/{CampaignId}/schedules
+        var IdStr := Copy(NormalizedPath, 12, MaxInt);
+        var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
+        var CampId := StrToIntDef(IdStr,0); if CampId=0 then begin JSONError(400,'Invalid campaign id'); Exit; end;
+
+        var Camp := TCampaignRepository.GetById(CampId);
+        if Camp=nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>Camp.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          if SameText(Request.Method,'GET') then
+          begin
+            var L := TScheduleRepository.ListByCampaign(CampId);
+            try
+              var Arr := TJSONArray.Create;
+              try
+                for var S in L do
+                begin
+                  var O := TJSONObject.Create;
+                  O.AddPair('Id', TJSONNumber.Create(S.Id));
+                  O.AddPair('CampaignId', TJSONNumber.Create(S.CampaignId));
+                  if S.StartTime <> 0 then O.AddPair('StartTime', DateToISO8601(S.StartTime, True)) else O.AddPair('StartTime', TJSONNull.Create);
+                  if S.EndTime <> 0 then O.AddPair('EndTime', DateToISO8601(S.EndTime, True)) else O.AddPair('EndTime', TJSONNull.Create);
+                  if S.RecurringPattern <> '' then O.AddPair('RecurringPattern', S.RecurringPattern) else O.AddPair('RecurringPattern', TJSONNull.Create);
+                  Arr.AddElement(O);
+                end;
+                var Wrapper := TJSONObject.Create;
+                try
+                  Wrapper.AddPair('value', Arr);
+                  Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+                finally Wrapper.Free; end;
+              finally Arr.Free; end;
+            finally L.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'POST') then
+          begin
+            if TryReplayIdempotency(Camp.OrganizationId) then Exit;
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var StartStrVal := Body.GetValue('StartTime');
+              var EndStrVal := Body.GetValue('EndTime');
+              var RecVal := Body.GetValue('RecurringPattern');
+
+              var HasStart := False;
+              var HasEnd := False;
+              var StartAt: TDateTime := 0;
+              var EndAt: TDateTime := 0;
+
+              if (StartStrVal<>nil) and (not (StartStrVal is TJSONNull)) then
+              begin
+                HasStart := TryISO8601ToDate(StartStrVal.Value, StartAt, True);
+                if not HasStart then begin JSONError(400,'Invalid StartTime'); Exit; end;
+              end;
+              if (EndStrVal<>nil) and (not (EndStrVal is TJSONNull)) then
+              begin
+                HasEnd := TryISO8601ToDate(EndStrVal.Value, EndAt, True);
+                if not HasEnd then begin JSONError(400,'Invalid EndTime'); Exit; end;
+              end;
+              if HasStart and HasEnd and (EndAt < StartAt) then begin JSONError(400,'EndTime must be >= StartTime'); Exit; end;
+
+              var Rec := '';
+              if (RecVal<>nil) and (not (RecVal is TJSONNull)) then
+                Rec := RecVal.Value;
+
+              var S := TScheduleRepository.CreateSchedule(CampId, StartAt, EndAt, HasStart, HasEnd, Rec);
+              try
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(S.Id));
+                O.AddPair('CampaignId', TJSONNumber.Create(S.CampaignId));
+                if HasStart then O.AddPair('StartTime', DateToISO8601(S.StartTime, True)) else O.AddPair('StartTime', TJSONNull.Create);
+                if HasEnd then O.AddPair('EndTime', DateToISO8601(S.EndTime, True)) else O.AddPair('EndTime', TJSONNull.Create);
+                if S.RecurringPattern <> '' then O.AddPair('RecurringPattern', S.RecurringPattern) else O.AddPair('RecurringPattern', TJSONNull.Create);
+                var OutBody := O.ToJSON;
+                O.Free;
+                StoreIdempotency(Camp.OrganizationId, 201, OutBody);
+                Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+              finally S.Free; end;
+            finally Body.Free; end;
+            Exit;
+          end;
+        finally Camp.Free; end;
+      end
+      else if Pos('/items', NormalizedPath) > 0 then
       begin
         var IdStr := Copy(NormalizedPath, 12, MaxInt);
         var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
@@ -1462,6 +1573,95 @@ begin
         finally
           Cmp0.Free;
         end;
+      end;
+    end;
+
+    // Schedules CRUD
+    if (Copy(NormalizedPath, 1, 11) = '/schedules/') then
+    begin
+      var IdStr := Copy(NormalizedPath, 12, MaxInt);
+      var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid schedule id'); Exit; end;
+      var S0 := TScheduleRepository.GetById(Id);
+      if S0=nil then begin JSONError(404,'Not found'); Exit; end;
+      var Camp0 := TCampaignRepository.GetById(S0.CampaignId);
+      if Camp0=nil then begin S0.Free; JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+        end
+        else
+        begin
+          if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>Camp0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        if SameText(Request.Method,'GET') then
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(S0.Id));
+          O.AddPair('CampaignId', TJSONNumber.Create(S0.CampaignId));
+          if S0.StartTime <> 0 then O.AddPair('StartTime', DateToISO8601(S0.StartTime, True)) else O.AddPair('StartTime', TJSONNull.Create);
+          if S0.EndTime <> 0 then O.AddPair('EndTime', DateToISO8601(S0.EndTime, True)) else O.AddPair('EndTime', TJSONNull.Create);
+          if S0.RecurringPattern <> '' then O.AddPair('RecurringPattern', S0.RecurringPattern) else O.AddPair('RecurringPattern', TJSONNull.Create);
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          Exit;
+        end
+        else if SameText(Request.Method,'PUT') then
+        begin
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var StartStrVal := Body.GetValue('StartTime');
+            var EndStrVal := Body.GetValue('EndTime');
+            var RecVal := Body.GetValue('RecurringPattern');
+
+            var HasStart := False;
+            var HasEnd := False;
+            var StartAt: TDateTime := 0;
+            var EndAt: TDateTime := 0;
+
+            if (StartStrVal<>nil) and (not (StartStrVal is TJSONNull)) then
+            begin
+              HasStart := TryISO8601ToDate(StartStrVal.Value, StartAt, True);
+              if not HasStart then begin JSONError(400,'Invalid StartTime'); Exit; end;
+            end;
+            if (EndStrVal<>nil) and (not (EndStrVal is TJSONNull)) then
+            begin
+              HasEnd := TryISO8601ToDate(EndStrVal.Value, EndAt, True);
+              if not HasEnd then begin JSONError(400,'Invalid EndTime'); Exit; end;
+            end;
+            if HasStart and HasEnd and (EndAt < StartAt) then begin JSONError(400,'EndTime must be >= StartTime'); Exit; end;
+
+            var Rec := '';
+            if (RecVal<>nil) and (not (RecVal is TJSONNull)) then
+              Rec := RecVal.Value;
+
+            var S := TScheduleRepository.UpdateSchedule(Id, StartAt, EndAt, HasStart, HasEnd, Rec);
+            if S=nil then begin JSONError(404,'Not found'); Exit; end;
+            try
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(S.Id));
+              O.AddPair('CampaignId', TJSONNumber.Create(S.CampaignId));
+              if HasStart then O.AddPair('StartTime', DateToISO8601(S.StartTime, True)) else O.AddPair('StartTime', TJSONNull.Create);
+              if HasEnd then O.AddPair('EndTime', DateToISO8601(S.EndTime, True)) else O.AddPair('EndTime', TJSONNull.Create);
+              if S.RecurringPattern <> '' then O.AddPair('RecurringPattern', S.RecurringPattern) else O.AddPair('RecurringPattern', TJSONNull.Create);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            finally S.Free; end;
+          finally Body.Free; end;
+          Exit;
+        end
+        else if SameText(Request.Method,'DELETE') then
+        begin
+          TScheduleRepository.DeleteSchedule(Id);
+          Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+          Exit;
+        end;
+
+      finally
+        Camp0.Free;
+        S0.Free;
       end;
     end;
 
@@ -2049,6 +2249,89 @@ begin
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var ProvisioningToken := Body.GetValue<string>('ProvisioningToken',''); if ProvisioningToken='' then begin JSONError(400,'Missing ProvisioningToken'); Exit; end;
+
+        function TryParseHm(const S: string; out Minutes: Integer): Boolean;
+        begin
+          Result := False;
+          Minutes := 0;
+          var P := Pos(':', S);
+          if P <= 0 then Exit;
+          var HH := StrToIntDef(Copy(S, 1, P-1), -1);
+          var MM := StrToIntDef(Copy(S, P+1, 2), -1);
+          if (HH < 0) or (HH > 23) or (MM < 0) or (MM > 59) then Exit;
+          Minutes := HH * 60 + MM;
+          Result := True;
+        end;
+
+        function MatchesRecurring(const Pattern: string; const NowUtc: TDateTime): Boolean;
+        begin
+          // If no pattern, no additional restriction.
+          Result := True;
+          if Pattern.Trim = '' then Exit;
+
+          // Only implement JSON recurrence for now; unknown formats are treated as non-restrictive.
+          var J := TJSONObject.ParseJSONValue(Pattern) as TJSONObject;
+          if J = nil then Exit(True);
+          try
+            // Days-of-week filter: 0=Sun..6=Sat
+            var DaysOk := True;
+            var DaysVal := J.GetValue('daysOfWeek');
+            if (DaysVal <> nil) and (DaysVal is TJSONArray) then
+            begin
+              DaysOk := False;
+              var Dow := DayOfWeek(NowUtc); // 1=Sun..7=Sat
+              var Dow0 := Dow - 1; // 0..6
+              for var V in TJSONArray(DaysVal) do
+                if StrToIntDef(V.Value, -1) = Dow0 then
+                begin
+                  DaysOk := True;
+                  Break;
+                end;
+            end;
+            if not DaysOk then Exit(False);
+
+            // Time-of-day window filter
+            var StartLocal := '';
+            var EndLocal := '';
+            var SV := J.GetValue('startLocal');
+            if (SV <> nil) and (not (SV is TJSONNull)) then StartLocal := SV.Value;
+            var EV := J.GetValue('endLocal');
+            if (EV <> nil) and (not (EV is TJSONNull)) then EndLocal := EV.Value;
+
+            if (StartLocal.Trim = '') and (EndLocal.Trim = '') then Exit(True);
+
+            var StartMin: Integer;
+            var EndMin: Integer;
+            if (StartLocal.Trim <> '') and (not TryParseHm(StartLocal.Trim, StartMin)) then Exit(True);
+            if (EndLocal.Trim <> '') and (not TryParseHm(EndLocal.Trim, EndMin)) then Exit(True);
+
+            var NowMin := HourOf(NowUtc) * 60 + MinuteOf(NowUtc);
+
+            // If only one bound provided, treat as open-ended.
+            if (StartLocal.Trim <> '') and (EndLocal.Trim = '') then
+              Exit(NowMin >= StartMin);
+            if (StartLocal.Trim = '') and (EndLocal.Trim <> '') then
+              Exit(NowMin <= EndMin);
+
+            // Both bounds provided.
+            if EndMin >= StartMin then
+              Result := (NowMin >= StartMin) and (NowMin <= EndMin)
+            else
+              // window spans midnight
+              Result := (NowMin >= StartMin) or (NowMin <= EndMin);
+          finally
+            J.Free;
+          end;
+        end;
+
+        function IsScheduleActive(const S: TSchedule; const NowUtc: TDateTime): Boolean;
+        begin
+          Result := True;
+          if (S.StartTime <> 0) and (NowUtc < S.StartTime) then Exit(False);
+          if (S.EndTime <> 0) and (NowUtc > S.EndTime) then Exit(False);
+          if not MatchesRecurring(S.RecurringPattern, NowUtc) then Exit(False);
+        end;
+
         // Lookup display by ProvisioningToken
         var C := NewConnection; try
           var Q := TFDQuery.Create(nil); try
@@ -2068,14 +2351,54 @@ begin
             var Assigns := TDisplayCampaignRepository.ListByDisplay(DisplayId);
             try
               var ArrC := TJSONArray.Create; try
+                var NowUtc := TTimeZone.Local.ToUniversalTime(Now);
+                var Seen := TDictionary<Integer, Boolean>.Create;
+                try
                 for var A in Assigns do
                 begin
+                  // De-dupe by campaign id
+                  if Seen.ContainsKey(A.CampaignId) then
+                    Continue;
+                  Seen.Add(A.CampaignId, True);
+
                   var Camp := TCampaignRepository.GetById(A.CampaignId);
                   if Camp<>nil then
                   try
-                    var OC := TJSONObject.Create; OC.AddPair('Id', TJSONNumber.Create(Camp.Id)); OC.AddPair('OrganizationId', TJSONNumber.Create(Camp.OrganizationId)); OC.AddPair('Name', Camp.Name); OC.AddPair('Orientation', Camp.Orientation);
+                    // Enforce orientation match at config time as well (safety)
+                    var DispOrient := Q.FieldByName('Orientation').AsString;
+                    if (Camp.Orientation <> '') and (DispOrient <> '') and (not SameText(Camp.Orientation, DispOrient)) then
+                      Continue;
+
+                    // Enforce schedules: if no schedules exist, treat as always-active.
+                    var Schedules := TScheduleRepository.ListByCampaign(Camp.Id);
+                    try
+                      var Active := True;
+                      if (Schedules <> nil) and (Schedules.Count > 0) then
+                      begin
+                        Active := False;
+                        for var S in Schedules do
+                          if IsScheduleActive(S, NowUtc) then
+                          begin
+                            Active := True;
+                            Break;
+                          end;
+                      end;
+                      if not Active then
+                        Continue;
+                    finally
+                      Schedules.Free;
+                    end;
+
+                    var OC := TJSONObject.Create;
+                    OC.AddPair('Id', TJSONNumber.Create(Camp.Id));
+                    OC.AddPair('OrganizationId', TJSONNumber.Create(Camp.OrganizationId));
+                    OC.AddPair('Name', Camp.Name);
+                    OC.AddPair('Orientation', Camp.Orientation);
                     ArrC.AddElement(OC);
                   finally Camp.Free; end;
+                end;
+                finally
+                  Seen.Free;
                 end;
                 var Root := TJSONObject.Create; Root.AddPair('Device', Dev); Root.AddPair('Campaigns', ArrC); Root.AddPair('Success', TJSONBool.Create(True)); Root.AddPair('Message', '');
                 Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse; Root.Free;

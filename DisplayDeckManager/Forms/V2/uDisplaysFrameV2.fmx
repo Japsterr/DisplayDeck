@@ -1,0 +1,4 @@
+object DisplaysFrameV2: TDisplaysFrameV2
+  Width = 0
+  Height = 0
+end

@@ -57,6 +57,29 @@ type
     UpdatedAt: string;
   end;
 
+  TScheduleData = record
+    Id: Integer;
+    CampaignId: Integer;
+    StartTime: string; // ISO8601 or '' when null
+    EndTime: string;   // ISO8601 or '' when null
+    RecurringPattern: string; // JSON string or '' when null
+  end;
+
+  TCampaignItemData = record
+    Id: Integer;
+    CampaignId: Integer;
+    MediaFileId: Integer;
+    DisplayOrder: Integer;
+    Duration: Integer;
+  end;
+
+  TDisplayCampaignAssignmentData = record
+    Id: Integer;
+    DisplayId: Integer;
+    CampaignId: Integer;
+    IsPrimary: Boolean;
+  end;
+
   TMediaFileData = record
     Id: Integer;
     OrganizationId: Integer;
@@ -77,6 +100,13 @@ type
     UploadUrl: string;
     StorageKey: string;
     Message: string;
+  end;
+
+  TWebhookData = record
+    WebhookId: Int64;
+    Url: string;
+    Events: string;
+    IsActive: Boolean;
   end;
 
   // Display insight/control
@@ -103,12 +133,10 @@ type
     function DoRequest(const AMethod, APath: string; ABody: TJSONObject = nil): TApiResponse;
     // Case-insensitive JSON value fetch helper
     function GetJsonValueCI(AObj: TJSONObject; const AName: string): TJSONValue;
-    function RewriteMinioHost(const AUrl: string): string;
     function ParseCurrentPlaying(AObj: TJSONObject): TCurrentPlaying;
     procedure LoadConfig;
     procedure SaveConfig;
     procedure LogHttp(const AMethod, AUrl: string; AStatus: Integer; const AInfo: string);
-    procedure LogNote(const AText: string);
   public
     destructor Destroy; override;
     class function Instance: TApiClient;
@@ -150,6 +178,24 @@ type
     function UpdateCampaign(const ACampaign: TCampaignData): TCampaignData;
     function DeleteCampaign(ACampaignId: Integer): Boolean;
 
+    // Campaign schedules
+    function GetCampaignSchedules(ACampaignId: Integer): TArray<TScheduleData>;
+    function CreateCampaignSchedule(ACampaignId: Integer; const AStartTimeIso, AEndTimeIso, ARecurringPattern: string): TScheduleData;
+    function UpdateSchedule(AScheduleId: Integer; const AStartTimeIso, AEndTimeIso, ARecurringPattern: string): TScheduleData;
+    function DeleteSchedule(AScheduleId: Integer): Boolean;
+
+    // Campaign playlist items
+    function GetCampaignItems(ACampaignId: Integer): TArray<TCampaignItemData>;
+    function CreateCampaignItem(ACampaignId, AMediaFileId, ADisplayOrder, ADuration: Integer): TCampaignItemData;
+    function UpdateCampaignItem(ACampaignItemId, AMediaFileId, ADisplayOrder, ADuration: Integer): TCampaignItemData;
+    function DeleteCampaignItem(ACampaignItemId: Integer): Boolean;
+
+    // Display-campaign assignments
+    function GetDisplayCampaignAssignments(ADisplayId: Integer): TArray<TDisplayCampaignAssignmentData>;
+    function CreateDisplayCampaignAssignment(ADisplayId, ACampaignId: Integer; AIsPrimary: Boolean): TDisplayCampaignAssignmentData;
+    function UpdateCampaignAssignment(AAssignmentId: Integer; AIsPrimary: Boolean): TDisplayCampaignAssignmentData;
+    function DeleteCampaignAssignment(AAssignmentId: Integer): Boolean;
+
     // Media endpoints
     function GetMediaFiles(AOrganizationId: Integer): TArray<TMediaFileData>;
     function GetMediaFile(AMediaFileId: Integer): TMediaFileData;
@@ -159,6 +205,9 @@ type
     function UpdateMediaFileMeta(AMediaFileId: Integer; const AFileName, AFileType, AStorageURL, AOrientation: string): Boolean;
     function DeleteMediaFile(AMediaFileId: Integer): Boolean;
     function GuessMimeType(const AFilePath: string): string;
+
+    // Webhooks
+    function GetWebhooks(AOrganizationId: Integer): TArray<TWebhookData>;
   end;
 
 implementation
@@ -363,18 +412,6 @@ begin
   end;
 end;
 
-procedure TApiClient.LogNote(const AText: string);
-var
-  LogPath: string;
-begin
-  try
-    LogPath := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) + 'displaydeck-http.log';
-    TFile.AppendAllText(LogPath,
-      FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) + ' NOTE ' + AText + sLineBreak,
-      TEncoding.UTF8);
-  except
-  end;
-end;
 
 function TApiClient.GetJsonValueCI(AObj: TJSONObject; const AName: string): TJSONValue;
 var
@@ -385,14 +422,6 @@ begin
   for Pair in AObj do
     if SameText(Pair.JsonString.Value, AName) then
       Exit(Pair.JsonValue);
-end;
-
-function TApiClient.RewriteMinioHost(const AUrl: string): string;
-begin
-  // Do NOT rewrite presigned S3 URLs: host header participates in SigV4 signature.
-  // Removed unused helpers RewriteMinioHost and LogNote to silence hints
-  // Keep original URL; connection-layer will optionally override TCP target while preserving Host header.
-  Result := AUrl;
 end;
 
 function TApiClient.ParseCurrentPlaying(AObj: TJSONObject): TCurrentPlaying;
@@ -787,6 +816,44 @@ begin
   if Assigned(Response.Data) then Response.Data.Free;
 end;
 
+function TApiClient.GetWebhooks(AOrganizationId: Integer): TArray<TWebhookData>;
+var
+  Response: TApiResponse;
+  Arr: TJSONArray;
+  Obj: TJSONObject;
+  I: Integer;
+begin
+  SetLength(Result, 0);
+  Response := DoRequest('GET', Format('/organizations/%d/webhooks', [AOrganizationId]));
+  if Response.Success and Assigned(Response.Data) then
+  begin
+    try
+      if Response.Data is TJSONArray then
+      begin
+        Arr := Response.Data as TJSONArray;
+        SetLength(Result, Arr.Count);
+        for I := 0 to Arr.Count - 1 do
+        begin
+          Obj := Arr.Items[I] as TJSONObject;
+          var V: TJSONValue;
+          V := GetJsonValueCI(Obj,'WebhookId');
+          if Assigned(V) then Result[I].WebhookId := StrToInt64Def(V.Value,0)
+          else Result[I].WebhookId := Obj.GetValue<Int64>('WebhookId', 0);
+          V := GetJsonValueCI(Obj,'Url');
+          if Assigned(V) then Result[I].Url := V.Value else Result[I].Url := Obj.GetValue<string>('Url','');
+          V := GetJsonValueCI(Obj,'Events');
+          if Assigned(V) then Result[I].Events := V.Value else Result[I].Events := Obj.GetValue<string>('Events','');
+          V := GetJsonValueCI(Obj,'IsActive');
+          if Assigned(V) then Result[I].IsActive := SameText(V.Value,'true')
+          else Result[I].IsActive := Obj.GetValue<Boolean>('IsActive', True);
+        end;
+      end;
+    finally
+      Response.Data.Free;
+    end;
+  end;
+end;
+
 procedure TApiClient.LoadConfig;
 var
   LText: string;
@@ -999,6 +1066,394 @@ var
   Response: TApiResponse;
 begin
   Response := DoRequest('DELETE', Format('/campaigns/%d', [ACampaignId]));
+  Result := Response.Success;
+  if Assigned(Response.Data) then
+    Response.Data.Free;
+end;
+
+function TApiClient.GetCampaignSchedules(ACampaignId: Integer): TArray<TScheduleData>;
+var
+  Response: TApiResponse;
+  JsonArray: TJSONArray;
+  JsonObj: TJSONObject;
+  I: Integer;
+  V: TJSONValue;
+begin
+  SetLength(Result, 0);
+
+  Response := DoRequest('GET', Format('/campaigns/%d/schedules', [ACampaignId]));
+
+  if Response.Success and Assigned(Response.Data) then
+  begin
+    try
+      if (Response.Data as TJSONObject).TryGetValue<TJSONArray>('value', JsonArray) then
+      begin
+        SetLength(Result, JsonArray.Count);
+        for I := 0 to JsonArray.Count - 1 do
+        begin
+          JsonObj := JsonArray.Items[I] as TJSONObject;
+          FillChar(Result[I], SizeOf(Result[I]), 0);
+          Result[I].CampaignId := ACampaignId;
+
+          V := GetJsonValueCI(JsonObj, 'Id');
+          if Assigned(V) then Result[I].Id := StrToIntDef(V.Value, 0) else Result[I].Id := JsonObj.GetValue<Integer>('Id', 0);
+
+          V := GetJsonValueCI(JsonObj, 'CampaignId');
+          if Assigned(V) then Result[I].CampaignId := StrToIntDef(V.Value, ACampaignId);
+
+          V := GetJsonValueCI(JsonObj, 'StartTime');
+          if Assigned(V) and (not (V is TJSONNull)) then Result[I].StartTime := V.Value else Result[I].StartTime := '';
+
+          V := GetJsonValueCI(JsonObj, 'EndTime');
+          if Assigned(V) and (not (V is TJSONNull)) then Result[I].EndTime := V.Value else Result[I].EndTime := '';
+
+          V := GetJsonValueCI(JsonObj, 'RecurringPattern');
+          if Assigned(V) and (not (V is TJSONNull)) then Result[I].RecurringPattern := V.Value else Result[I].RecurringPattern := '';
+        end;
+      end;
+    finally
+      Response.Data.Free;
+    end;
+  end;
+end;
+
+function TApiClient.CreateCampaignSchedule(ACampaignId: Integer; const AStartTimeIso, AEndTimeIso, ARecurringPattern: string): TScheduleData;
+var
+  RequestBody: TJSONObject;
+  Response: TApiResponse;
+  JsonObj: TJSONObject;
+  V: TJSONValue;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.CampaignId := ACampaignId;
+
+  RequestBody := TJSONObject.Create;
+  try
+    if Trim(AStartTimeIso) = '' then
+      RequestBody.AddPair('StartTime', TJSONNull.Create)
+    else
+      RequestBody.AddPair('StartTime', Trim(AStartTimeIso));
+
+    if Trim(AEndTimeIso) = '' then
+      RequestBody.AddPair('EndTime', TJSONNull.Create)
+    else
+      RequestBody.AddPair('EndTime', Trim(AEndTimeIso));
+
+    if Trim(ARecurringPattern) = '' then
+      RequestBody.AddPair('RecurringPattern', TJSONNull.Create)
+    else
+      RequestBody.AddPair('RecurringPattern', ARecurringPattern);
+
+    Response := DoRequest('POST', Format('/campaigns/%d/schedules', [ACampaignId]), RequestBody);
+    if Response.Success and Assigned(Response.Data) then
+    begin
+      try
+        JsonObj := Response.Data as TJSONObject;
+        Result.Id := JsonObj.GetValue<Integer>('Id', 0);
+        V := GetJsonValueCI(JsonObj, 'CampaignId');
+        if Assigned(V) then Result.CampaignId := StrToIntDef(V.Value, ACampaignId);
+        V := GetJsonValueCI(JsonObj, 'StartTime');
+        if Assigned(V) and (not (V is TJSONNull)) then Result.StartTime := V.Value else Result.StartTime := '';
+        V := GetJsonValueCI(JsonObj, 'EndTime');
+        if Assigned(V) and (not (V is TJSONNull)) then Result.EndTime := V.Value else Result.EndTime := '';
+        V := GetJsonValueCI(JsonObj, 'RecurringPattern');
+        if Assigned(V) and (not (V is TJSONNull)) then Result.RecurringPattern := V.Value else Result.RecurringPattern := '';
+      finally
+        Response.Data.Free;
+      end;
+    end;
+  finally
+    RequestBody.Free;
+  end;
+end;
+
+function TApiClient.UpdateSchedule(AScheduleId: Integer; const AStartTimeIso, AEndTimeIso, ARecurringPattern: string): TScheduleData;
+var
+  RequestBody: TJSONObject;
+  Response: TApiResponse;
+  JsonObj: TJSONObject;
+  V: TJSONValue;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Id := AScheduleId;
+
+  RequestBody := TJSONObject.Create;
+  try
+    if Trim(AStartTimeIso) = '' then
+      RequestBody.AddPair('StartTime', TJSONNull.Create)
+    else
+      RequestBody.AddPair('StartTime', Trim(AStartTimeIso));
+
+    if Trim(AEndTimeIso) = '' then
+      RequestBody.AddPair('EndTime', TJSONNull.Create)
+    else
+      RequestBody.AddPair('EndTime', Trim(AEndTimeIso));
+
+    if Trim(ARecurringPattern) = '' then
+      RequestBody.AddPair('RecurringPattern', TJSONNull.Create)
+    else
+      RequestBody.AddPair('RecurringPattern', ARecurringPattern);
+
+    Response := DoRequest('PUT', Format('/schedules/%d', [AScheduleId]), RequestBody);
+    if Response.Success and Assigned(Response.Data) then
+    begin
+      try
+        JsonObj := Response.Data as TJSONObject;
+        Result.Id := JsonObj.GetValue<Integer>('Id', AScheduleId);
+        V := GetJsonValueCI(JsonObj, 'CampaignId');
+        if Assigned(V) then Result.CampaignId := StrToIntDef(V.Value, 0);
+        V := GetJsonValueCI(JsonObj, 'StartTime');
+        if Assigned(V) and (not (V is TJSONNull)) then Result.StartTime := V.Value else Result.StartTime := '';
+        V := GetJsonValueCI(JsonObj, 'EndTime');
+        if Assigned(V) and (not (V is TJSONNull)) then Result.EndTime := V.Value else Result.EndTime := '';
+        V := GetJsonValueCI(JsonObj, 'RecurringPattern');
+        if Assigned(V) and (not (V is TJSONNull)) then Result.RecurringPattern := V.Value else Result.RecurringPattern := '';
+      finally
+        Response.Data.Free;
+      end;
+    end;
+  finally
+    RequestBody.Free;
+  end;
+end;
+
+function TApiClient.DeleteSchedule(AScheduleId: Integer): Boolean;
+var
+  Response: TApiResponse;
+begin
+  Response := DoRequest('DELETE', Format('/schedules/%d', [AScheduleId]));
+  Result := Response.Success;
+  if Assigned(Response.Data) then
+    Response.Data.Free;
+end;
+
+function TApiClient.GetCampaignItems(ACampaignId: Integer): TArray<TCampaignItemData>;
+var
+  Response: TApiResponse;
+  JsonArray: TJSONArray;
+  JsonObj: TJSONObject;
+  I: Integer;
+  V: TJSONValue;
+begin
+  SetLength(Result, 0);
+
+  Response := DoRequest('GET', Format('/campaigns/%d/items', [ACampaignId]));
+
+  if Response.Success and Assigned(Response.Data) then
+  begin
+    try
+      if (Response.Data as TJSONObject).TryGetValue<TJSONArray>('value', JsonArray) then
+      begin
+        SetLength(Result, JsonArray.Count);
+        for I := 0 to JsonArray.Count - 1 do
+        begin
+          JsonObj := JsonArray.Items[I] as TJSONObject;
+          FillChar(Result[I], SizeOf(Result[I]), 0);
+          Result[I].CampaignId := ACampaignId;
+
+          V := GetJsonValueCI(JsonObj, 'Id');
+          if Assigned(V) then Result[I].Id := StrToIntDef(V.Value, 0) else Result[I].Id := JsonObj.GetValue<Integer>('Id', 0);
+
+          V := GetJsonValueCI(JsonObj, 'MediaFileId');
+          if Assigned(V) then Result[I].MediaFileId := StrToIntDef(V.Value, 0) else Result[I].MediaFileId := JsonObj.GetValue<Integer>('MediaFileId', 0);
+
+          V := GetJsonValueCI(JsonObj, 'DisplayOrder');
+          if Assigned(V) then Result[I].DisplayOrder := StrToIntDef(V.Value, 0) else Result[I].DisplayOrder := JsonObj.GetValue<Integer>('DisplayOrder', 0);
+
+          V := GetJsonValueCI(JsonObj, 'Duration');
+          if Assigned(V) then Result[I].Duration := StrToIntDef(V.Value, 0) else Result[I].Duration := JsonObj.GetValue<Integer>('Duration', 0);
+        end;
+      end;
+    finally
+      Response.Data.Free;
+    end;
+  end;
+end;
+
+function TApiClient.CreateCampaignItem(ACampaignId, AMediaFileId, ADisplayOrder, ADuration: Integer): TCampaignItemData;
+var
+  RequestBody: TJSONObject;
+  Response: TApiResponse;
+  JsonObj: TJSONObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.CampaignId := ACampaignId;
+
+  RequestBody := TJSONObject.Create;
+  try
+    RequestBody.AddPair('MediaFileId', TJSONNumber.Create(AMediaFileId));
+    RequestBody.AddPair('DisplayOrder', TJSONNumber.Create(ADisplayOrder));
+    RequestBody.AddPair('Duration', TJSONNumber.Create(ADuration));
+    Response := DoRequest('POST', Format('/campaigns/%d/items', [ACampaignId]), RequestBody);
+
+    if Response.Success and Assigned(Response.Data) then
+    begin
+      try
+        JsonObj := Response.Data as TJSONObject;
+        Result.Id := JsonObj.GetValue<Integer>('Id', 0);
+        Result.MediaFileId := JsonObj.GetValue<Integer>('MediaFileId', 0);
+        Result.DisplayOrder := JsonObj.GetValue<Integer>('DisplayOrder', 0);
+        Result.Duration := JsonObj.GetValue<Integer>('Duration', 0);
+      finally
+        Response.Data.Free;
+      end;
+    end;
+  finally
+    RequestBody.Free;
+  end;
+end;
+
+function TApiClient.UpdateCampaignItem(ACampaignItemId, AMediaFileId, ADisplayOrder, ADuration: Integer): TCampaignItemData;
+var
+  RequestBody: TJSONObject;
+  Response: TApiResponse;
+  JsonObj: TJSONObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Id := ACampaignItemId;
+
+  RequestBody := TJSONObject.Create;
+  try
+    RequestBody.AddPair('MediaFileId', TJSONNumber.Create(AMediaFileId));
+    RequestBody.AddPair('DisplayOrder', TJSONNumber.Create(ADisplayOrder));
+    RequestBody.AddPair('Duration', TJSONNumber.Create(ADuration));
+    Response := DoRequest('PUT', Format('/campaign-items/%d', [ACampaignItemId]), RequestBody);
+
+    if Response.Success and Assigned(Response.Data) then
+    begin
+      try
+        JsonObj := Response.Data as TJSONObject;
+        Result.Id := JsonObj.GetValue<Integer>('Id', ACampaignItemId);
+        Result.MediaFileId := JsonObj.GetValue<Integer>('MediaFileId', 0);
+        Result.DisplayOrder := JsonObj.GetValue<Integer>('DisplayOrder', 0);
+        Result.Duration := JsonObj.GetValue<Integer>('Duration', 0);
+      finally
+        Response.Data.Free;
+      end;
+    end;
+  finally
+    RequestBody.Free;
+  end;
+end;
+
+function TApiClient.DeleteCampaignItem(ACampaignItemId: Integer): Boolean;
+var
+  Response: TApiResponse;
+begin
+  Response := DoRequest('DELETE', Format('/campaign-items/%d', [ACampaignItemId]));
+  Result := Response.Success;
+  if Assigned(Response.Data) then
+    Response.Data.Free;
+end;
+
+function TApiClient.GetDisplayCampaignAssignments(ADisplayId: Integer): TArray<TDisplayCampaignAssignmentData>;
+var
+  Response: TApiResponse;
+  JsonArray: TJSONArray;
+  JsonObj: TJSONObject;
+  I: Integer;
+  V: TJSONValue;
+begin
+  SetLength(Result, 0);
+
+  Response := DoRequest('GET', Format('/displays/%d/campaign-assignments', [ADisplayId]));
+
+  if Response.Success and Assigned(Response.Data) then
+  begin
+    try
+      if (Response.Data as TJSONObject).TryGetValue<TJSONArray>('value', JsonArray) then
+      begin
+        SetLength(Result, JsonArray.Count);
+        for I := 0 to JsonArray.Count - 1 do
+        begin
+          JsonObj := JsonArray.Items[I] as TJSONObject;
+          FillChar(Result[I], SizeOf(Result[I]), 0);
+          Result[I].DisplayId := ADisplayId;
+
+          V := GetJsonValueCI(JsonObj, 'Id');
+          if Assigned(V) then Result[I].Id := StrToIntDef(V.Value, 0) else Result[I].Id := JsonObj.GetValue<Integer>('Id', 0);
+
+          V := GetJsonValueCI(JsonObj, 'CampaignId');
+          if Assigned(V) then Result[I].CampaignId := StrToIntDef(V.Value, 0) else Result[I].CampaignId := JsonObj.GetValue<Integer>('CampaignId', 0);
+
+          V := GetJsonValueCI(JsonObj, 'IsPrimary');
+          if Assigned(V) then Result[I].IsPrimary := SameText(V.Value, 'true') else Result[I].IsPrimary := JsonObj.GetValue<Boolean>('IsPrimary', False);
+        end;
+      end;
+    finally
+      Response.Data.Free;
+    end;
+  end;
+end;
+
+function TApiClient.CreateDisplayCampaignAssignment(ADisplayId, ACampaignId: Integer; AIsPrimary: Boolean): TDisplayCampaignAssignmentData;
+var
+  RequestBody: TJSONObject;
+  Response: TApiResponse;
+  JsonObj: TJSONObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.DisplayId := ADisplayId;
+  Result.CampaignId := ACampaignId;
+  Result.IsPrimary := AIsPrimary;
+
+  RequestBody := TJSONObject.Create;
+  try
+    RequestBody.AddPair('CampaignId', TJSONNumber.Create(ACampaignId));
+    RequestBody.AddPair('IsPrimary', TJSONBool.Create(AIsPrimary));
+    Response := DoRequest('POST', Format('/displays/%d/campaign-assignments', [ADisplayId]), RequestBody);
+    if Response.Success and Assigned(Response.Data) then
+    begin
+      try
+        JsonObj := Response.Data as TJSONObject;
+        Result.Id := JsonObj.GetValue<Integer>('Id', 0);
+        Result.CampaignId := JsonObj.GetValue<Integer>('CampaignId', ACampaignId);
+        Result.IsPrimary := JsonObj.GetValue<Boolean>('IsPrimary', AIsPrimary);
+      finally
+        Response.Data.Free;
+      end;
+    end;
+  finally
+    RequestBody.Free;
+  end;
+end;
+
+function TApiClient.UpdateCampaignAssignment(AAssignmentId: Integer; AIsPrimary: Boolean): TDisplayCampaignAssignmentData;
+var
+  RequestBody: TJSONObject;
+  Response: TApiResponse;
+  JsonObj: TJSONObject;
+begin
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Id := AAssignmentId;
+  Result.IsPrimary := AIsPrimary;
+
+  RequestBody := TJSONObject.Create;
+  try
+    RequestBody.AddPair('IsPrimary', TJSONBool.Create(AIsPrimary));
+    Response := DoRequest('PUT', Format('/campaign-assignments/%d', [AAssignmentId]), RequestBody);
+    if Response.Success and Assigned(Response.Data) then
+    begin
+      try
+        JsonObj := Response.Data as TJSONObject;
+        Result.Id := JsonObj.GetValue<Integer>('Id', AAssignmentId);
+        Result.DisplayId := JsonObj.GetValue<Integer>('DisplayId', 0);
+        Result.CampaignId := JsonObj.GetValue<Integer>('CampaignId', 0);
+        Result.IsPrimary := JsonObj.GetValue<Boolean>('IsPrimary', AIsPrimary);
+      finally
+        Response.Data.Free;
+      end;
+    end;
+  finally
+    RequestBody.Free;
+  end;
+end;
+
+function TApiClient.DeleteCampaignAssignment(AAssignmentId: Integer): Boolean;
+var
+  Response: TApiResponse;
+begin
+  Response := DoRequest('DELETE', Format('/campaign-assignments/%d', [AAssignmentId]));
   Result := Response.Success;
   if Assigned(Response.Data) then
     Response.Data.Free;
@@ -1268,7 +1723,6 @@ var
   Body: TJSONObject;
   Response: TApiResponse;
 begin
-  Result := False;
   Body := TJSONObject.Create;
   try
     Body.AddPair('FileName', AFileName);

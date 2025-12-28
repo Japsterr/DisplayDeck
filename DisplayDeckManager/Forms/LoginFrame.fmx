@@ -98,14 +98,32 @@ object Frame1: TFrame1
             Size.PlatformDefault = False
             TabOrder = 5
           end
-          object btnLogin: TButton
+          object RectLoginBtn: TRectangle
             Align = Top
+            Cursor = crHandPoint
+            Fill.Color = xFF2563EB
             Size.Width = 320.000000000000000000
-            Size.Height = 44.000000000000000000
+            Size.Height = 50.000000000000000000
             Size.PlatformDefault = False
-            TabOrder = 6
-            Text = 'Login'
+            Stroke.Kind = None
+            XRadius = 10.000000000000000000
+            YRadius = 10.000000000000000000
             OnClick = btnLoginClick
+            object LblLoginBtn: TLabel
+              Align = Client
+              HitTest = False
+              StyledSettings = [Family, Style]
+              Size.Width = 320.000000000000000000
+              Size.Height = 50.000000000000000000
+              Size.PlatformDefault = False
+              TextSettings.Font.Size = 16.000000000000000000
+              TextSettings.Font.Style = [fsBold]
+              TextSettings.FontColor = claWhite
+              TextSettings.HorzAlign = Center
+              TextSettings.VertAlign = Center
+              Text = 'Login'
+              TabOrder = 0
+            end
           end
           object LayoutSpacer4: TLayout
             Align = Top
@@ -113,6 +131,35 @@ object Frame1: TFrame1
             Size.Height = 20.000000000000000000
             Size.PlatformDefault = False
             TabOrder = 7
+          end
+          object RectLoginError: TRectangle
+            Align = Top
+            Fill.Color = xFFFEE2E2
+            Size.Width = 320.000000000000000000
+            Size.Height = 46.000000000000000000
+            Size.PlatformDefault = False
+            Stroke.Kind = None
+            Visible = False
+            XRadius = 10.000000000000000000
+            YRadius = 10.000000000000000000
+            object LblLoginError: TLabel
+              Align = Client
+              Margins.Left = 12.000000000000000000
+              Margins.Top = 8.000000000000000000
+              Margins.Right = 12.000000000000000000
+              Margins.Bottom = 8.000000000000000000
+              StyledSettings = [Family, Style]
+              Size.Width = 320.000000000000000000
+              Size.Height = 46.000000000000000000
+              Size.PlatformDefault = False
+              TextSettings.Font.Size = 12.000000000000000000
+              TextSettings.FontColor = xFF991B1B
+              TextSettings.HorzAlign = Center
+              TextSettings.VertAlign = Center
+              Text = ' '
+              WordWrap = True
+              TabOrder = 0
+            end
           end
           object lblRegister: TLabel
             Align = Top
