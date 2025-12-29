@@ -96,6 +96,62 @@ Timestamp format: "yyyy-MM-ddTHH:mm:ss" (ISO 8601).
 - `PUT /campaign-items/{Id}`
 - `DELETE /campaign-items/{Id}`
 
+Campaign items now support two types:
+
+- `ItemType: "media"` (default/legacy)
+  - Requires `MediaFileId`
+  - Requires `MenuId` to be null
+- `ItemType: "menu"`
+  - Requires `MenuId`
+  - Requires `MediaFileId` to be null
+
+The database enforces the one-of constraint.
+
+Example (create media item):
+```json
+{ "ItemType": "media", "MediaFileId": 123, "DisplayOrder": 0, "Duration": 10 }
+```
+
+Example (create menu item):
+```json
+{ "ItemType": "menu", "MenuId": 55, "DisplayOrder": 0, "Duration": 15 }
+```
+
+---
+
+## Menus (Dynamic Menu Boards)
+
+Phase 1 adds structured menu boards (menus → sections → items) and a public token renderer endpoint.
+
+Authenticated endpoints:
+
+- `GET /organizations/{OrganizationId}/menus` → `{ "value": [ ... ] }`
+- `POST /organizations/{OrganizationId}/menus`
+  - Request: `{ "Name": "Breakfast", "Orientation": "Landscape", "TemplateKey": "simple", "ThemeConfig": { ... } }`
+- `GET /menus/{Id}`
+- `PUT /menus/{Id}`
+- `DELETE /menus/{Id}`
+
+Menu sections:
+
+- `GET /menus/{MenuId}/sections` → `{ "value": [ ... ] }`
+- `POST /menus/{MenuId}/sections` → creates a section
+  - Request: `{ "Name": "Burgers", "DisplayOrder": 0 }`
+- `PUT /menu-sections/{Id}`
+- `DELETE /menu-sections/{Id}`
+
+Menu items:
+
+- `GET /menu-sections/{MenuSectionId}/items` → `{ "value": [ ... ] }`
+- `POST /menu-sections/{MenuSectionId}/items`
+  - Request: `{ "Name": "Cheeseburger", "Description": "...", "PriceCents": 8999, "IsAvailable": true, "DisplayOrder": 0 }`
+- `PUT /menu-items/{Id}`
+- `DELETE /menu-items/{Id}`
+
+Public endpoint (no auth):
+
+- `GET /public/menus/{Token}` → menu with its sections + items (for display players)
+
 ---
 
 ## Display Assignments

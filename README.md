@@ -293,6 +293,20 @@ Upgrades:
 - Existing databases: apply `migrations/2025-11-10_add_orientation.sql` or run an `ALTER TABLE` if column missing.
 - Fresh installs: `schema.sql` already contains the column.
 
+---
+
+## Menu Builder (since 0.1.9)
+
+Phase 1 adds dynamic menu boards (menus → sections → items) and allows campaigns to include menu items.
+
+Database upgrades:
+- Existing databases: apply `migrations/2025-12-29_add_menus.sql`.
+- Fresh installs: `schema.sql` already includes menu tables + constraints.
+
+Important note for Docker deployments:
+- The Postgres container only runs `schema.sql` on *first* initialization of the data volume.
+- For existing volumes, you must run the migration SQL against the running database.
+
 Testing:
 - Use `tests\media-upload-download.ps1` to confirm round-trip; script now validates the `Orientation` field.
 

@@ -32,6 +32,9 @@ uses
   DisplayRepository,
   CampaignRepository,
   CampaignItemRepository,
+  MenuRepository,
+  MenuSectionRepository,
+  MenuItemRepository,
   DisplayCampaignRepository,
   ScheduleRepository,
   MediaFileRepository,
@@ -1306,6 +1309,521 @@ begin
       end;
     end;
 
+    // Organization menus: /organizations/{OrganizationId}/menus
+    if (Copy(NormalizedPath, 1, 15) = '/organizations/') and
+       (Pos('/menus', NormalizedPath) > 0) then
+    begin
+      var OrgIdStr := Copy(NormalizedPath, 16, MaxInt);
+      var Slash := Pos('/', OrgIdStr); if Slash>0 then OrgIdStr := Copy(OrgIdStr, 1, Slash-1);
+      var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
+
+      if SameText(Request.Method,'GET') then
+      begin
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
+        var L := TMenuRepository.ListByOrganization(OrgId);
+        try
+          var Arr := TJSONArray.Create; try
+            for var M in L do
+            begin
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(M.Id));
+              O.AddPair('OrganizationId', TJSONNumber.Create(M.OrganizationId));
+              O.AddPair('Name', M.Name);
+              O.AddPair('Orientation', M.Orientation);
+              O.AddPair('TemplateKey', M.TemplateKey);
+              O.AddPair('PublicToken', M.PublicToken);
+              var Theme := TJSONObject.ParseJSONValue(M.ThemeConfigJson);
+              if Theme=nil then Theme := TJSONObject.Create;
+              O.AddPair('ThemeConfig', Theme);
+              Arr.AddElement(O);
+            end;
+            var Wrapper := TJSONObject.Create; try
+              Wrapper.AddPair('value', Arr);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+            finally Wrapper.Free; end;
+          finally Arr.Free; end;
+        finally L.Free; end;
+        Exit;
+      end
+      else if SameText(Request.Method,'POST') then
+      begin
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
+        if TryReplayIdempotency(OrgId) then Exit;
+        var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+        try
+          if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+          var Name := Body.GetValue<string>('Name','');
+          var Orientation := Body.GetValue<string>('Orientation','');
+          var TemplateKey := Body.GetValue<string>('TemplateKey','');
+          var ThemeVal := Body.GetValue('ThemeConfig');
+          var ThemeJson := '{}';
+          if (ThemeVal<>nil) and (not (ThemeVal is TJSONNull)) then ThemeJson := ThemeVal.ToJSON;
+          if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+          if Orientation='' then Orientation := 'Landscape';
+          if TemplateKey='' then TemplateKey := 'classic';
+          var PublicToken := TGUID.NewGuid.ToString.Replace('{','').Replace('}','').Replace('-','');
+          var M := TMenuRepository.CreateMenu(OrgId, Name, Orientation, TemplateKey, ThemeJson, PublicToken);
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(M.Id));
+            O.AddPair('OrganizationId', TJSONNumber.Create(M.OrganizationId));
+            O.AddPair('Name', M.Name);
+            O.AddPair('Orientation', M.Orientation);
+            O.AddPair('TemplateKey', M.TemplateKey);
+            O.AddPair('PublicToken', M.PublicToken);
+            var Theme := TJSONObject.ParseJSONValue(M.ThemeConfigJson);
+            if Theme=nil then Theme := TJSONObject.Create;
+            O.AddPair('ThemeConfig', Theme);
+            var OutBody := O.ToJSON;
+            O.Free;
+            StoreIdempotency(OrgId, 201, OutBody);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+          finally M.Free; end;
+        finally Body.Free; end;
+        Exit;
+      end;
+    end;
+
+    // Public menu JSON: /public/menus/{token}
+    if (Copy(NormalizedPath, 1, 14) = '/public/menus/') and SameText(Request.Method,'GET') then
+    begin
+      var Token := Copy(NormalizedPath, 15, MaxInt);
+      if Token='' then begin JSONError(400,'Missing token'); Exit; end;
+      var M := TMenuRepository.GetByPublicToken(Token);
+      if M=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var Root := TJSONObject.Create;
+        Root.AddPair('Id', TJSONNumber.Create(M.Id));
+        Root.AddPair('Name', M.Name);
+        Root.AddPair('Orientation', M.Orientation);
+        Root.AddPair('TemplateKey', M.TemplateKey);
+        var Theme := TJSONObject.ParseJSONValue(M.ThemeConfigJson);
+        if Theme=nil then Theme := TJSONObject.Create;
+        Root.AddPair('ThemeConfig', Theme);
+
+        var SectionsArr := TJSONArray.Create;
+        var Secs := TMenuSectionRepository.ListByMenu(M.Id);
+        try
+          for var S in Secs do
+          begin
+            var SO := TJSONObject.Create;
+            SO.AddPair('Id', TJSONNumber.Create(S.Id));
+            SO.AddPair('Name', S.Name);
+            SO.AddPair('DisplayOrder', TJSONNumber.Create(S.DisplayOrder));
+
+            var ItemsArr := TJSONArray.Create;
+            var Items := TMenuItemRepository.ListBySection(S.Id);
+            try
+              for var It in Items do
+              begin
+                var IO := TJSONObject.Create;
+                IO.AddPair('Id', TJSONNumber.Create(It.Id));
+                IO.AddPair('Name', It.Name);
+                if Trim(It.Description)<>'' then IO.AddPair('Description', It.Description) else IO.AddPair('Description', TJSONNull.Create);
+                if It.HasPriceCents then IO.AddPair('PriceCents', TJSONNumber.Create(It.PriceCents)) else IO.AddPair('PriceCents', TJSONNull.Create);
+                IO.AddPair('IsAvailable', TJSONBool.Create(It.IsAvailable));
+                IO.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
+                ItemsArr.AddElement(IO);
+              end;
+            finally Items.Free; end;
+            SO.AddPair('Items', ItemsArr);
+            SectionsArr.AddElement(SO);
+          end;
+        finally Secs.Free; end;
+
+        Root.AddPair('Sections', SectionsArr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+        Exit;
+      finally M.Free; end;
+    end;
+
+    // Menus CRUD: /menus/{id}
+    if (Copy(NormalizedPath, 1, 7) = '/menus/') then
+    begin
+      var Tail := Copy(NormalizedPath, 8, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var MenuId := StrToIntDef(IdStr,0); if MenuId=0 then begin JSONError(400,'Invalid menu id'); Exit; end;
+
+      // /menus/{id}/sections
+      if Pos('/sections', NormalizedPath) > 0 then
+      begin
+        var M0 := TMenuRepository.GetById(MenuId);
+        if M0=nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>M0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          if SameText(Request.Method,'GET') then
+          begin
+            var L := TMenuSectionRepository.ListByMenu(MenuId);
+            try
+              var Arr := TJSONArray.Create; try
+                for var S in L do
+                begin
+                  var O := TJSONObject.Create;
+                  O.AddPair('Id', TJSONNumber.Create(S.Id));
+                  O.AddPair('MenuId', TJSONNumber.Create(S.MenuId));
+                  O.AddPair('Name', S.Name);
+                  O.AddPair('DisplayOrder', TJSONNumber.Create(S.DisplayOrder));
+                  Arr.AddElement(O);
+                end;
+                var Wrapper := TJSONObject.Create; try
+                  Wrapper.AddPair('value', Arr);
+                  Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+                finally Wrapper.Free; end;
+              finally Arr.Free; end;
+            finally L.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'POST') then
+          begin
+            if TryReplayIdempotency(M0.OrganizationId) then Exit;
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var Name := Body.GetValue<string>('Name','');
+              var DisplayOrder := Body.GetValue<Integer>('DisplayOrder',0);
+              if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+              var S := TMenuSectionRepository.CreateSection(MenuId, Name, DisplayOrder);
+              try
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(S.Id));
+                O.AddPair('MenuId', TJSONNumber.Create(S.MenuId));
+                O.AddPair('Name', S.Name);
+                O.AddPair('DisplayOrder', TJSONNumber.Create(S.DisplayOrder));
+                var OutBody := O.ToJSON;
+                O.Free;
+                StoreIdempotency(M0.OrganizationId, 201, OutBody);
+                Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+              finally S.Free; end;
+            finally Body.Free; end;
+            Exit;
+          end;
+
+        finally M0.Free; end;
+      end
+      else
+      begin
+        var M0 := TMenuRepository.GetById(MenuId);
+        if M0=nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>M0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          if SameText(Request.Method,'GET') then
+          begin
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(M0.Id));
+            O.AddPair('OrganizationId', TJSONNumber.Create(M0.OrganizationId));
+            O.AddPair('Name', M0.Name);
+            O.AddPair('Orientation', M0.Orientation);
+            O.AddPair('TemplateKey', M0.TemplateKey);
+            O.AddPair('PublicToken', M0.PublicToken);
+            var Theme := TJSONObject.ParseJSONValue(M0.ThemeConfigJson);
+            if Theme=nil then Theme := TJSONObject.Create;
+            O.AddPair('ThemeConfig', Theme);
+            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            Exit;
+          end
+          else if SameText(Request.Method,'PUT') then
+          begin
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var Name := Body.GetValue<string>('Name','');
+              var Orientation := Body.GetValue<string>('Orientation','');
+              var TemplateKey := Body.GetValue<string>('TemplateKey','');
+              var ThemeVal := Body.GetValue('ThemeConfig');
+              var ThemeJson := '{}';
+              if (ThemeVal<>nil) and (not (ThemeVal is TJSONNull)) then ThemeJson := ThemeVal.ToJSON;
+              if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+              if Orientation='' then Orientation := M0.Orientation;
+              if TemplateKey='' then TemplateKey := M0.TemplateKey;
+              var M := TMenuRepository.UpdateMenu(MenuId, Name, Orientation, TemplateKey, ThemeJson);
+              if M=nil then begin JSONError(404,'Not found'); Exit; end;
+              try
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(M.Id));
+                O.AddPair('OrganizationId', TJSONNumber.Create(M.OrganizationId));
+                O.AddPair('Name', M.Name);
+                O.AddPair('Orientation', M.Orientation);
+                O.AddPair('TemplateKey', M.TemplateKey);
+                O.AddPair('PublicToken', M.PublicToken);
+                var Theme := TJSONObject.ParseJSONValue(M.ThemeConfigJson);
+                if Theme=nil then Theme := TJSONObject.Create;
+                O.AddPair('ThemeConfig', Theme);
+                Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+              finally M.Free; end;
+            finally Body.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'DELETE') then
+          begin
+            TMenuRepository.DeleteMenu(MenuId);
+            Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+            Exit;
+          end;
+
+        finally M0.Free; end;
+      end;
+    end;
+
+    // Menu sections: /menu-sections/{id}
+    if (Copy(NormalizedPath, 1, 15) = '/menu-sections/') then
+    begin
+      var Tail := Copy(NormalizedPath, 16, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var SecId := StrToIntDef(IdStr,0); if SecId=0 then begin JSONError(400,'Invalid menu section id'); Exit; end;
+
+      // /menu-sections/{id}/items
+      if Pos('/items', NormalizedPath) > 0 then
+      begin
+        var S0 := TMenuSectionRepository.GetById(SecId);
+        if S0=nil then begin JSONError(404,'Not found'); Exit; end;
+        var M0 := TMenuRepository.GetById(S0.MenuId);
+        if M0=nil then begin S0.Free; JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>M0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          if SameText(Request.Method,'GET') then
+          begin
+            var L := TMenuItemRepository.ListBySection(SecId);
+            try
+              var Arr := TJSONArray.Create; try
+                for var It in L do
+                begin
+                  var O := TJSONObject.Create;
+                  O.AddPair('Id', TJSONNumber.Create(It.Id));
+                  O.AddPair('MenuSectionId', TJSONNumber.Create(It.MenuSectionId));
+                  O.AddPair('Name', It.Name);
+                  if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+                  if It.HasPriceCents then O.AddPair('PriceCents', TJSONNumber.Create(It.PriceCents)) else O.AddPair('PriceCents', TJSONNull.Create);
+                  O.AddPair('IsAvailable', TJSONBool.Create(It.IsAvailable));
+                  O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
+                  Arr.AddElement(O);
+                end;
+                var Wrapper := TJSONObject.Create; try
+                  Wrapper.AddPair('value', Arr);
+                  Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+                finally Wrapper.Free; end;
+              finally Arr.Free; end;
+            finally L.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'POST') then
+          begin
+            if TryReplayIdempotency(M0.OrganizationId) then Exit;
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var Name := Body.GetValue<string>('Name','');
+              var Desc := Body.GetValue<string>('Description','');
+              var PriceVal := Body.GetValue('PriceCents');
+              var HasPrice := (PriceVal<>nil) and (not (PriceVal is TJSONNull));
+              var PriceCents := 0;
+              if HasPrice then PriceCents := StrToIntDef(PriceVal.Value,0);
+              var IsAvailable := Body.GetValue<Boolean>('IsAvailable', True);
+              var DisplayOrder := Body.GetValue<Integer>('DisplayOrder',0);
+              if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+              var It := TMenuItemRepository.CreateItem(SecId, Name, Desc, PriceCents, HasPrice, IsAvailable, DisplayOrder);
+              try
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(It.Id));
+                O.AddPair('MenuSectionId', TJSONNumber.Create(It.MenuSectionId));
+                O.AddPair('Name', It.Name);
+                if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+                if It.HasPriceCents then O.AddPair('PriceCents', TJSONNumber.Create(It.PriceCents)) else O.AddPair('PriceCents', TJSONNull.Create);
+                O.AddPair('IsAvailable', TJSONBool.Create(It.IsAvailable));
+                O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
+                var OutBody := O.ToJSON;
+                O.Free;
+                StoreIdempotency(M0.OrganizationId, 201, OutBody);
+                Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+              finally It.Free; end;
+            finally Body.Free; end;
+            Exit;
+          end;
+
+        finally
+          M0.Free;
+          S0.Free;
+        end;
+      end
+      else
+      begin
+        var S0 := TMenuSectionRepository.GetById(SecId);
+        if S0=nil then begin JSONError(404,'Not found'); Exit; end;
+        var M0 := TMenuRepository.GetById(S0.MenuId);
+        if M0=nil then begin S0.Free; JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>M0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          if SameText(Request.Method,'GET') then
+          begin
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(S0.Id));
+            O.AddPair('MenuId', TJSONNumber.Create(S0.MenuId));
+            O.AddPair('Name', S0.Name);
+            O.AddPair('DisplayOrder', TJSONNumber.Create(S0.DisplayOrder));
+            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            Exit;
+          end
+          else if SameText(Request.Method,'PUT') then
+          begin
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var Name := Body.GetValue<string>('Name','');
+              var DisplayOrder := Body.GetValue<Integer>('DisplayOrder',0);
+              if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+              var S := TMenuSectionRepository.UpdateSection(SecId, Name, DisplayOrder);
+              if S=nil then begin JSONError(404,'Not found'); Exit; end;
+              try
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(S.Id));
+                O.AddPair('MenuId', TJSONNumber.Create(S.MenuId));
+                O.AddPair('Name', S.Name);
+                O.AddPair('DisplayOrder', TJSONNumber.Create(S.DisplayOrder));
+                Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+              finally S.Free; end;
+            finally Body.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'DELETE') then
+          begin
+            TMenuSectionRepository.DeleteSection(SecId);
+            Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+            Exit;
+          end;
+
+        finally
+          M0.Free;
+          S0.Free;
+        end;
+      end;
+    end;
+
+    // Menu items: /menu-items/{id}
+    if (Copy(NormalizedPath, 1, 12) = '/menu-items/') then
+    begin
+      var IdStr := Copy(NormalizedPath, 13, MaxInt);
+      var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid menu item id'); Exit; end;
+      var It0 := TMenuItemRepository.GetById(Id);
+      if It0=nil then begin JSONError(404,'Not found'); Exit; end;
+      var S0 := TMenuSectionRepository.GetById(It0.MenuSectionId);
+      if S0=nil then begin It0.Free; JSONError(404,'Not found'); Exit; end;
+      var M0 := TMenuRepository.GetById(S0.MenuId);
+      if M0=nil then begin It0.Free; S0.Free; JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+        end
+        else
+        begin
+          if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>M0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        if SameText(Request.Method,'GET') then
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(It0.Id));
+          O.AddPair('MenuSectionId', TJSONNumber.Create(It0.MenuSectionId));
+          O.AddPair('Name', It0.Name);
+          if Trim(It0.Description)<>'' then O.AddPair('Description', It0.Description) else O.AddPair('Description', TJSONNull.Create);
+          if It0.HasPriceCents then O.AddPair('PriceCents', TJSONNumber.Create(It0.PriceCents)) else O.AddPair('PriceCents', TJSONNull.Create);
+          O.AddPair('IsAvailable', TJSONBool.Create(It0.IsAvailable));
+          O.AddPair('DisplayOrder', TJSONNumber.Create(It0.DisplayOrder));
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          Exit;
+        end
+        else if SameText(Request.Method,'PUT') then
+        begin
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var Name := Body.GetValue<string>('Name','');
+            var Desc := Body.GetValue<string>('Description','');
+            var PriceVal := Body.GetValue('PriceCents');
+            var HasPrice := (PriceVal<>nil) and (not (PriceVal is TJSONNull));
+            var PriceCents := 0;
+            if HasPrice then PriceCents := StrToIntDef(PriceVal.Value,0);
+            var IsAvailable := Body.GetValue<Boolean>('IsAvailable', True);
+            var DisplayOrder := Body.GetValue<Integer>('DisplayOrder',0);
+            if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+            var It := TMenuItemRepository.UpdateItem(Id, Name, Desc, PriceCents, HasPrice, IsAvailable, DisplayOrder);
+            if It=nil then begin JSONError(404,'Not found'); Exit; end;
+            try
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(It.Id));
+              O.AddPair('MenuSectionId', TJSONNumber.Create(It.MenuSectionId));
+              O.AddPair('Name', It.Name);
+              if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+              if It.HasPriceCents then O.AddPair('PriceCents', TJSONNumber.Create(It.PriceCents)) else O.AddPair('PriceCents', TJSONNull.Create);
+              O.AddPair('IsAvailable', TJSONBool.Create(It.IsAvailable));
+              O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            finally It.Free; end;
+          finally Body.Free; end;
+          Exit;
+        end
+        else if SameText(Request.Method,'DELETE') then
+        begin
+          TMenuItemRepository.DeleteItem(Id);
+          Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+          Exit;
+        end;
+
+      finally
+        M0.Free;
+        S0.Free;
+        It0.Free;
+      end;
+    end;
+
     // Displays
     if (Copy(NormalizedPath, 1, 10) = '/displays/') then
     begin
@@ -1578,7 +2096,14 @@ begin
             var Arr := TJSONArray.Create; try
               for var Itm in L do
               begin
-                var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Itm.Id)); O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)); O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder)); O.AddPair('Duration', TJSONNumber.Create(Itm.Duration)); Arr.AddElement(O);
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(Itm.Id));
+                O.AddPair('ItemType', Itm.ItemType);
+                if Itm.MediaFileId>0 then O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)) else O.AddPair('MediaFileId', TJSONNull.Create);
+                if Itm.MenuId>0 then O.AddPair('MenuId', TJSONNumber.Create(Itm.MenuId)) else O.AddPair('MenuId', TJSONNull.Create);
+                O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder));
+                O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
+                Arr.AddElement(O);
               end;
               var Wrapper := TJSONObject.Create; try
                 Wrapper.AddPair('value', Arr);
@@ -1592,13 +2117,32 @@ begin
           if TryReplayIdempotency(Camp.OrganizationId) then Exit;
           var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
             if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var ItemType := Body.GetValue<string>('ItemType','media');
             var MediaFileId := Body.GetValue<Integer>('MediaFileId',0);
+            var MenuId := Body.GetValue<Integer>('MenuId',0);
             var DisplayOrder := Body.GetValue<Integer>('DisplayOrder',0);
             var Duration := Body.GetValue<Integer>('Duration',0);
-            if MediaFileId=0 then begin JSONError(400,'Missing MediaFileId'); Exit; end;
-            var Itm := TCampaignItemRepository.CreateItem(CampId, MediaFileId, DisplayOrder, Duration);
+            if SameText(ItemType,'menu') then
+            begin
+              if MenuId=0 then begin JSONError(400,'Missing MenuId'); Exit; end;
+              MediaFileId := 0;
+            end
+            else
+            begin
+              ItemType := 'media';
+              if MediaFileId=0 then begin JSONError(400,'Missing MediaFileId'); Exit; end;
+              MenuId := 0;
+            end;
+
+            var Itm := TCampaignItemRepository.CreateItem(CampId, ItemType, MediaFileId, MenuId, DisplayOrder, Duration);
             try
-              var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Itm.Id)); O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)); O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder)); O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(Itm.Id));
+              O.AddPair('ItemType', Itm.ItemType);
+              if Itm.MediaFileId>0 then O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)) else O.AddPair('MediaFileId', TJSONNull.Create);
+              if Itm.MenuId>0 then O.AddPair('MenuId', TJSONNumber.Create(Itm.MenuId)) else O.AddPair('MenuId', TJSONNull.Create);
+              O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder));
+              O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
               var OutBody := O.ToJSON;
               O.Free;
               StoreIdempotency(Camp.OrganizationId, 201, OutBody);
@@ -1772,7 +2316,13 @@ begin
       if SameText(Request.Method,'GET') then
       begin
         var Itm := Itm0;
-        var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Itm.Id)); O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)); O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder)); O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
+        var O := TJSONObject.Create;
+        O.AddPair('Id', TJSONNumber.Create(Itm.Id));
+        O.AddPair('ItemType', Itm.ItemType);
+        if Itm.MediaFileId>0 then O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)) else O.AddPair('MediaFileId', TJSONNull.Create);
+        if Itm.MenuId>0 then O.AddPair('MenuId', TJSONNumber.Create(Itm.MenuId)) else O.AddPair('MenuId', TJSONNull.Create);
+        O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder));
+        O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
           Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
         Exit;
       end
@@ -1780,11 +2330,38 @@ begin
       begin
         var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
           if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+          var ItemType := Body.GetValue<string>('ItemType', Itm0.ItemType);
+          if ItemType='' then ItemType := 'media';
           var MediaFileId := Body.GetValue<Integer>('MediaFileId',0);
+          var MenuId := Body.GetValue<Integer>('MenuId',0);
           var DisplayOrder := Body.GetValue<Integer>('DisplayOrder',0);
           var Duration := Body.GetValue<Integer>('Duration',0);
-          var Itm := TCampaignItemRepository.UpdateItem(Id, MediaFileId, DisplayOrder, Duration); if Itm=nil then begin JSONError(404,'Not found'); Exit; end;
-          try var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Itm.Id)); O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)); O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder)); O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
+          if SameText(ItemType,'menu') then
+          begin
+            if MenuId=0 then begin JSONError(400,'Missing MenuId'); Exit; end;
+            MediaFileId := 0;
+          end
+          else if SameText(ItemType,'media') then
+          begin
+            if MediaFileId=0 then begin JSONError(400,'Missing MediaFileId'); Exit; end;
+            MenuId := 0;
+          end
+          else
+          begin
+            JSONError(400,'Invalid ItemType');
+            Exit;
+          end;
+
+          var Itm := TCampaignItemRepository.UpdateItem(Id, ItemType, MediaFileId, MenuId, DisplayOrder, Duration);
+          if Itm=nil then begin JSONError(404,'Not found'); Exit; end;
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Itm.Id));
+            O.AddPair('ItemType', Itm.ItemType);
+            if Itm.MediaFileId>0 then O.AddPair('MediaFileId', TJSONNumber.Create(Itm.MediaFileId)) else O.AddPair('MediaFileId', TJSONNull.Create);
+            if Itm.MenuId>0 then O.AddPair('MenuId', TJSONNumber.Create(Itm.MenuId)) else O.AddPair('MenuId', TJSONNull.Create);
+            O.AddPair('DisplayOrder', TJSONNumber.Create(Itm.DisplayOrder));
+            O.AddPair('Duration', TJSONNumber.Create(Itm.Duration));
             Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
           finally Itm.Free; end; Exit;
         finally Body.Free; end;

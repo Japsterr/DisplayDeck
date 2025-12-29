@@ -13,6 +13,7 @@
 > - Assignments: /displays/{id}/campaign-assignments (GET/POST), /campaign-assignments/{id} (PUT/DELETE)
 > - Media: /organizations/{orgId}/media-files (GET/POST), /media-files/{id} (GET/PUT/DELETE), /media-files/upload-url, /media-files/{id}/download-url
 > - Device/logging: /device/config, /device/logs, /playback-logs
+> - Menus: /organizations/{orgId}/menus, /menus/{id}, /menus/{id}/sections, /menu-sections/{id}/items, /public/menus/{token}
 
 ## 1. Project Vision
 

@@ -72,12 +72,64 @@ CREATE TABLE Campaigns (
 CREATE TABLE CampaignItems (
     CampaignItemID SERIAL PRIMARY KEY,
     CampaignID INT NOT NULL,
-    MediaFileID INT NOT NULL,
+        -- Media items (legacy) reference MediaFileID
+        MediaFileID INT,
+        -- New: campaign items can also be menus
+        ItemType VARCHAR(20) NOT NULL DEFAULT 'media',
+        MenuID INT,
     DisplayOrder INT NOT NULL,
     Duration INT NOT NULL, -- in seconds
     FOREIGN KEY (CampaignID) REFERENCES Campaigns(CampaignID) ON DELETE CASCADE,
     FOREIGN KEY (MediaFileID) REFERENCES MediaFiles(MediaFileID) ON DELETE CASCADE
 );
+
+-- New: dynamic menu boards
+CREATE TABLE Menus (
+        MenuID SERIAL PRIMARY KEY,
+        OrganizationID INT NOT NULL,
+        Name VARCHAR(255) NOT NULL,
+        Orientation VARCHAR(20) NOT NULL DEFAULT 'Landscape',
+        TemplateKey VARCHAR(64) NOT NULL DEFAULT 'simple',
+        ThemeConfig JSONB NOT NULL DEFAULT '{}'::jsonb,
+        PublicToken VARCHAR(64) NOT NULL UNIQUE,
+        CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE CASCADE
+);
+
+CREATE TABLE MenuSections (
+        MenuSectionID SERIAL PRIMARY KEY,
+        MenuID INT NOT NULL,
+        Name VARCHAR(255) NOT NULL,
+        DisplayOrder INT NOT NULL DEFAULT 0,
+        CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (MenuID) REFERENCES Menus(MenuID) ON DELETE CASCADE
+);
+
+CREATE TABLE MenuItems (
+        MenuItemID SERIAL PRIMARY KEY,
+        MenuSectionID INT NOT NULL,
+        Name VARCHAR(255) NOT NULL,
+        Description TEXT,
+        PriceCents INT,
+        IsAvailable BOOLEAN NOT NULL DEFAULT TRUE,
+        DisplayOrder INT NOT NULL DEFAULT 0,
+        CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (MenuSectionID) REFERENCES MenuSections(MenuSectionID) ON DELETE CASCADE
+);
+
+ALTER TABLE CampaignItems
+    ADD CONSTRAINT fk_campaignitems_menuid FOREIGN KEY (MenuID) REFERENCES Menus(MenuID) ON DELETE CASCADE;
+
+ALTER TABLE CampaignItems
+    ADD CONSTRAINT ck_campaignitems_itemtype_target
+    CHECK (
+        (ItemType='media' AND MediaFileID IS NOT NULL AND MenuID IS NULL)
+        OR
+        (ItemType='menu' AND MenuID IS NOT NULL AND MediaFileID IS NULL)
+    );
 
 -- 4. Scheduling and Display Tables
 CREATE TABLE Schedules (

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.9 - 2025-12-29
+
+- **Menu Builder (Phase 1)**:
+  - Added menu tables: `Menus`, `MenuSections`, `MenuItems`.
+  - Added public menu rendering endpoint: `GET /public/menus/{token}`.
+  - Added dashboard UI for menu CRUD and preview.
+- **Campaign Items**:
+  - Campaign items now support `ItemType` (`media` | `menu`).
+  - `CampaignItems` can reference either `MediaFileId` or `MenuId` (one-of enforced).
+- **Database**:
+  - Fresh installs updated via `schema.sql`.
+  - Existing DB migration: `migrations/2025-12-29_add_menus.sql`.
+
 ## 0.1.8 - 2025-12-28
 
 - **Campaign Editor**:

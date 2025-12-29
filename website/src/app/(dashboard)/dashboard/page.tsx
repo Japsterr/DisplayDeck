@@ -4,7 +4,24 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Monitor, Megaphone, AlertCircle, Activity } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, isValid, parseISO } from "date-fns";
+
+function safeDistanceToNow(input: string | null | undefined): string {
+  if (!input) return "Unknown";
+  try {
+    // Prefer ISO parsing; fall back to Date parsing.
+    const parsed = parseISO(input);
+    const date = isValid(parsed) ? parsed : new Date(input);
+    if (!isValid(date)) return "Unknown";
+    return formatDistanceToNow(date, { addSuffix: true });
+  } catch {
+    return "Unknown";
+  }
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
 
 interface Display {
   Id: number;
@@ -58,8 +75,21 @@ export default function DashboardPage() {
           return;
         }
 
-        const user = JSON.parse(userStr);
-        const orgId = user.OrganizationId;
+        let user: any;
+        try {
+          user = JSON.parse(userStr);
+        } catch {
+          console.error("Invalid user JSON in localStorage");
+          router.push("/login");
+          return;
+        }
+
+        const orgId = user?.OrganizationId;
+        if (!orgId) {
+          console.error("Missing OrganizationId in user profile");
+          router.push("/login");
+          return;
+        }
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
 
         const headers = {
@@ -73,17 +103,23 @@ export default function DashboardPage() {
             return;
         }
         const displaysData = await displaysRes.json();
-        const displaysList: Display[] = displaysData.value || [];
+        const displaysList: Display[] = asArray<Display>(
+          (displaysData && (displaysData.value ?? displaysData.Value ?? displaysData.items ?? displaysData.Items))
+        );
 
         // Fetch Campaigns
         const campaignsRes = await fetch(`${apiUrl}/organizations/${orgId}/campaigns`, { headers });
         const campaignsData = await campaignsRes.json();
-        const campaignsList: Campaign[] = campaignsData.value || [];
+        const campaignsList: Campaign[] = asArray<Campaign>(
+          (campaignsData && (campaignsData.value ?? campaignsData.Value ?? campaignsData.items ?? campaignsData.Items))
+        );
 
         // Fetch Audit Log
         const auditRes = await fetch(`${apiUrl}/organizations/${orgId}/audit-log?limit=5`, { headers });
         const auditData = await auditRes.json();
-        const auditList: AuditLog[] = auditData.Items || [];
+        const auditList: AuditLog[] = asArray<AuditLog>(
+          (auditData && (auditData.Items ?? auditData.items ?? auditData.value ?? auditData.Value))
+        );
 
         // Check System Health
         let healthStatus = "Healthy";
@@ -95,7 +131,7 @@ export default function DashboardPage() {
         }
 
         // Calculate Stats
-        const offlineCount = displaysList.filter(d => d.CurrentStatus === "Offline").length;
+        const offlineCount = displaysList.filter(d => d?.CurrentStatus === "Offline").length;
 
         setStats({
           totalDisplays: displaysList.length,
@@ -192,7 +228,7 @@ export default function DashboardPage() {
                       </p>
                     </div>
                     <div className="ml-auto font-medium text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(log.CreatedAt), { addSuffix: true })}
+                      {safeDistanceToNow(log.CreatedAt)}
                     </div>
                   </div>
                 ))
@@ -214,7 +250,7 @@ export default function DashboardPage() {
                     <div className="ml-4 space-y-1">
                       <p className="text-sm font-medium leading-none">{display.Name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {display.CurrentStatus} • Last seen {formatDistanceToNow(new Date(display.LastSeen), { addSuffix: true })}
+                        {display.CurrentStatus} • Last seen {safeDistanceToNow(display.LastSeen)}
                       </p>
                     </div>
                     <div className={`ml-auto font-medium ${display.CurrentStatus === 'Online' ? 'text-green-500' : 'text-red-500'}`}>

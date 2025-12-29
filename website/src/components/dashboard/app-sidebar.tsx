@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Monitor,
   Megaphone,
+  UtensilsCrossed,
   Library,
   Settings,
   LogOut,
@@ -41,6 +42,11 @@ const items = [
     title: "Campaigns",
     url: "/dashboard/campaigns",
     icon: Megaphone,
+  },
+  {
+    title: "Menus",
+    url: "/dashboard/menus",
+    icon: UtensilsCrossed,
   },
   {
     title: "Media Library",

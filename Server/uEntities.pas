@@ -129,12 +129,16 @@ type
     FId: Integer;
     FCampaignId: Integer;
     FMediaFileId: Integer;
+    FItemType: string;
+    FMenuId: Integer;
     FDisplayOrder: Integer;
     FDuration: Integer;
   public
     property Id: Integer read FId write FId;
     property CampaignId: Integer read FCampaignId write FCampaignId;
     property MediaFileId: Integer read FMediaFileId write FMediaFileId;
+    property ItemType: string read FItemType write FItemType;
+    property MenuId: Integer read FMenuId write FMenuId;
     property DisplayOrder: Integer read FDisplayOrder write FDisplayOrder;
     property Duration: Integer read FDuration write FDuration;
   end;

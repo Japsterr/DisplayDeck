@@ -826,6 +826,327 @@ paths:
         '204':
           description: No Content
 
+  /organizations/{OrganizationId}/menus:
+    get:
+      summary: List menus for organization
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Menu'
+    post:
+      summary: Create menu for organization
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: OrganizationId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Menu'
+
+  /menus/{Id}:
+    get:
+      summary: Get menu by id
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Menu'
+        '404':
+          description: Not found
+    put:
+      summary: Update menu
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Menu'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Menu'
+    delete:
+      summary: Delete menu
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+
+  /menus/{MenuId}/sections:
+    get:
+      summary: List sections for menu
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: MenuId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MenuSection'
+    post:
+      summary: Create section for menu
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: MenuId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuSectionCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuSection'
+
+  /menu-sections/{Id}:
+    put:
+      summary: Update menu section
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuSection'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuSection'
+    delete:
+      summary: Delete menu section
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+
+  /menu-sections/{MenuSectionId}/items:
+    get:
+      summary: List items for menu section
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: MenuSectionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MenuItem'
+    post:
+      summary: Create item for menu section
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: MenuSectionId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuItemCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+
+  /menu-items/{Id}:
+    put:
+      summary: Update menu item
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuItem'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+    delete:
+      summary: Delete menu item
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+
+  /public/menus/{Token}:
+    get:
+      summary: Get public menu by token (no auth)
+      parameters:
+        - name: Token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicMenu'
+        '404':
+          description: Not found
+
   /displays/{DisplayId}/campaign-assignments:
     get:
       summary: List campaign assignments for display
@@ -1389,16 +1710,101 @@ components:
       properties:
         Id: { type: integer }
         CampaignId: { type: integer }
-        MediaFileId: { type: integer }
+        ItemType:
+          type: string
+          description: "media" (default) or "menu"
+          enum: [media, menu]
+        MediaFileId: { type: integer, nullable: true }
+        MenuId: { type: integer, nullable: true }
         DisplayOrder: { type: integer }
         Duration: { type: integer }
     CampaignItemCreate:
+      oneOf:
+        - type: object
+          properties:
+            ItemType: { type: string, enum: [media] }
+            MediaFileId: { type: integer }
+            DisplayOrder: { type: integer }
+            Duration: { type: integer }
+          required: [MediaFileId]
+        - type: object
+          properties:
+            ItemType: { type: string, enum: [menu] }
+            MenuId: { type: integer }
+            DisplayOrder: { type: integer }
+            Duration: { type: integer }
+          required: [MenuId]
+
+    Menu:
       type: object
       properties:
-        MediaFileId: { type: integer }
+        Id: { type: integer }
+        OrganizationId: { type: integer }
+        Name: { type: string }
+        Orientation: { type: string }
+        TemplateKey: { type: string }
+        ThemeConfig:
+          type: object
+          additionalProperties: true
+        PublicToken: { type: string }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+    MenuCreate:
+      type: object
+      properties:
+        Name: { type: string }
+        Orientation: { type: string }
+        TemplateKey: { type: string }
+        ThemeConfig:
+          type: object
+          additionalProperties: true
+      required: [Name]
+    MenuSection:
+      type: object
+      properties:
+        Id: { type: integer }
+        MenuId: { type: integer }
+        Name: { type: string }
         DisplayOrder: { type: integer }
-        Duration: { type: integer }
-      required: [MediaFileId]
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+    MenuSectionCreate:
+      type: object
+      properties:
+        Name: { type: string }
+        DisplayOrder: { type: integer }
+      required: [Name]
+    MenuItem:
+      type: object
+      properties:
+        Id: { type: integer }
+        MenuSectionId: { type: integer }
+        Name: { type: string }
+        Description: { type: string, nullable: true }
+        PriceCents: { type: integer, nullable: true }
+        IsAvailable: { type: boolean }
+        DisplayOrder: { type: integer }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+    MenuItemCreate:
+      type: object
+      properties:
+        Name: { type: string }
+        Description: { type: string, nullable: true }
+        PriceCents: { type: integer, nullable: true }
+        IsAvailable: { type: boolean }
+        DisplayOrder: { type: integer }
+      required: [Name]
+    PublicMenu:
+      type: object
+      properties:
+        Menu: { $ref: '#/components/schemas/Menu' }
+        Sections:
+          type: array
+          items: { $ref: '#/components/schemas/MenuSection' }
+        Items:
+          type: array
+          items: { $ref: '#/components/schemas/MenuItem' }
 
     Schedule:
       type: object
