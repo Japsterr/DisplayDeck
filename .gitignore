@@ -59,6 +59,7 @@ tests/last-token.txt
 # Build outputs and binaries
 Server/Linux/Release/
 Server/Linux/DisplayDeck.WebBroker
+!Server/Linux/DisplayDeck.WebBroker
 Server/Linux/*.o
 Server/Linux/*.res
 Server/**/.DS_Store
