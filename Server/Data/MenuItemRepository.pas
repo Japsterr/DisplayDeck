@@ -41,7 +41,7 @@ type
 
 implementation
 
-uses System.SysUtils, FireDAC.Comp.Client, FireDAC.Stan.Param, uServerContainer;
+uses System.SysUtils, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Param, uServerContainer;
 
 function NewConnection: TFDConnection;
 begin
@@ -129,14 +129,19 @@ begin
                   + 'values (:S,:Name,:Desc,:Price,:Avail,:O) returning *';
       Q.ParamByName('S').AsInteger := MenuSectionId;
       Q.ParamByName('Name').AsString := Name;
+      var PDesc := Q.ParamByName('Desc');
+      PDesc.DataType := ftWideMemo;
       if Trim(Description)<>'' then
-        Q.ParamByName('Desc').AsString := Description
+        PDesc.AsString := Description
       else
-        Q.ParamByName('Desc').Clear;
+        PDesc.Clear;
+
+      var PPrice := Q.ParamByName('Price');
+      PPrice.DataType := ftInteger;
       if HasPriceCents then
-        Q.ParamByName('Price').AsInteger := PriceCents
+        PPrice.AsInteger := PriceCents
       else
-        Q.ParamByName('Price').Clear;
+        PPrice.Clear;
       Q.ParamByName('Avail').AsBoolean := IsAvailable;
       Q.ParamByName('O').AsInteger := DisplayOrder;
       Q.Open;
@@ -157,14 +162,19 @@ begin
                   + 'where MenuItemID=:Id returning *';
       Q.ParamByName('Id').AsInteger := Id;
       Q.ParamByName('Name').AsString := Name;
+      var PDesc := Q.ParamByName('Desc');
+      PDesc.DataType := ftWideMemo;
       if Trim(Description)<>'' then
-        Q.ParamByName('Desc').AsString := Description
+        PDesc.AsString := Description
       else
-        Q.ParamByName('Desc').Clear;
+        PDesc.Clear;
+
+      var PPrice := Q.ParamByName('Price');
+      PPrice.DataType := ftInteger;
       if HasPriceCents then
-        Q.ParamByName('Price').AsInteger := PriceCents
+        PPrice.AsInteger := PriceCents
       else
-        Q.ParamByName('Price').Clear;
+        PPrice.Clear;
       Q.ParamByName('Avail').AsBoolean := IsAvailable;
       Q.ParamByName('O').AsInteger := DisplayOrder;
       Q.Open;

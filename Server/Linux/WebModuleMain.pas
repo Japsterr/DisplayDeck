@@ -1649,7 +1649,10 @@ begin
             try
               if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
               var Name := Body.GetValue<string>('Name','');
-              var Desc := Body.GetValue<string>('Description','');
+              var Desc := '';
+              var DescVal := Body.GetValue('Description');
+              if (DescVal<>nil) and (not (DescVal is TJSONNull)) then
+                Desc := DescVal.Value;
               var PriceVal := Body.GetValue('PriceCents');
               var HasPrice := (PriceVal<>nil) and (not (PriceVal is TJSONNull));
               var PriceCents := 0;
@@ -1786,7 +1789,10 @@ begin
           try
             if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
             var Name := Body.GetValue<string>('Name','');
-            var Desc := Body.GetValue<string>('Description','');
+            var Desc := '';
+            var DescVal := Body.GetValue('Description');
+            if (DescVal<>nil) and (not (DescVal is TJSONNull)) then
+              Desc := DescVal.Value;
             var PriceVal := Body.GetValue('PriceCents');
             var HasPrice := (PriceVal<>nil) and (not (PriceVal is TJSONNull));
             var PriceCents := 0;

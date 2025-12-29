@@ -413,7 +413,16 @@ export default function MenuEditorPage() {
       toast.success("Item created");
     } catch (e) {
       console.error(e);
-      toast.error("Failed to create item");
+      let msg = "Failed to create item";
+      if (e instanceof Error && e.message) msg = e.message;
+      // If the API returned our standard JSONError payload, prefer its `message` field.
+      try {
+        const parsed = JSON.parse(msg) as { message?: string };
+        if (parsed?.message) msg = parsed.message;
+      } catch {
+        // ignore
+      }
+      toast.error(msg);
     }
   };
 
