@@ -10,7 +10,9 @@ type
     FId: Integer;
     FMenuSectionId: Integer;
     FName: string;
+    FSku: string;
     FDescription: string;
+    FImageUrl: string;
     FPriceCents: Integer;
     FHasPriceCents: Boolean;
     FIsAvailable: Boolean;
@@ -21,7 +23,9 @@ type
     property Id: Integer read FId write FId;
     property MenuSectionId: Integer read FMenuSectionId write FMenuSectionId;
     property Name: string read FName write FName;
+    property Sku: string read FSku write FSku;
     property Description: string read FDescription write FDescription;
+    property ImageUrl: string read FImageUrl write FImageUrl;
     property PriceCents: Integer read FPriceCents write FPriceCents;
     property HasPriceCents: Boolean read FHasPriceCents write FHasPriceCents;
     property IsAvailable: Boolean read FIsAvailable write FIsAvailable;
@@ -34,8 +38,8 @@ type
   public
     class function GetById(const Id: Integer): TMenuItem;
     class function ListBySection(const MenuSectionId: Integer): TObjectList<TMenuItem>;
-    class function CreateItem(const MenuSectionId: Integer; const Name, Description: string; const PriceCents: Integer; const HasPriceCents, IsAvailable: Boolean; const DisplayOrder: Integer): TMenuItem;
-    class function UpdateItem(const Id: Integer; const Name, Description: string; const PriceCents: Integer; const HasPriceCents, IsAvailable: Boolean; const DisplayOrder: Integer): TMenuItem;
+    class function CreateItem(const MenuSectionId: Integer; const Name, Sku, Description, ImageUrl: string; const PriceCents: Integer; const HasPriceCents, IsAvailable: Boolean; const DisplayOrder: Integer): TMenuItem;
+    class function UpdateItem(const Id: Integer; const Name, Sku, Description, ImageUrl: string; const PriceCents: Integer; const HasPriceCents, IsAvailable: Boolean; const DisplayOrder: Integer): TMenuItem;
     class procedure DeleteItem(const Id: Integer);
   end;
 
@@ -62,10 +66,21 @@ begin
   Result.Id := Q.FieldByName('MenuItemID').AsInteger;
   Result.MenuSectionId := Q.FieldByName('MenuSectionID').AsInteger;
   Result.Name := Q.FieldByName('Name').AsString;
+
+  if Q.FindField('Sku')<>nil then
+    Result.Sku := Q.FieldByName('Sku').AsString
+  else
+    Result.Sku := '';
+
   if Q.FindField('Description')<>nil then
     Result.Description := Q.FieldByName('Description').AsString
   else
     Result.Description := '';
+
+  if Q.FindField('ImageUrl')<>nil then
+    Result.ImageUrl := Q.FieldByName('ImageUrl').AsString
+  else
+    Result.ImageUrl := '';
 
   Result.HasPriceCents := (Q.FindField('PriceCents')<>nil) and (not Q.FieldByName('PriceCents').IsNull);
   if Result.HasPriceCents then
@@ -117,7 +132,7 @@ begin
   finally C.Free; end;
 end;
 
-class function TMenuItemRepository.CreateItem(const MenuSectionId: Integer; const Name, Description: string; const PriceCents: Integer; const HasPriceCents, IsAvailable: Boolean; const DisplayOrder: Integer): TMenuItem;
+class function TMenuItemRepository.CreateItem(const MenuSectionId: Integer; const Name, Sku, Description, ImageUrl: string; const PriceCents: Integer; const HasPriceCents, IsAvailable: Boolean; const DisplayOrder: Integer): TMenuItem;
 var C: TFDConnection; Q: TFDQuery;
 begin
   C := NewConnection;
@@ -125,16 +140,31 @@ begin
     Q := TFDQuery.Create(nil);
     try
       Q.Connection := C;
-      Q.SQL.Text := 'insert into MenuItems (MenuSectionID, Name, Description, PriceCents, IsAvailable, DisplayOrder) '
-                  + 'values (:S,:Name,:Desc,:Price,:Avail,:O) returning *';
+      Q.SQL.Text := 'insert into MenuItems (MenuSectionID, Name, Sku, Description, ImageUrl, PriceCents, IsAvailable, DisplayOrder) '
+                  + 'values (:S,:Name,:Sku,:Desc,:Img,:Price,:Avail,:O) returning *';
       Q.ParamByName('S').AsInteger := MenuSectionId;
       Q.ParamByName('Name').AsString := Name;
+
+      var PSku := Q.ParamByName('Sku');
+      PSku.DataType := ftWideString;
+      if Trim(Sku)<>'' then
+        PSku.AsString := Sku
+      else
+        PSku.Clear;
+
       var PDesc := Q.ParamByName('Desc');
       PDesc.DataType := ftWideMemo;
       if Trim(Description)<>'' then
         PDesc.AsString := Description
       else
         PDesc.Clear;
+
+      var PImg := Q.ParamByName('Img');
+      PImg.DataType := ftWideString;
+      if Trim(ImageUrl)<>'' then
+        PImg.AsString := ImageUrl
+      else
+        PImg.Clear;
 
       var PPrice := Q.ParamByName('Price');
       PPrice.DataType := ftInteger;
@@ -150,7 +180,7 @@ begin
   finally C.Free; end;
 end;
 
-class function TMenuItemRepository.UpdateItem(const Id: Integer; const Name, Description: string; const PriceCents: Integer; const HasPriceCents, IsAvailable: Boolean; const DisplayOrder: Integer): TMenuItem;
+class function TMenuItemRepository.UpdateItem(const Id: Integer; const Name, Sku, Description, ImageUrl: string; const PriceCents: Integer; const HasPriceCents, IsAvailable: Boolean; const DisplayOrder: Integer): TMenuItem;
 var C: TFDConnection; Q: TFDQuery;
 begin
   C := NewConnection;
@@ -158,16 +188,31 @@ begin
     Q := TFDQuery.Create(nil);
     try
       Q.Connection := C;
-      Q.SQL.Text := 'update MenuItems set Name=:Name, Description=:Desc, PriceCents=:Price, IsAvailable=:Avail, DisplayOrder=:O, UpdatedAt=now() '
+      Q.SQL.Text := 'update MenuItems set Name=:Name, Sku=:Sku, Description=:Desc, ImageUrl=:Img, PriceCents=:Price, IsAvailable=:Avail, DisplayOrder=:O, UpdatedAt=now() '
                   + 'where MenuItemID=:Id returning *';
       Q.ParamByName('Id').AsInteger := Id;
       Q.ParamByName('Name').AsString := Name;
+
+      var PSku := Q.ParamByName('Sku');
+      PSku.DataType := ftWideString;
+      if Trim(Sku)<>'' then
+        PSku.AsString := Sku
+      else
+        PSku.Clear;
+
       var PDesc := Q.ParamByName('Desc');
       PDesc.DataType := ftWideMemo;
       if Trim(Description)<>'' then
         PDesc.AsString := Description
       else
         PDesc.Clear;
+
+      var PImg := Q.ParamByName('Img');
+      PImg.DataType := ftWideString;
+      if Trim(ImageUrl)<>'' then
+        PImg.AsString := ImageUrl
+      else
+        PImg.Clear;
 
       var PPrice := Q.ParamByName('Price');
       PPrice.DataType := ftInteger;

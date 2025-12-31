@@ -58,7 +58,7 @@ export default function DisplaysPage() {
   const [displays, setDisplays] = useState<Display[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [newDisplay, setNewDisplay] = useState({ name: "", orientation: "Landscape" });
+  const [newDisplay, setNewDisplay] = useState({ name: "", pairingCode: "", orientation: "Landscape" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchDisplays = async () => {
@@ -103,9 +103,14 @@ export default function DisplaysPage() {
     fetchDisplays();
   }, []);
 
-  const handleCreateDisplay = async () => {
+  const handlePairDisplay = async () => {
     if (!newDisplay.name) {
       toast.error("Display name is required");
+      return;
+    }
+
+    if (!newDisplay.pairingCode.trim()) {
+      toast.error("Pairing code is required");
       return;
     }
 
@@ -120,29 +125,32 @@ export default function DisplaysPage() {
       const orgId = user.OrganizationId;
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
 
-      const response = await fetch(`${apiUrl}/organizations/${orgId}/displays`, {
+      const response = await fetch(`${apiUrl}/organizations/${orgId}/displays/claim`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Auth-Token": token || "",
         },
         body: JSON.stringify({
+          ProvisioningToken: newDisplay.pairingCode.trim().toUpperCase(),
           Name: newDisplay.name,
           Orientation: newDisplay.orientation,
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to create display");
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const msg = payload?.message || "Failed to pair display";
+        throw new Error(msg);
+      }
 
-      const createdDisplay = await response.json();
-      
-      toast.success("Display created successfully");
-      setDisplays([...displays, createdDisplay]);
+      toast.success("Display paired successfully");
+      await fetchDisplays();
       setIsAddDialogOpen(false);
-      setNewDisplay({ name: "", orientation: "Landscape" });
+      setNewDisplay({ name: "", pairingCode: "", orientation: "Landscape" });
     } catch (error) {
       console.error(error);
-      toast.error("Failed to create display");
+      toast.error(error instanceof Error ? error.message : "Failed to pair display");
     } finally {
       setIsSubmitting(false);
     }
@@ -193,12 +201,24 @@ export default function DisplaysPage() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add New Display</DialogTitle>
+                <DialogTitle>Add Display</DialogTitle>
                 <DialogDescription>
-                  Create a new display endpoint. You will receive a provisioning token to pair your device.
+                  Turn on the Android player and enter the 6-character code shown on the screen.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="pairingCode" className="text-right">
+                    Code
+                  </Label>
+                  <Input
+                    id="pairingCode"
+                    value={newDisplay.pairingCode}
+                    onChange={(e) => setNewDisplay({ ...newDisplay, pairingCode: e.target.value })}
+                    className="col-span-3 font-mono uppercase"
+                    placeholder="A1B2C3"
+                  />
+                </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="name" className="text-right">
                     Name
@@ -231,8 +251,8 @@ export default function DisplaysPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreateDisplay} disabled={isSubmitting}>
-                  {isSubmitting ? "Creating..." : "Create Display"}
+                <Button onClick={handlePairDisplay} disabled={isSubmitting}>
+                  {isSubmitting ? "Pairing..." : "Pair Display"}
                 </Button>
               </DialogFooter>
             </DialogContent>

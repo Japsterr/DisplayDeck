@@ -6,6 +6,8 @@ import { Monitor, Megaphone, AlertCircle, Activity } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow, isValid, parseISO } from "date-fns";
 
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
+
 function safeDistanceToNow(input: string | null | undefined): string {
   if (!input) return "Unknown";
   try {
@@ -204,7 +206,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.systemStatus}</div>
             <p className="text-xs text-muted-foreground">
-              API Connection
+              API Connection • UI build: {APP_VERSION}
             </p>
           </CardContent>
         </Card>

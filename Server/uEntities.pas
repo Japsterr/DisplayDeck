@@ -24,6 +24,8 @@ type
     FEmail: string;
     FPasswordHash: string;
     FRole: string;
+    FEmailVerifiedAt: TDateTime;
+    FHasEmailVerifiedAt: Boolean;
     FCreatedAt: TDateTime;
     FUpdatedAt: TDateTime;
   public
@@ -32,6 +34,8 @@ type
     property Email: string read FEmail write FEmail;
     property PasswordHash: string read FPasswordHash write FPasswordHash;
     property Role: string read FRole write FRole;
+    property EmailVerifiedAt: TDateTime read FEmailVerifiedAt write FEmailVerifiedAt;
+    property HasEmailVerifiedAt: Boolean read FHasEmailVerifiedAt write FHasEmailVerifiedAt;
     property CreatedAt: TDateTime read FCreatedAt write FCreatedAt;
     property UpdatedAt: TDateTime read FUpdatedAt write FUpdatedAt;
   end;
@@ -200,6 +204,19 @@ type
     property Id: Integer read FId write FId;
     property DisplayId: Integer read FDisplayId write FDisplayId;
     property CampaignId: Integer read FCampaignId write FCampaignId;
+    property IsPrimary: Boolean read FIsPrimary write FIsPrimary;
+  end;
+
+  TDisplayMenu = class
+  private
+    FId: Integer;
+    FDisplayId: Integer;
+    FMenuId: Integer;
+    FIsPrimary: Boolean;
+  public
+    property Id: Integer read FId write FId;
+    property DisplayId: Integer read FDisplayId write FDisplayId;
+    property MenuId: Integer read FMenuId write FMenuId;
     property IsPrimary: Boolean read FIsPrimary write FIsPrimary;
   end;
 

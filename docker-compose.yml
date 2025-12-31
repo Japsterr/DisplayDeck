@@ -1,5 +1,21 @@
 
 services:
+  # Local reverse proxy (so /api works without hardcoding host IPs)
+  nginx:
+    image: nginx:alpine
+    container_name: displaydeck-nginx
+    restart: unless-stopped
+    depends_on:
+      - website
+      - server
+      - minio
+      - swagger-ui
+    ports:
+      # Use 8088 to avoid port 80 conflicts on Windows.
+      - "8088:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
   # PostgreSQL Database Service
   postgres:
     image: postgres:15-alpine
@@ -20,6 +36,43 @@ services:
       # This runs the initialization scripts on first startup
       - ./init-user.sql:/docker-entrypoint-initdb.d/01-init-user.sql
       - ./schema.sql:/docker-entrypoint-initdb.d/02-schema.sql
+
+  # DB migrations runner (optional)
+  # Run with: docker compose --profile migrate up --abort-on-container-exit db-migrate
+  db-migrate:
+    image: postgres:15-alpine
+    depends_on:
+      - postgres
+    volumes:
+      - ./migrations:/migrations:ro
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: displaydeck
+      PGUSER: displaydeck_user
+      PGPASSWORD: verysecretpassword
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+        set -e
+        echo "Waiting for postgres..."
+        until pg_isready -h "$$PGHOST" -p "$$PGPORT" -U "$$PGUSER" -d "$$PGDATABASE"; do sleep 2; done
+        psql -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());"
+        for f in $$(ls -1 /migrations/*.sql 2>/dev/null | sort); do
+          name=$$(basename "$$f")
+          applied=$$(psql -tA -v ON_ERROR_STOP=1 -c "SELECT 1 FROM schema_migrations WHERE filename='$$name' LIMIT 1;")
+          if [ "$$applied" = "1" ]; then
+            echo "Skipping $$name (already applied)"
+          else
+            echo "Applying $$name"
+            psql -v ON_ERROR_STOP=1 -f "$$f"
+            psql -v ON_ERROR_STOP=1 -c "INSERT INTO schema_migrations(filename) VALUES ('$$name');"
+          fi
+        done
+        echo "Migrations complete."
+    restart: "no"
+    profiles: ["migrate"]
 
   # MinIO S3-Compatible Object Storage
   minio:
@@ -92,6 +145,16 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-in-prod-9b1d5c4e7f2a47b9a3c1d8e0f5b6c2a1}
       # Toggle server debug logs and endpoints
       SERVER_DEBUG: ${SERVER_DEBUG:-true}
+
+      # Auth / email flows
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3000}
+      AUTH_REQUIRE_EMAIL_VERIFICATION: ${AUTH_REQUIRE_EMAIL_VERIFICATION:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-no-reply@displaydeck.co.za}
+      SMTP_SECURE: ${SMTP_SECURE:-starttls}
     ports:
       - "2001:2001"
     depends_on:
@@ -121,12 +184,14 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: /api
+        NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-dev}
     container_name: displaydeck-website
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-dev}
 
 volumes:
   postgres_data:

@@ -41,6 +41,10 @@ begin
   Result.LastSeen := Q.FieldByName('LastSeen').AsDateTime;
   Result.CurrentStatus := Q.FieldByName('CurrentStatus').AsString;
   Result.ProvisioningToken := Q.FieldByName('ProvisioningToken').AsString;
+  Result.LastHeartbeatAt := Q.FieldByName('LastHeartbeatAt').AsDateTime;
+  Result.AppVersion := Q.FieldByName('AppVersion').AsString;
+  Result.DeviceInfoJson := Q.FieldByName('DeviceInfo').AsString;
+  Result.LastIp := Q.FieldByName('LastIp').AsString;
   Result.CreatedAt := Q.FieldByName('CreatedAt').AsDateTime;
   Result.UpdatedAt := Q.FieldByName('UpdatedAt').AsDateTime;
 end;

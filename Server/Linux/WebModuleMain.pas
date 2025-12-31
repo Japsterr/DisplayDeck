@@ -36,16 +36,20 @@ uses
   MenuSectionRepository,
   MenuItemRepository,
   DisplayCampaignRepository,
+  DisplayMenuRepository,
   ScheduleRepository,
   MediaFileRepository,
   UserRepository,
   RefreshTokenRepository,
+  EmailVerificationTokenRepository,
+  PasswordResetTokenRepository,
   ApiKeyRepository,
   IdempotencyRepository,
   AuditLogRepository,
   WebhookRepository,
   PasswordUtils,
   JWTUtils,
+  EmailSender,
   AWSSigV4,
   ProvisioningTokenRepository,
   uServerContainer,
@@ -126,6 +130,60 @@ var
   begin
     Result := GetEnvironmentVariable(Name);
     if Result = '' then Result := DefaultVal;
+  end;
+  function TryPresignS3GetUrlFromStorageUrl(
+    const StorageUrl, PublicEndpoint, InternalEndpoint, Access, Secret, Region: string;
+    out OutUrl: string
+  ): Boolean;
+  begin
+    Result := False;
+    OutUrl := '';
+
+    var Path := Trim(StorageUrl);
+    if Path='' then Exit;
+
+    if (PublicEndpoint<>'') and Path.StartsWith(PublicEndpoint) then
+      Path := Copy(Path, Length(PublicEndpoint)+1, MaxInt)
+    else if (InternalEndpoint<>'') and Path.StartsWith(InternalEndpoint) then
+      Path := Copy(Path, Length(InternalEndpoint)+1, MaxInt);
+
+    if (Length(Path)>0) and (Path[1]='/') then Path := Copy(Path,2,MaxInt);
+
+    // Backward-compat: StorageURL may include a reverse-proxy prefix (e.g. https://api.../minio/{bucket}/{key}).
+    if (Length(Path) >= 6) and SameText(Copy(Path, 1, 6), 'minio/') then
+      Path := Copy(Path, 7, MaxInt);
+
+    // Strip scheme/host if present.
+    var SchemePos := Pos('://', Path);
+    if SchemePos>0 then
+    begin
+      var HostEndIdx := SchemePos + 3;
+      var SlashAfterHost := 0;
+      var i := HostEndIdx;
+      while i <= Length(Path) do begin if Path[i]='/' then begin SlashAfterHost := i; Break; end; Inc(i); end;
+      if SlashAfterHost>0 then Path := Copy(Path, SlashAfterHost+1, MaxInt);
+    end;
+
+    if (Length(Path) >= 6) and SameText(Copy(Path, 1, 6), 'minio/') then
+      Path := Copy(Path, 7, MaxInt);
+
+    var p := Pos('/', Path);
+    if p=0 then Exit;
+    var Bucket := Copy(Path,1,p-1);
+    var Key := Copy(Path,p+1, MaxInt);
+    if (Bucket='') or (Key='') then Exit;
+
+    var Params: TS3PresignParams;
+    Params.Endpoint := PublicEndpoint;
+    if Params.Endpoint = '' then Params.Endpoint := InternalEndpoint;
+    Params.Region := Region;
+    Params.Bucket := Bucket;
+    Params.ObjectKey := Key;
+    Params.AccessKey := Access;
+    Params.SecretKey := Secret;
+    Params.Method := 'GET';
+    Params.ExpiresSeconds := 900;
+    Result := BuildS3PresignedUrl(Params, OutUrl);
   end;
   function DebugEnabled: Boolean;
   begin
@@ -533,6 +591,25 @@ begin
           // Create user
           var User := TUserRepository.CreateUser(Org.Id, Email, Password, 'Owner');
           try
+            // Send verification email (optional; enforced only if AUTH_REQUIRE_EMAIL_VERIFICATION=true)
+            try
+              var PublicWebUrl := GetEnv('PUBLIC_WEB_URL', 'http://localhost:3000');
+              if (PublicWebUrl <> '') and PublicWebUrl.EndsWith('/') then
+                PublicWebUrl := PublicWebUrl.Substring(0, Length(PublicWebUrl)-1);
+              var VerifyToken := GenerateOpaqueToken;
+              TEmailVerificationTokenRepository.InvalidateOutstandingForUser(User.Id);
+              TEmailVerificationTokenRepository.StoreToken(User.Id, HashSha256Hex(VerifyToken), Now + 2);
+              var VerifyLink := PublicWebUrl + '/verify-email?token=' + VerifyToken;
+              TEmailSender.SendPlainText(User.Email, 'Verify your DisplayDeck account',
+                'Welcome to DisplayDeck.' + sLineBreak + sLineBreak +
+                'Verify your email address by clicking this link:' + sLineBreak +
+                VerifyLink + sLineBreak + sLineBreak +
+                'If you did not create this account, you can ignore this email.');
+            except
+              on E: Exception do
+                Writeln('Auth register: failed to send verification email: ' + E.Message);
+            end;
+
             // Token
             var Header := TJSONObject.Create; Header.AddPair('alg','HS256'); Header.AddPair('typ','JWT');
             var Payload := TJSONObject.Create;
@@ -553,8 +630,11 @@ begin
             UserObj.AddPair('Id', TJSONNumber.Create(User.Id));
             UserObj.AddPair('OrganizationId', TJSONNumber.Create(User.OrganizationId));
             UserObj.AddPair('Email', User.Email);
-            UserObj.AddPair('PasswordHash', User.PasswordHash);
             UserObj.AddPair('Role', User.Role);
+            if User.HasEmailVerifiedAt then
+              UserObj.AddPair('EmailVerifiedAt', DateToISO8601(User.EmailVerifiedAt, True))
+            else
+              UserObj.AddPair('EmailVerifiedAt', TJSONNull.Create);
             var Obj := TJSONObject.Create;
             try
               Obj.AddPair('Token', Token);
@@ -586,6 +666,17 @@ begin
           var Parts := U.PasswordHash.Split(['$']);
           if Length(Parts)<>2 then begin JSONError(500,'Stored password format invalid'); Exit; end;
           if not VerifyPassword(Password, Parts[0], Parts[1]) then begin JSONError(401,'Invalid email or password'); Exit; end;
+
+          // Optional: block login until email verified
+          if SameText(GetEnv('AUTH_REQUIRE_EMAIL_VERIFICATION','false'), 'true') then
+          begin
+            if not U.HasEmailVerifiedAt then
+            begin
+              JSONError(403, 'Email not verified', 'email_not_verified');
+              Exit;
+            end;
+          end;
+
           var Header := TJSONObject.Create; Header.AddPair('alg','HS256'); Header.AddPair('typ','JWT');
           var Payload := TJSONObject.Create; 
           Payload.AddPair('sub', TJSONNumber.Create(U.Id));
@@ -605,8 +696,11 @@ begin
           UserObj.AddPair('Id', TJSONNumber.Create(U.Id));
           UserObj.AddPair('OrganizationId', TJSONNumber.Create(U.OrganizationId));
           UserObj.AddPair('Email', U.Email);
-          UserObj.AddPair('PasswordHash', U.PasswordHash);
           UserObj.AddPair('Role', U.Role);
+          if U.HasEmailVerifiedAt then
+            UserObj.AddPair('EmailVerifiedAt', DateToISO8601(U.EmailVerifiedAt, True))
+          else
+            UserObj.AddPair('EmailVerifiedAt', TJSONNull.Create);
           var Obj := TJSONObject.Create;
           try
             Obj.AddPair('Token', Token);
@@ -619,6 +713,183 @@ begin
           finally Obj.Free; end;
         finally U.Free; end;
       finally Body.Free; end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/auth/resend-verification') and SameText(Request.Method, 'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      try
+        if (Body=nil) then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var Email := Body.GetValue<string>('Email','');
+        if Email='' then begin JSONError(400,'Missing Email'); Exit; end;
+
+        // Always return 200 to avoid account enumeration.
+        var U := TUserRepository.FindByEmail(Email);
+        if (U<>nil) then
+        try
+          if not U.HasEmailVerifiedAt then
+          begin
+            var PublicWebUrl := GetEnv('PUBLIC_WEB_URL', 'http://localhost:3000');
+            if (PublicWebUrl <> '') and PublicWebUrl.EndsWith('/') then
+              PublicWebUrl := PublicWebUrl.Substring(0, Length(PublicWebUrl)-1);
+            var VerifyToken := GenerateOpaqueToken;
+            TEmailVerificationTokenRepository.InvalidateOutstandingForUser(U.Id);
+            TEmailVerificationTokenRepository.StoreToken(U.Id, HashSha256Hex(VerifyToken), Now + 2);
+            var VerifyLink := PublicWebUrl + '/verify-email?token=' + VerifyToken;
+            TEmailSender.SendPlainText(U.Email, 'Verify your DisplayDeck account',
+              'Verify your email address by clicking this link:' + sLineBreak +
+              VerifyLink + sLineBreak);
+          end;
+        finally
+          U.Free;
+        end;
+
+        var Obj := TJSONObject.Create;
+        try
+          Obj.AddPair('Success', TJSONBool.Create(True));
+          Obj.AddPair('Message', 'If the account exists, a verification email has been sent.');
+          if GetEnvironmentVariable('SMTP_HOST') = '' then
+            Obj.AddPair('EmailMode', 'log')
+          else
+            Obj.AddPair('EmailMode', 'smtp');
+          Response.StatusCode := 200;
+          Response.ContentType := 'application/json';
+          Response.Content := Obj.ToJSON;
+          Response.SendResponse;
+        finally
+          Obj.Free;
+        end;
+      finally
+        Body.Free;
+      end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/auth/verify-email') and SameText(Request.Method, 'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      try
+        if (Body=nil) then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var Token := Body.GetValue<string>('Token','');
+        if Token='' then begin JSONError(400,'Missing Token'); Exit; end;
+
+        var UserId: Integer;
+        if not TEmailVerificationTokenRepository.ConsumeToken(HashSha256Hex(Token), UserId) then
+        begin
+          JSONError(400, 'Invalid or expired token', 'invalid_token');
+          Exit;
+        end;
+
+        TUserRepository.MarkEmailVerified(UserId);
+
+        var Obj := TJSONObject.Create;
+        try
+          Obj.AddPair('Success', TJSONBool.Create(True));
+          Obj.AddPair('Message', 'Email verified.');
+          Response.StatusCode := 200;
+          Response.ContentType := 'application/json';
+          Response.Content := Obj.ToJSON;
+          Response.SendResponse;
+        finally
+          Obj.Free;
+        end;
+      finally
+        Body.Free;
+      end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/auth/forgot-password') and SameText(Request.Method, 'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      try
+        if (Body=nil) then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var Email := Body.GetValue<string>('Email','');
+        if Email='' then begin JSONError(400,'Missing Email'); Exit; end;
+
+        // Always return 200 to avoid account enumeration.
+        var U := TUserRepository.FindByEmail(Email);
+        if (U<>nil) then
+        try
+          var PublicWebUrl := GetEnv('PUBLIC_WEB_URL', 'http://localhost:3000');
+          if (PublicWebUrl <> '') and PublicWebUrl.EndsWith('/') then
+            PublicWebUrl := PublicWebUrl.Substring(0, Length(PublicWebUrl)-1);
+          var ResetToken := GenerateOpaqueToken;
+          TPasswordResetTokenRepository.InvalidateOutstandingForUser(U.Id);
+          TPasswordResetTokenRepository.StoreToken(U.Id, HashSha256Hex(ResetToken), Now + (1/24)); // 1 hour
+          var ResetLink := PublicWebUrl + '/reset-password?token=' + ResetToken;
+          TEmailSender.SendPlainText(U.Email, 'Reset your DisplayDeck password',
+            'Click this link to reset your password:' + sLineBreak +
+            ResetLink + sLineBreak + sLineBreak +
+            'This link expires in 1 hour.');
+        finally
+          U.Free;
+        end;
+
+        var Obj := TJSONObject.Create;
+        try
+          Obj.AddPair('Success', TJSONBool.Create(True));
+          Obj.AddPair('Message', 'If the account exists, a reset email has been sent.');
+          if GetEnvironmentVariable('SMTP_HOST') = '' then
+            Obj.AddPair('EmailMode', 'log')
+          else
+            Obj.AddPair('EmailMode', 'smtp');
+          Response.StatusCode := 200;
+          Response.ContentType := 'application/json';
+          Response.Content := Obj.ToJSON;
+          Response.SendResponse;
+        finally
+          Obj.Free;
+        end;
+      finally
+        Body.Free;
+      end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/auth/reset-password') and SameText(Request.Method, 'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      try
+        if (Body=nil) then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var Token := Body.GetValue<string>('Token','');
+        var NewPassword := Body.GetValue<string>('Password','');
+        if Token='' then begin JSONError(400,'Missing Token'); Exit; end;
+        if NewPassword='' then begin JSONError(400,'Missing Password'); Exit; end;
+
+        var UserId: Integer;
+        if not TPasswordResetTokenRepository.ConsumeToken(HashSha256Hex(Token), UserId) then
+        begin
+          JSONError(400, 'Invalid or expired token', 'invalid_token');
+          Exit;
+        end;
+
+        TUserRepository.SetPassword(UserId, NewPassword);
+
+        // Revoke all refresh tokens for this user
+        var U := TUserRepository.FindById(UserId);
+        if U<>nil then
+        try
+          TRefreshTokenRepository.RevokeAllForUser(U.OrganizationId, U.Id);
+        finally
+          U.Free;
+        end;
+
+        var Obj := TJSONObject.Create;
+        try
+          Obj.AddPair('Success', TJSONBool.Create(True));
+          Obj.AddPair('Message', 'Password updated.');
+          Response.StatusCode := 200;
+          Response.ContentType := 'application/json';
+          Response.Content := Obj.ToJSON;
+          Response.SendResponse;
+        finally
+          Obj.Free;
+        end;
+      finally
+        Body.Free;
+      end;
       Exit;
     end;
 
@@ -866,6 +1137,240 @@ begin
           Response.ContentType := 'application/json';
           Response.Content := '';
           Response.SendResponse;
+          Exit;
+        end;
+
+        // ----- Organization Users -----
+        if (PathOrgId > 0) and SameText(Tail, 'users') and SameText(Request.Method, 'GET') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth([], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+          if not SameText(AuthRole, 'Owner') then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var C := NewConnection;
+          try
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text := 'select UserID, Email, Role, CreatedAt, EmailVerifiedAt from Users where OrganizationID=:Org order by UserID';
+              Q.ParamByName('Org').AsInteger := PathOrgId;
+              Q.Open;
+              var Arr := TJSONArray.Create;
+              try
+                while not Q.Eof do
+                begin
+                  var Obj := TJSONObject.Create;
+                  Obj.AddPair('Id', TJSONNumber.Create(Q.FieldByName('UserID').AsLargeInt));
+                  Obj.AddPair('OrganizationId', TJSONNumber.Create(PathOrgId));
+                  Obj.AddPair('Email', Q.FieldByName('Email').AsString);
+                  Obj.AddPair('Role', Q.FieldByName('Role').AsString);
+                  Obj.AddPair('CreatedAt', DateToISO8601(Q.FieldByName('CreatedAt').AsDateTime, True));
+                  if not Q.FieldByName('EmailVerifiedAt').IsNull then
+                    Obj.AddPair('EmailVerifiedAt', DateToISO8601(Q.FieldByName('EmailVerifiedAt').AsDateTime, True))
+                  else
+                    Obj.AddPair('EmailVerifiedAt', TJSONNull.Create);
+                  Arr.AddElement(Obj);
+                  Q.Next;
+                end;
+                Response.StatusCode := 200;
+                Response.ContentType := 'application/json';
+                Response.Content := Arr.ToJSON;
+                Response.SendResponse;
+              finally
+                Arr.Free;
+              end;
+            finally
+              Q.Free;
+            end;
+          finally
+            C.Free;
+          end;
+          Exit;
+        end;
+
+        if (PathOrgId > 0) and SameText(Tail, 'users') and SameText(Request.Method, 'POST') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth([], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+          if not SameText(AuthRole, 'Owner') then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var Email := Body.GetValue<string>('Email','');
+            var Role := Body.GetValue<string>('Role','ContentManager');
+            if Email='' then begin JSONError(400,'Missing Email'); Exit; end;
+            if Role='' then Role := 'ContentManager';
+
+            // Create user with a random temp password, then email a reset link.
+            var TempPassword := 'Temp-' + Copy(GenerateOpaqueToken, 1, 12);
+            var NewUser: TUser := nil;
+            try
+              NewUser := TUserRepository.CreateUser(PathOrgId, Email, TempPassword, Role);
+
+              var PublicWebUrl := GetEnv('PUBLIC_WEB_URL', 'http://localhost:3000');
+              if (PublicWebUrl <> '') and PublicWebUrl.EndsWith('/') then
+                PublicWebUrl := PublicWebUrl.Substring(0, Length(PublicWebUrl)-1);
+
+              var ResetToken := GenerateOpaqueToken;
+              TPasswordResetTokenRepository.InvalidateOutstandingForUser(NewUser.Id);
+              TPasswordResetTokenRepository.StoreToken(NewUser.Id, HashSha256Hex(ResetToken), Now + (1/24));
+              var ResetLink := PublicWebUrl + '/reset-password?token=' + ResetToken;
+
+              var VerifyToken := GenerateOpaqueToken;
+              TEmailVerificationTokenRepository.InvalidateOutstandingForUser(NewUser.Id);
+              TEmailVerificationTokenRepository.StoreToken(NewUser.Id, HashSha256Hex(VerifyToken), Now + 2);
+              var VerifyLink := PublicWebUrl + '/verify-email?token=' + VerifyToken;
+
+              TEmailSender.SendPlainText(NewUser.Email, 'You have been invited to DisplayDeck',
+                'An account has been created for you.' + sLineBreak + sLineBreak +
+                '1) Set your password:' + sLineBreak + ResetLink + sLineBreak + sLineBreak +
+                '2) Verify your email:' + sLineBreak + VerifyLink + sLineBreak);
+
+              TAuditLogRepository.WriteEvent(PathOrgId, AuthUserId, 'user.create', 'user', IntToStr(NewUser.Id), nil, RequestId, ClientIp, UserAgent);
+
+              var UserObj := TJSONObject.Create;
+              try
+                UserObj.AddPair('Id', TJSONNumber.Create(NewUser.Id));
+                UserObj.AddPair('OrganizationId', TJSONNumber.Create(NewUser.OrganizationId));
+                UserObj.AddPair('Email', NewUser.Email);
+                UserObj.AddPair('Role', NewUser.Role);
+                UserObj.AddPair('EmailVerifiedAt', TJSONNull.Create);
+
+                Response.StatusCode := 201;
+                Response.ContentType := 'application/json';
+                Response.Content := UserObj.ToJSON;
+                Response.SendResponse;
+              finally
+                UserObj.Free;
+              end;
+            finally
+              NewUser.Free;
+            end;
+          finally
+            Body.Free;
+          end;
+          Exit;
+        end;
+
+        if (PathOrgId > 0) and (Copy(Tail, 1, 6) = 'users/') and SameText(Request.Method, 'PATCH') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth([], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+          if not SameText(AuthRole, 'Owner') then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var UserIdToUpdate := StrToIntDef(Copy(Tail, 7, MaxInt), 0);
+          if UserIdToUpdate <= 0 then begin JSONError(400,'Invalid user id'); Exit; end;
+
+          if UserIdToUpdate = AuthUserId then
+          begin
+            JSONError(400,'Cannot change your own role','cannot_change_own_role');
+            Exit;
+          end;
+
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var NewRole := Body.GetValue<string>('Role','');
+            if NewRole='' then begin JSONError(400,'Missing Role'); Exit; end;
+            if (not SameText(NewRole,'Owner')) and (not SameText(NewRole,'ContentManager')) then
+            begin
+              JSONError(400,'Invalid Role','invalid_role');
+              Exit;
+            end;
+
+            var C := NewConnection;
+            try
+              // Fetch current role
+              var CurRole := '';
+              var Qr := TFDQuery.Create(nil);
+              try
+                Qr.Connection := C;
+                Qr.SQL.Text := 'select Role from Users where OrganizationID=:Org and UserID=:UserId';
+                Qr.ParamByName('Org').AsInteger := PathOrgId;
+                Qr.ParamByName('UserId').AsInteger := UserIdToUpdate;
+                Qr.Open;
+                if Qr.Eof then begin JSONError(404,'Not found'); Exit; end;
+                CurRole := Qr.FieldByName('Role').AsString;
+              finally
+                Qr.Free;
+              end;
+
+              // Guard: cannot remove the last Owner
+              if SameText(CurRole,'Owner') and (not SameText(NewRole,'Owner')) then
+              begin
+                var Qc := TFDQuery.Create(nil);
+                try
+                  Qc.Connection := C;
+                  Qc.SQL.Text := 'select count(*) as Cnt from Users where OrganizationID=:Org and Role=''Owner''';
+                  Qc.ParamByName('Org').AsInteger := PathOrgId;
+                  Qc.Open;
+                  if Qc.FieldByName('Cnt').AsInteger <= 1 then
+                  begin
+                    JSONError(400,'Cannot remove the last Owner','cannot_remove_last_owner');
+                    Exit;
+                  end;
+                finally
+                  Qc.Free;
+                end;
+              end;
+
+              // Update role
+              var Qu := TFDQuery.Create(nil);
+              try
+                Qu.Connection := C;
+                Qu.SQL.Text := 'update Users set Role=:Role where OrganizationID=:Org and UserID=:UserId';
+                Qu.ParamByName('Role').AsString := NewRole;
+                Qu.ParamByName('Org').AsInteger := PathOrgId;
+                Qu.ParamByName('UserId').AsInteger := UserIdToUpdate;
+                Qu.ExecSQL;
+              finally
+                Qu.Free;
+              end;
+
+              TAuditLogRepository.WriteEvent(PathOrgId, AuthUserId, 'user.role_update', 'user', IntToStr(UserIdToUpdate), nil, RequestId, ClientIp, UserAgent);
+
+              // Return updated user (minimal fields)
+              var Qo := TFDQuery.Create(nil);
+              try
+                Qo.Connection := C;
+                Qo.SQL.Text := 'select UserID, Email, Role, CreatedAt, EmailVerifiedAt from Users where OrganizationID=:Org and UserID=:UserId';
+                Qo.ParamByName('Org').AsInteger := PathOrgId;
+                Qo.ParamByName('UserId').AsInteger := UserIdToUpdate;
+                Qo.Open;
+                if Qo.Eof then begin JSONError(404,'Not found'); Exit; end;
+
+                var Obj := TJSONObject.Create;
+                try
+                  Obj.AddPair('Id', TJSONNumber.Create(Qo.FieldByName('UserID').AsLargeInt));
+                  Obj.AddPair('OrganizationId', TJSONNumber.Create(PathOrgId));
+                  Obj.AddPair('Email', Qo.FieldByName('Email').AsString);
+                  Obj.AddPair('Role', Qo.FieldByName('Role').AsString);
+                  Obj.AddPair('CreatedAt', DateToISO8601(Qo.FieldByName('CreatedAt').AsDateTime, True));
+                  if not Qo.FieldByName('EmailVerifiedAt').IsNull then
+                    Obj.AddPair('EmailVerifiedAt', DateToISO8601(Qo.FieldByName('EmailVerifiedAt').AsDateTime, True))
+                  else
+                    Obj.AddPair('EmailVerifiedAt', TJSONNull.Create);
+
+                  Response.StatusCode := 200;
+                  Response.ContentType := 'application/json';
+                  Response.Content := Obj.ToJSON;
+                  Response.SendResponse;
+                finally
+                  Obj.Free;
+                end;
+              finally
+                Qo.Free;
+              end;
+            finally
+              C.Free;
+            end;
+          finally
+            Body.Free;
+          end;
           Exit;
         end;
 
@@ -1136,7 +1641,9 @@ begin
       finally C.Free; end;
       Exit;
     end;
-    if (Copy(NormalizedPath, 1, 15) = '/organizations/') and (Pos('/displays', NormalizedPath) > 0) then
+    // Important: match only the collection route (/organizations/{orgId}/displays),
+    // otherwise sub-routes like /organizations/{orgId}/displays/claim will be incorrectly handled here.
+    if (Copy(NormalizedPath, 1, 15) = '/organizations/') and (NormalizedPath.EndsWith('/displays') or NormalizedPath.EndsWith('/displays/')) then
     begin
       // /organizations/{orgId}/displays
       var OrgIdStr := Copy(NormalizedPath, 16, MaxInt);
@@ -1156,10 +1663,22 @@ begin
           try
             for var D in List do
             begin
+              // Compute online/offline from heartbeat. Avoid trusting stale CurrentStatus.
+              var OnlineSeconds := StrToIntDef(GetEnv('HEARTBEAT_ONLINE_SECONDS','90'), 90);
+              var Status := 'Offline';
+              if (D.LastHeartbeatAt > 0) and (SecondsBetween(Now, D.LastHeartbeatAt) <= OnlineSeconds) then
+                Status := 'Online';
+
               var It := TJSONObject.Create;
               It.AddPair('Id', TJSONNumber.Create(D.Id));
               It.AddPair('Name', D.Name);
               It.AddPair('Orientation', D.Orientation);
+              It.AddPair('CurrentStatus', Status);
+              if (D.LastSeen > 0) then It.AddPair('LastSeen', DateToISO8601(D.LastSeen, True)) else It.AddPair('LastSeen', TJSONNull.Create);
+              if (D.ProvisioningToken <> '') then It.AddPair('ProvisioningToken', D.ProvisioningToken) else It.AddPair('ProvisioningToken', TJSONNull.Create);
+              if (D.LastHeartbeatAt > 0) then It.AddPair('LastHeartbeatAt', DateToISO8601(D.LastHeartbeatAt, True)) else It.AddPair('LastHeartbeatAt', TJSONNull.Create);
+              if (D.AppVersion <> '') then It.AddPair('AppVersion', D.AppVersion) else It.AddPair('AppVersion', TJSONNull.Create);
+              if (D.LastIp <> '') then It.AddPair('LastIp', D.LastIp) else It.AddPair('LastIp', TJSONNull.Create);
               Arr.AddElement(It);
             end;
             var Wrapper := TJSONObject.Create; try
@@ -1197,13 +1716,14 @@ begin
       end;
     end;
 
-    // Device pairing: device asks for ephemeral provisioning token
+    // Device pairing: device asks for a short pairing code (shown on screen)
     if (SameText(Request.PathInfo, '/device/provisioning/token') or SameText(Request.PathInfo, '/api/device/provisioning/token')) and SameText(Request.Method,'POST') then
     begin
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
         var HardwareId := Body.GetValue<string>('HardwareId',''); if HardwareId='' then begin JSONError(400,'Missing HardwareId'); Exit; end;
-        var Info := TProvisioningTokenRepository.CreateToken(600);
+        // 6-char code for manual pairing on the website. TTL is long enough to avoid frustration during onboarding.
+        var Info := TProvisioningTokenRepository.CreatePairingCode(3600, 6);
         // Optionally store hardware id
         var C := NewConnection; try
           var Q := TFDQuery.Create(nil); try
@@ -1212,12 +1732,343 @@ begin
           finally Q.Free; end;
         finally C.Free; end;
         var Obj := TJSONObject.Create; 
-        Obj.AddPair('ProvisioningToken', Info.Token); 
-        Obj.AddPair('ExpiresInSeconds', TJSONNumber.Create(600));
-        Obj.AddPair('QrCodeData', 'displaydeck://claim/' + Info.Token);
-        Obj.AddPair('Instructions', 'Scan this QR code with the DisplayDeck mobile app to pair this display.');
+        Obj.AddPair('ProvisioningToken', Info.Token);
+        Obj.AddPair('PairingCode', Info.Token);
+        Obj.AddPair('ExpiresInSeconds', TJSONNumber.Create(3600));
+        Obj.AddPair('Instructions', 'Enter this code on the DisplayDeck website to add/pair this display.');
         Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
       finally Body.Free; end;
+      Exit;
+    end;
+
+    // Device pairing: device polls for claim status (no user input on device)
+    if (SameText(Request.PathInfo, '/device/provisioning/status') or SameText(Request.PathInfo, '/api/device/provisioning/status')) and SameText(Request.Method,'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var HardwareId := Body.GetValue<string>('HardwareId',''); if HardwareId='' then begin JSONError(400,'Missing HardwareId'); Exit; end;
+        var ProvisioningToken := Body.GetValue<string>('ProvisioningToken',''); if ProvisioningToken='' then begin JSONError(400,'Missing ProvisioningToken'); Exit; end;
+
+        var C := NewConnection; try
+          var Q := TFDQuery.Create(nil); try
+            Q.Connection := C;
+            Q.SQL.Text :=
+              'select pt.Claimed, pt.ExpiresAt, pt.DisplayID, d.Name as DisplayName, d.Orientation as DisplayOrientation, d.OrganizationID ' +
+              'from ProvisioningTokens pt ' +
+              'left join Displays d on d.DisplayID = pt.DisplayID ' +
+              'where pt.Token=:T and pt.HardwareId=:H';
+            Q.ParamByName('T').AsString := ProvisioningToken;
+            Q.ParamByName('H').AsString := HardwareId;
+            Q.Open;
+            if Q.Eof then begin JSONError(404,'Not found'); Exit; end;
+
+            // Expired tokens are treated as gone.
+            if Q.FieldByName('ExpiresAt').AsDateTime <= Now then begin JSONError(410,'Expired'); Exit; end;
+
+            var Claimed := Q.FieldByName('Claimed').AsBoolean;
+            var Obj := TJSONObject.Create;
+            try
+              if Claimed then
+                Obj.AddPair('Status', 'Claimed')
+              else
+                Obj.AddPair('Status', 'Pending');
+              Obj.AddPair('Claimed', TJSONBool.Create(Claimed));
+
+              if Claimed and (not Q.FieldByName('DisplayID').IsNull) then
+              begin
+                var DObj := TJSONObject.Create;
+                DObj.AddPair('Id', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
+                DObj.AddPair('OrganizationId', TJSONNumber.Create(Q.FieldByName('OrganizationID').AsInteger));
+                DObj.AddPair('Name', Q.FieldByName('DisplayName').AsString);
+                DObj.AddPair('Orientation', Q.FieldByName('DisplayOrientation').AsString);
+                Obj.AddPair('Display', DObj);
+              end;
+
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse;
+            finally
+              Obj.Free;
+            end;
+          finally Q.Free; end;
+        finally C.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // Device heartbeat + config: device reports liveness and receives what to display
+    if (SameText(Request.PathInfo, '/device/heartbeat') or SameText(Request.PathInfo, '/api/device/heartbeat')) and SameText(Request.Method,'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      try
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var HardwareId := Body.GetValue<string>('HardwareId',''); if HardwareId='' then begin JSONError(400,'Missing HardwareId'); Exit; end;
+        var ProvisioningToken := Body.GetValue<string>('ProvisioningToken',''); if ProvisioningToken='' then begin JSONError(400,'Missing ProvisioningToken'); Exit; end;
+        var AppVersion := Body.GetValue<string>('AppVersion','');
+        var DeviceInfoVal := Body.GetValue('DeviceInfo');
+        var DeviceInfoJson := '';
+        if (DeviceInfoVal<>nil) and (not (DeviceInfoVal is TJSONNull)) then DeviceInfoJson := DeviceInfoVal.ToJSON;
+
+        var C := NewConnection;
+        try
+          // Validate token belongs to this hardware and is claimed.
+          var QTok := TFDQuery.Create(nil);
+          try
+            QTok.Connection := C;
+            QTok.SQL.Text := 'select Claimed, ExpiresAt, DisplayID from ProvisioningTokens where Token=:T and HardwareId=:H';
+            QTok.ParamByName('T').AsString := ProvisioningToken;
+            QTok.ParamByName('H').AsString := HardwareId;
+            QTok.Open;
+            if QTok.Eof then begin JSONError(404,'Not found'); Exit; end;
+            var ClaimedTok := QTok.FieldByName('Claimed').AsBoolean;
+            // Provisioning tokens are short-lived during pairing, but once claimed we treat them
+            // as a long-lived device credential to keep the device zero-input.
+            if (not ClaimedTok) and (QTok.FieldByName('ExpiresAt').AsDateTime <= Now) then
+            begin
+              JSONError(410,'Expired');
+              Exit;
+            end;
+            if not ClaimedTok then begin JSONError(409,'Not claimed'); Exit; end;
+            if QTok.FieldByName('DisplayID').IsNull then begin JSONError(409,'Not linked'); Exit; end;
+
+            var DisplayId := QTok.FieldByName('DisplayID').AsInteger;
+
+            // Update heartbeat/status fields
+            var Qu := TFDQuery.Create(nil);
+            try
+              Qu.Connection := C;
+              Qu.SQL.Text := 'update Displays set LastSeen=now(), CurrentStatus=''Online'', LastHeartbeatAt=now(), AppVersion=:V, DeviceInfo=:DI::jsonb, LastIp=:IP, UpdatedAt=now() where DisplayID=:D';
+              Qu.ParamByName('V').AsString := AppVersion;
+              if Trim(DeviceInfoJson)='' then
+                Qu.ParamByName('DI').AsString := '{}'
+              else
+                Qu.ParamByName('DI').AsString := DeviceInfoJson;
+              Qu.ParamByName('IP').AsString := ClientIp;
+              Qu.ParamByName('D').AsInteger := DisplayId;
+              Qu.ExecSQL;
+            finally
+              Qu.Free;
+            end;
+
+            // Determine current assignment: prefer primary campaign; else primary menu.
+            var AssignType := 'none';
+            var MenuToken := '';
+            var CampaignId := 0;
+
+            var Qc := TFDQuery.Create(nil);
+            try
+              Qc.Connection := C;
+              Qc.SQL.Text := 'select CampaignID from DisplayCampaigns where DisplayID=:D and IsPrimary=true order by DisplayCampaignID desc limit 1';
+              Qc.ParamByName('D').AsInteger := DisplayId;
+              Qc.Open;
+              if not Qc.Eof then
+              begin
+                AssignType := 'campaign';
+                CampaignId := Qc.FieldByName('CampaignID').AsInteger;
+              end;
+            finally
+              Qc.Free;
+            end;
+
+            if AssignType='none' then
+            begin
+              var Qm := TFDQuery.Create(nil);
+              try
+                Qm.Connection := C;
+                Qm.SQL.Text := 'select m.PublicToken from DisplayMenus dm join Menus m on m.MenuID=dm.MenuID where dm.DisplayID=:D and dm.IsPrimary=true order by dm.DisplayMenuID desc limit 1';
+                Qm.ParamByName('D').AsInteger := DisplayId;
+                Qm.Open;
+                if not Qm.Eof then
+                begin
+                  AssignType := 'menu';
+                  MenuToken := Qm.FieldByName('PublicToken').AsString;
+                end;
+              finally
+                Qm.Free;
+              end;
+            end;
+
+            var Qd := TFDQuery.Create(nil);
+            try
+              Qd.Connection := C;
+              Qd.SQL.Text := 'select DisplayID, OrganizationID, Name, Orientation, ProvisioningToken from Displays where DisplayID=:D';
+              Qd.ParamByName('D').AsInteger := DisplayId;
+              Qd.Open;
+              if Qd.Eof then begin JSONError(404,'Display not found'); Exit; end;
+
+              var OutObj := TJSONObject.Create;
+              try
+                var DObj := TJSONObject.Create;
+                DObj.AddPair('Id', TJSONNumber.Create(Qd.FieldByName('DisplayID').AsInteger));
+                DObj.AddPair('OrganizationId', TJSONNumber.Create(Qd.FieldByName('OrganizationID').AsInteger));
+                DObj.AddPair('Name', Qd.FieldByName('Name').AsString);
+                DObj.AddPair('Orientation', Qd.FieldByName('Orientation').AsString);
+                DObj.AddPair('ProvisioningToken', Qd.FieldByName('ProvisioningToken').AsString);
+                OutObj.AddPair('Display', DObj);
+
+                var AObj := TJSONObject.Create;
+                AObj.AddPair('Type', AssignType);
+                if (AssignType='menu') and (MenuToken<>'') then
+                  AObj.AddPair('MenuPublicToken', MenuToken)
+                else
+                  AObj.AddPair('MenuPublicToken', TJSONNull.Create);
+                if (AssignType='campaign') and (CampaignId>0) then
+                  AObj.AddPair('CampaignId', TJSONNumber.Create(CampaignId))
+                else
+                  AObj.AddPair('CampaignId', TJSONNull.Create);
+                OutObj.AddPair('Assignment', AObj);
+
+                Response.StatusCode := 200; Response.ContentType := 'application/json';
+                Response.Content := OutObj.ToJSON; Response.SendResponse;
+              finally
+                OutObj.Free;
+              end;
+            finally
+              Qd.Free;
+            end;
+          finally
+            QTok.Free;
+          end;
+        finally
+          C.Free;
+        end;
+      finally
+        Body.Free;
+      end;
+      Exit;
+    end;
+
+    // Device: fetch a campaign manifest for playback on-device.
+    // POST /device/campaign/manifest
+    // Body: { HardwareId, ProvisioningToken, CampaignId }
+    if (SameText(Request.PathInfo, '/device/campaign/manifest') or SameText(Request.PathInfo, '/api/device/campaign/manifest')) and SameText(Request.Method,'POST') then
+    begin
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      try
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        var HardwareId := Body.GetValue<string>('HardwareId',''); if HardwareId='' then begin JSONError(400,'Missing HardwareId'); Exit; end;
+        var ProvisioningToken := Body.GetValue<string>('ProvisioningToken',''); if ProvisioningToken='' then begin JSONError(400,'Missing ProvisioningToken'); Exit; end;
+        var CampaignId := Body.GetValue<Integer>('CampaignId',0); if CampaignId<=0 then begin JSONError(400,'Missing CampaignId'); Exit; end;
+
+        var C := NewConnection;
+        try
+          // Validate token belongs to this hardware and is claimed.
+          var DisplayId := 0;
+          var QTok := TFDQuery.Create(nil);
+          try
+            QTok.Connection := C;
+            QTok.SQL.Text := 'select Claimed, ExpiresAt, DisplayID from ProvisioningTokens where Token=:T and HardwareId=:H';
+            QTok.ParamByName('T').AsString := ProvisioningToken;
+            QTok.ParamByName('H').AsString := HardwareId;
+            QTok.Open;
+            if QTok.Eof then begin JSONError(404,'Not found'); Exit; end;
+            var ClaimedTok := QTok.FieldByName('Claimed').AsBoolean;
+            if (not ClaimedTok) and (QTok.FieldByName('ExpiresAt').AsDateTime <= Now) then begin JSONError(410,'Expired'); Exit; end;
+            if not ClaimedTok then begin JSONError(409,'Not claimed'); Exit; end;
+            if QTok.FieldByName('DisplayID').IsNull then begin JSONError(409,'Not linked'); Exit; end;
+            DisplayId := QTok.FieldByName('DisplayID').AsInteger;
+          finally
+            QTok.Free;
+          end;
+
+          // Ensure this campaign is actually assigned to this display (primary).
+          var QAsn := TFDQuery.Create(nil);
+          try
+            QAsn.Connection := C;
+            QAsn.SQL.Text := 'select 1 from DisplayCampaigns where DisplayID=:D and CampaignID=:C and IsPrimary=true limit 1';
+            QAsn.ParamByName('D').AsInteger := DisplayId;
+            QAsn.ParamByName('C').AsInteger := CampaignId;
+            QAsn.Open;
+            if QAsn.Eof then begin JSONError(404,'Not assigned'); Exit; end;
+          finally
+            QAsn.Free;
+          end;
+
+          // Presign helper (GET) for media items.
+          var InternalEndpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
+          var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT','');
+          if PublicEndpoint = '' then
+          begin
+            var ReqProto := Request.GetFieldByName('X-Forwarded-Proto');
+            if ReqProto = '' then ReqProto := 'http';
+            var ReqHost := Request.GetFieldByName('X-Forwarded-Host');
+            if ReqHost = '' then ReqHost := Request.GetFieldByName('Host');
+            if ReqHost <> '' then PublicEndpoint := ReqProto + '://' + ReqHost + '/minio';
+          end;
+          if PublicEndpoint = '' then PublicEndpoint := InternalEndpoint;
+
+          var Access := GetEnv('MINIO_ACCESS_KEY','minioadmin');
+          var Secret := GetEnv('MINIO_SECRET_KEY','minioadmin');
+          var Region := GetEnv('MINIO_REGION','us-east-1');
+
+          var Q := TFDQuery.Create(nil);
+          try
+            Q.Connection := C;
+            Q.SQL.Text :=
+              'select ci.ItemType, ci.DisplayOrder, ci.Duration, ci.MediaFileID, ci.MenuID, ' +
+              'mf.StorageURL as MediaStorageURL, mf.FileType as MediaFileType, ' +
+              'm.PublicToken as MenuPublicToken ' +
+              'from CampaignItems ci ' +
+              'left join MediaFiles mf on mf.MediaFileID=ci.MediaFileID ' +
+              'left join Menus m on m.MenuID=ci.MenuID ' +
+              'where ci.CampaignID=:C ' +
+              'order by ci.DisplayOrder, ci.CampaignItemID';
+            Q.ParamByName('C').AsInteger := CampaignId;
+            Q.Open;
+
+            var OutObj := TJSONObject.Create;
+            try
+              OutObj.AddPair('CampaignId', TJSONNumber.Create(CampaignId));
+              var ItemsArr := TJSONArray.Create;
+              OutObj.AddPair('Items', ItemsArr);
+
+              while not Q.Eof do
+              begin
+                var ItObj := TJSONObject.Create;
+                var ItemType := Trim(Q.FieldByName('ItemType').AsString);
+                if ItemType='' then ItemType := 'media';
+                ItObj.AddPair('Type', LowerCase(ItemType));
+                ItObj.AddPair('DisplayOrder', TJSONNumber.Create(Q.FieldByName('DisplayOrder').AsInteger));
+                ItObj.AddPair('Duration', TJSONNumber.Create(Q.FieldByName('Duration').AsInteger));
+
+                if SameText(ItemType,'menu') then
+                begin
+                  var Tok := Q.FieldByName('MenuPublicToken').AsString;
+                  if Tok<>'' then ItObj.AddPair('MenuPublicToken', Tok) else ItObj.AddPair('MenuPublicToken', TJSONNull.Create);
+                end
+                else
+                begin
+                  if not Q.FieldByName('MediaFileID').IsNull then
+                    ItObj.AddPair('MediaFileId', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger))
+                  else
+                    ItObj.AddPair('MediaFileId', TJSONNull.Create);
+                  var Ft := Q.FieldByName('MediaFileType').AsString;
+                  if Ft<>'' then ItObj.AddPair('FileType', Ft) else ItObj.AddPair('FileType', TJSONNull.Create);
+                  var Dl := '';
+                  if TryPresignS3GetUrlFromStorageUrl(Q.FieldByName('MediaStorageURL').AsString, PublicEndpoint, InternalEndpoint, Access, Secret, Region, Dl) and (Dl<>'') then
+                    ItObj.AddPair('DownloadUrl', Dl)
+                  else
+                    ItObj.AddPair('DownloadUrl', TJSONNull.Create);
+                end;
+
+                ItemsArr.AddElement(ItObj);
+                Q.Next;
+              end;
+
+              Response.StatusCode := 200;
+              Response.ContentType := 'application/json';
+              Response.Content := OutObj.ToJSON;
+              Response.SendResponse;
+            finally
+              OutObj.Free;
+            end;
+          finally
+            Q.Free;
+          end;
+        finally
+          C.Free;
+        end;
+      finally
+        Body.Free;
+      end;
       Exit;
     end;
 
@@ -1233,25 +2084,137 @@ begin
       if TryReplayIdempotency(OrgId) then Exit;
       var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject; try
         if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
-        var ProvisioningToken := Body.GetValue<string>('ProvisioningToken',''); if ProvisioningToken='' then begin JSONError(400,'Missing ProvisioningToken'); Exit; end;
-        var Name := Body.GetValue<string>('Name','New Display'); var Orientation := Body.GetValue<string>('Orientation','Landscape');
-        if not TProvisioningTokenRepository.ExistsValid(ProvisioningToken) then begin JSONError(400,'Invalid or expired token'); Exit; end;
-        var C := NewConnection; try
-          // create display now that token is valid
-          var D := TDisplayRepository.CreateDisplay(OrgId, Name, Orientation);
+        var ProvisioningToken := Trim(Body.GetValue<string>('ProvisioningToken',''));
+        if ProvisioningToken='' then begin JSONError(400,'Missing ProvisioningToken'); Exit; end;
+        // Defensive normalization: codes are uppercase A-Z/2-9; strip whitespace.
+        ProvisioningToken := UpperCase(ProvisioningToken);
+
+        var Name := Body.GetValue<string>('Name','New Display');
+        var Orientation := Body.GetValue<string>('Orientation','Landscape');
+
+        var C := NewConnection;
+        try
+          C.StartTransaction;
           try
-            if not TProvisioningTokenRepository.ValidateAndClaim(ProvisioningToken) then begin JSONError(400,'Token already claimed'); Exit; end;
-            var U := TFDQuery.Create(nil); try
-              U.Connection := C; U.SQL.Text := 'update ProvisioningTokens set DisplayID=:D, OrganizationID=:O where Token=:T';
-              U.ParamByName('D').AsInteger := D.Id; U.ParamByName('O').AsInteger := OrgId; U.ParamByName('T').AsString := ProvisioningToken; U.ExecSQL;
-            finally U.Free; end;
-            var Obj := TJSONObject.Create; Obj.AddPair('Id', TJSONNumber.Create(D.Id)); Obj.AddPair('Name', D.Name); Obj.AddPair('Orientation', D.Orientation);
+            // Lock the token row so claim + create display is consistent.
+            var QTok := TFDQuery.Create(nil);
+            try
+              QTok.Connection := C;
+              QTok.SQL.Text := 'select Claimed, ExpiresAt, HardwareId from ProvisioningTokens where Token=:T for update';
+              QTok.ParamByName('T').AsString := ProvisioningToken;
+              QTok.Open;
+              if QTok.Eof then begin C.Rollback; JSONError(404,'Token not found','token_not_found'); Exit; end;
+
+              // If the token is unclaimed but expired, treat it as gone.
+              if (not QTok.FieldByName('Claimed').AsBoolean) and (QTok.FieldByName('ExpiresAt').AsDateTime <= Now) then
+              begin
+                C.Rollback;
+                JSONError(410,'Token expired','token_expired');
+                Exit;
+              end;
+
+              if QTok.FieldByName('Claimed').AsBoolean then
+              begin
+                C.Rollback;
+                JSONError(409,'Token already claimed','token_claimed');
+                Exit;
+              end;
+
+              // Require that the token was actually issued to a device (via /device/provisioning/token).
+              var Hw := Trim(QTok.FieldByName('HardwareId').AsString);
+              if Hw = '' then
+              begin
+                C.Rollback;
+                JSONError(400,'Token not issued to a device','token_not_issued');
+                Exit;
+              end;
+            finally
+              QTok.Free;
+            end;
+
+            // Claim token
+            var QClaim := TFDQuery.Create(nil);
+            try
+              QClaim.Connection := C;
+              QClaim.SQL.Text := 'update ProvisioningTokens set Claimed=true where Token=:T and Claimed=false and ExpiresAt > now()';
+              QClaim.ParamByName('T').AsString := ProvisioningToken;
+              QClaim.ExecSQL;
+              if QClaim.RowsAffected = 0 then
+              begin
+                C.Rollback;
+                JSONError(409,'Token already claimed','token_claimed');
+                Exit;
+              end;
+            finally
+              QClaim.Free;
+            end;
+
+            // Create display (same DB transaction)
+            var QIns := TFDQuery.Create(nil);
+            var DisplayId: Integer;
+            try
+              QIns.Connection := C;
+              QIns.SQL.Text := 'insert into Displays (OrganizationID, Name, Orientation) values (:Org,:Name,:Orient) returning DisplayID, Name, Orientation';
+              QIns.ParamByName('Org').AsInteger := OrgId;
+              QIns.ParamByName('Name').AsString := Name;
+              QIns.ParamByName('Orient').AsString := Orientation;
+              QIns.Open;
+              if QIns.Eof then
+              begin
+                C.Rollback;
+                JSONError(500,'Failed to create display','display_create_failed');
+                Exit;
+              end;
+              DisplayId := QIns.FieldByName('DisplayID').AsInteger;
+            finally
+              QIns.Free;
+            end;
+
+            // Link token -> display/org
+            var U := TFDQuery.Create(nil);
+            try
+              U.Connection := C;
+              U.SQL.Text := 'update ProvisioningTokens set DisplayID=:D, OrganizationID=:O where Token=:T';
+              U.ParamByName('D').AsInteger := DisplayId;
+              U.ParamByName('O').AsInteger := OrgId;
+              U.ParamByName('T').AsString := ProvisioningToken;
+              U.ExecSQL;
+            finally
+              U.Free;
+            end;
+
+            // Store token against the display as a convenience for device heartbeat lookup
+            var U2 := TFDQuery.Create(nil);
+            try
+              U2.Connection := C;
+              U2.SQL.Text := 'update Displays set ProvisioningToken=:T, UpdatedAt=now() where DisplayID=:D';
+              U2.ParamByName('T').AsString := ProvisioningToken;
+              U2.ParamByName('D').AsInteger := DisplayId;
+              U2.ExecSQL;
+            finally
+              U2.Free;
+            end;
+
+            C.Commit;
+
+            var Obj := TJSONObject.Create;
+            Obj.AddPair('Id', TJSONNumber.Create(DisplayId));
+            Obj.AddPair('Name', Name);
+            Obj.AddPair('Orientation', Orientation);
             var OutBody := Obj.ToJSON;
             Obj.Free;
             StoreIdempotency(OrgId, 200, OutBody);
             Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
-          finally D.Free; end;
-        finally C.Free; end;
+          except
+            on E: Exception do
+            begin
+              try C.Rollback; except end;
+              JSONError(500, 'Pairing failed: ' + E.Message, 'pairing_failed');
+            end;
+          end;
+        finally
+          C.Free;
+        end;
       finally Body.Free; end;
       Exit;
     end;
@@ -1389,7 +2352,8 @@ begin
     end;
 
     // Public menu JSON: /public/menus/{token}
-    if (Copy(NormalizedPath, 1, 14) = '/public/menus/') and SameText(Request.Method,'GET') then
+    // NOTE: exclude nested routes like /public/menus/{token}/media-files/{id}/download-url
+    if (Copy(NormalizedPath, 1, 14) = '/public/menus/') and (Pos('/media-files/', NormalizedPath) = 0) and SameText(Request.Method,'GET') then
     begin
       var Token := Copy(NormalizedPath, 15, MaxInt);
       if Token='' then begin JSONError(400,'Missing token'); Exit; end;
@@ -1423,7 +2387,9 @@ begin
                 var IO := TJSONObject.Create;
                 IO.AddPair('Id', TJSONNumber.Create(It.Id));
                 IO.AddPair('Name', It.Name);
+                if Trim(It.Sku)<>'' then IO.AddPair('Sku', It.Sku) else IO.AddPair('Sku', TJSONNull.Create);
                 if Trim(It.Description)<>'' then IO.AddPair('Description', It.Description) else IO.AddPair('Description', TJSONNull.Create);
+                if Trim(It.ImageUrl)<>'' then IO.AddPair('ImageUrl', It.ImageUrl) else IO.AddPair('ImageUrl', TJSONNull.Create);
                 if It.HasPriceCents then IO.AddPair('PriceCents', TJSONNumber.Create(It.PriceCents)) else IO.AddPair('PriceCents', TJSONNull.Create);
                 IO.AddPair('IsAvailable', TJSONBool.Create(It.IsAvailable));
                 IO.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
@@ -1443,12 +2409,79 @@ begin
     end;
 
     // Menus CRUD: /menus/{id}
-    if (Copy(NormalizedPath, 1, 7) = '/menus/') then
+    // NOTE: exclude /menus/{id}/display-assignments so the bulk assignment handler can process it.
+    if (Copy(NormalizedPath, 1, 7) = '/menus/') and (Pos('/display-assignments', NormalizedPath) = 0) then
     begin
       var Tail := Copy(NormalizedPath, 8, MaxInt);
       var Slash := Pos('/', Tail);
       var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
       var MenuId := StrToIntDef(IdStr,0); if MenuId=0 then begin JSONError(400,'Invalid menu id'); Exit; end;
+
+      // /menus/{id}/duplicate
+      if Pos('/duplicate', NormalizedPath) > 0 then
+      begin
+        var M0 := TMenuRepository.GetById(MenuId);
+        if M0=nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+          if TokOrg<>M0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+          if not SameText(Request.Method,'POST') then begin JSONError(405,'Method not allowed'); Exit; end;
+          if TryReplayIdempotency(M0.OrganizationId) then Exit;
+
+          var NewName := M0.Name + ' (Copy)';
+          var Body: TJSONObject := nil;
+          if Trim(Request.Content)<>'' then
+            Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body<>nil then
+            begin
+              var NameFromBody := Body.GetValue<string>('Name','');
+              if Trim(NameFromBody)<>'' then NewName := NameFromBody;
+            end;
+          finally
+            if Body<>nil then Body.Free;
+          end;
+
+          var PublicToken := TGUID.NewGuid.ToString.Replace('{','').Replace('}','').Replace('-','');
+          var NewMenu := TMenuRepository.CreateMenu(M0.OrganizationId, NewName, M0.Orientation, M0.TemplateKey, M0.ThemeConfigJson, PublicToken);
+          try
+            var Secs := TMenuSectionRepository.ListByMenu(M0.Id);
+            try
+              for var S in Secs do
+              begin
+                var NewSec := TMenuSectionRepository.CreateSection(NewMenu.Id, S.Name, S.DisplayOrder);
+                try
+                  var Items := TMenuItemRepository.ListBySection(S.Id);
+                  try
+                    for var It in Items do
+                    begin
+                      var NewItem := TMenuItemRepository.CreateItem(NewSec.Id, It.Name, It.Sku, It.Description, It.ImageUrl, It.PriceCents, It.HasPriceCents, It.IsAvailable, It.DisplayOrder);
+                      NewItem.Free;
+                    end;
+                  finally Items.Free; end;
+                finally NewSec.Free; end;
+              end;
+            finally Secs.Free; end;
+
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(NewMenu.Id));
+            O.AddPair('OrganizationId', TJSONNumber.Create(NewMenu.OrganizationId));
+            O.AddPair('Name', NewMenu.Name);
+            O.AddPair('Orientation', NewMenu.Orientation);
+            O.AddPair('TemplateKey', NewMenu.TemplateKey);
+            O.AddPair('PublicToken', NewMenu.PublicToken);
+            var Theme := TJSONObject.ParseJSONValue(NewMenu.ThemeConfigJson);
+            if Theme=nil then Theme := TJSONObject.Create;
+            O.AddPair('ThemeConfig', Theme);
+            var OutBody := O.ToJSON;
+            O.Free;
+            StoreIdempotency(M0.OrganizationId, 201, OutBody);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+            Exit;
+          finally NewMenu.Free; end;
+        finally M0.Free; end;
+      end;
 
       // /menus/{id}/sections
       if Pos('/sections', NormalizedPath) > 0 then
@@ -1628,7 +2661,9 @@ begin
                   O.AddPair('Id', TJSONNumber.Create(It.Id));
                   O.AddPair('MenuSectionId', TJSONNumber.Create(It.MenuSectionId));
                   O.AddPair('Name', It.Name);
+                  if Trim(It.Sku)<>'' then O.AddPair('Sku', It.Sku) else O.AddPair('Sku', TJSONNull.Create);
                   if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+                  if Trim(It.ImageUrl)<>'' then O.AddPair('ImageUrl', It.ImageUrl) else O.AddPair('ImageUrl', TJSONNull.Create);
                   if It.HasPriceCents then O.AddPair('PriceCents', TJSONNumber.Create(It.PriceCents)) else O.AddPair('PriceCents', TJSONNull.Create);
                   O.AddPair('IsAvailable', TJSONBool.Create(It.IsAvailable));
                   O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
@@ -1649,10 +2684,22 @@ begin
             try
               if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
               var Name := Body.GetValue<string>('Name','');
+
+              var SkuVal := Body.GetValue('Sku');
+              var Sku := '';
+              if (SkuVal<>nil) and (not (SkuVal is TJSONNull)) then
+                Sku := SkuVal.Value;
+
               var Desc := '';
               var DescVal := Body.GetValue('Description');
               if (DescVal<>nil) and (not (DescVal is TJSONNull)) then
                 Desc := DescVal.Value;
+
+              var ImgVal := Body.GetValue('ImageUrl');
+              var Img := '';
+              if (ImgVal<>nil) and (not (ImgVal is TJSONNull)) then
+                Img := ImgVal.Value;
+
               var PriceVal := Body.GetValue('PriceCents');
               var HasPrice := (PriceVal<>nil) and (not (PriceVal is TJSONNull));
               var PriceCents := 0;
@@ -1660,13 +2707,15 @@ begin
               var IsAvailable := Body.GetValue<Boolean>('IsAvailable', True);
               var DisplayOrder := Body.GetValue<Integer>('DisplayOrder',0);
               if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
-              var It := TMenuItemRepository.CreateItem(SecId, Name, Desc, PriceCents, HasPrice, IsAvailable, DisplayOrder);
+              var It := TMenuItemRepository.CreateItem(SecId, Name, Sku, Desc, Img, PriceCents, HasPrice, IsAvailable, DisplayOrder);
               try
                 var O := TJSONObject.Create;
                 O.AddPair('Id', TJSONNumber.Create(It.Id));
                 O.AddPair('MenuSectionId', TJSONNumber.Create(It.MenuSectionId));
                 O.AddPair('Name', It.Name);
+                if Trim(It.Sku)<>'' then O.AddPair('Sku', It.Sku) else O.AddPair('Sku', TJSONNull.Create);
                 if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+                if Trim(It.ImageUrl)<>'' then O.AddPair('ImageUrl', It.ImageUrl) else O.AddPair('ImageUrl', TJSONNull.Create);
                 if It.HasPriceCents then O.AddPair('PriceCents', TJSONNumber.Create(It.PriceCents)) else O.AddPair('PriceCents', TJSONNull.Create);
                 O.AddPair('IsAvailable', TJSONBool.Create(It.IsAvailable));
                 O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
@@ -1776,7 +2825,9 @@ begin
           O.AddPair('Id', TJSONNumber.Create(It0.Id));
           O.AddPair('MenuSectionId', TJSONNumber.Create(It0.MenuSectionId));
           O.AddPair('Name', It0.Name);
+          if Trim(It0.Sku)<>'' then O.AddPair('Sku', It0.Sku) else O.AddPair('Sku', TJSONNull.Create);
           if Trim(It0.Description)<>'' then O.AddPair('Description', It0.Description) else O.AddPair('Description', TJSONNull.Create);
+          if Trim(It0.ImageUrl)<>'' then O.AddPair('ImageUrl', It0.ImageUrl) else O.AddPair('ImageUrl', TJSONNull.Create);
           if It0.HasPriceCents then O.AddPair('PriceCents', TJSONNumber.Create(It0.PriceCents)) else O.AddPair('PriceCents', TJSONNull.Create);
           O.AddPair('IsAvailable', TJSONBool.Create(It0.IsAvailable));
           O.AddPair('DisplayOrder', TJSONNumber.Create(It0.DisplayOrder));
@@ -1789,10 +2840,22 @@ begin
           try
             if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
             var Name := Body.GetValue<string>('Name','');
+
+            var SkuVal := Body.GetValue('Sku');
+            var Sku := '';
+            if (SkuVal<>nil) and (not (SkuVal is TJSONNull)) then
+              Sku := SkuVal.Value;
+
             var Desc := '';
             var DescVal := Body.GetValue('Description');
             if (DescVal<>nil) and (not (DescVal is TJSONNull)) then
               Desc := DescVal.Value;
+
+            var ImgVal := Body.GetValue('ImageUrl');
+            var Img := '';
+            if (ImgVal<>nil) and (not (ImgVal is TJSONNull)) then
+              Img := ImgVal.Value;
+
             var PriceVal := Body.GetValue('PriceCents');
             var HasPrice := (PriceVal<>nil) and (not (PriceVal is TJSONNull));
             var PriceCents := 0;
@@ -1800,14 +2863,16 @@ begin
             var IsAvailable := Body.GetValue<Boolean>('IsAvailable', True);
             var DisplayOrder := Body.GetValue<Integer>('DisplayOrder',0);
             if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
-            var It := TMenuItemRepository.UpdateItem(Id, Name, Desc, PriceCents, HasPrice, IsAvailable, DisplayOrder);
+            var It := TMenuItemRepository.UpdateItem(Id, Name, Sku, Desc, Img, PriceCents, HasPrice, IsAvailable, DisplayOrder);
             if It=nil then begin JSONError(404,'Not found'); Exit; end;
             try
               var O := TJSONObject.Create;
               O.AddPair('Id', TJSONNumber.Create(It.Id));
               O.AddPair('MenuSectionId', TJSONNumber.Create(It.MenuSectionId));
               O.AddPair('Name', It.Name);
+              if Trim(It.Sku)<>'' then O.AddPair('Sku', It.Sku) else O.AddPair('Sku', TJSONNull.Create);
               if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+              if Trim(It.ImageUrl)<>'' then O.AddPair('ImageUrl', It.ImageUrl) else O.AddPair('ImageUrl', TJSONNull.Create);
               if It.HasPriceCents then O.AddPair('PriceCents', TJSONNumber.Create(It.PriceCents)) else O.AddPair('PriceCents', TJSONNull.Create);
               O.AddPair('IsAvailable', TJSONBool.Create(It.IsAvailable));
               O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
@@ -1915,6 +2980,85 @@ begin
           Disp.Free;
         end;
       end
+      else if Pos('/menu-assignments', NormalizedPath) > 0 then
+      begin
+        var Disp := TDisplayRepository.GetById(Id);
+        if Disp=nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['assignments:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['assignments:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>Disp.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          if SameText(Request.Method,'GET') then
+          begin
+            var L := TDisplayMenuRepository.ListByDisplay(Id);
+            try
+              var Arr := TJSONArray.Create;
+              try
+                for var A in L do
+                begin
+                  var It := TJSONObject.Create;
+                  It.AddPair('Id', TJSONNumber.Create(A.Id));
+                  It.AddPair('MenuId', TJSONNumber.Create(A.MenuId));
+                  It.AddPair('IsPrimary', TJSONBool.Create(A.IsPrimary));
+                  Arr.AddElement(It);
+                end;
+                var Wrapper := TJSONObject.Create; try
+                  Wrapper.AddPair('value', Arr);
+                  Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+                finally Wrapper.Free; end;
+              finally Arr.Free; end;
+            finally L.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'POST') then
+          begin
+            if TryReplayIdempotency(Disp.OrganizationId) then Exit;
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var MenuId := Body.GetValue<Integer>('MenuId',0);
+              var IsPrimary := Body.GetValue<Boolean>('IsPrimary',True);
+              if MenuId=0 then begin JSONError(400,'Missing MenuId'); Exit; end;
+
+              // Enforce orientation match
+              var M := TMenuRepository.GetById(MenuId);
+              if M=nil then begin JSONError(404,'Menu not found'); Exit; end;
+              try
+                if (M.Orientation<>'') and (Disp.Orientation<>'') and (not SameText(M.Orientation, Disp.Orientation)) then
+                begin
+                  JSONError(400, 'Menu orientation does not match display orientation');
+                  Exit;
+                end;
+              finally
+                M.Free;
+              end;
+
+              var A := TDisplayMenuRepository.CreateAssignment(Id, MenuId, IsPrimary);
+              try
+                var Obj := TJSONObject.Create;
+                Obj.AddPair('Id', TJSONNumber.Create(A.Id));
+                Obj.AddPair('MenuId', TJSONNumber.Create(A.MenuId));
+                Obj.AddPair('IsPrimary', TJSONBool.Create(A.IsPrimary));
+                var OutBody := Obj.ToJSON;
+                Obj.Free;
+                StoreIdempotency(Disp.OrganizationId, 201, OutBody);
+                Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+              finally A.Free; end;
+            finally Body.Free; end;
+            Exit;
+          end;
+        finally
+          Disp.Free;
+        end;
+      end
       else
       begin
         if SameText(Request.Method,'GET') then
@@ -1975,6 +3119,365 @@ begin
           Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse; Exit;
         end;
       end;
+    end;
+
+    // Menu assignment CRUD (by assignment id): /menu-assignments/{id}
+    if (Copy(NormalizedPath, 1, 18) = '/menu-assignments/') then
+    begin
+      var IdStr := Copy(NormalizedPath, 19, MaxInt);
+      var Id := StrToIntDef(IdStr,0); if Id=0 then begin JSONError(400,'Invalid assignment id'); Exit; end;
+      var A0 := TDisplayMenuRepository.GetById(Id);
+      if A0=nil then begin JSONError(404,'Not found'); Exit; end;
+      var D0 := TDisplayRepository.GetById(A0.DisplayId);
+      if D0=nil then begin A0.Free; JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['assignments:write'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>D0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        if SameText(Request.Method,'PUT') then
+        begin
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var IsPrimary := Body.GetValue<Boolean>('IsPrimary', True);
+            var A := TDisplayMenuRepository.UpdateAssignment(Id, IsPrimary); if A=nil then begin JSONError(404,'Not found'); Exit; end;
+            try
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(A.Id));
+              O.AddPair('DisplayId', TJSONNumber.Create(A.DisplayId));
+              O.AddPair('MenuId', TJSONNumber.Create(A.MenuId));
+              O.AddPair('IsPrimary', TJSONBool.Create(A.IsPrimary));
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            finally A.Free; end;
+          finally Body.Free; end;
+          Exit;
+        end
+        else if SameText(Request.Method,'DELETE') then
+        begin
+          TDisplayMenuRepository.DeleteAssignment(Id);
+          Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse; Exit;
+        end;
+      finally
+        D0.Free;
+        A0.Free;
+      end;
+    end;
+
+    // Bulk: list/replace campaign assignments for a campaign: /campaigns/{id}/display-assignments
+    if (Copy(NormalizedPath, 1, 11) = '/campaigns/') and (Pos('/display-assignments', NormalizedPath) > 0) then
+    begin
+      var IdStr := Copy(NormalizedPath, 12, MaxInt);
+      var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
+      var CampId := StrToIntDef(IdStr,0); if CampId=0 then begin JSONError(400,'Invalid campaign id'); Exit; end;
+      var Camp := TCampaignRepository.GetById(CampId);
+      if Camp=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['assignments:read'], TokOrg, TokUser, TokRole) then Exit;
+        end
+        else
+        begin
+          if not RequireAuth(['assignments:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>Camp.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        var C := NewConnection;
+        try
+          if SameText(Request.Method,'GET') then
+          begin
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text := 'select DisplayCampaignID, DisplayID, IsPrimary from DisplayCampaigns where CampaignID=:C order by DisplayCampaignID';
+              Q.ParamByName('C').AsInteger := CampId;
+              Q.Open;
+              var Arr := TJSONArray.Create;
+              try
+                while not Q.Eof do
+                begin
+                  var O := TJSONObject.Create;
+                  O.AddPair('Id', TJSONNumber.Create(Q.FieldByName('DisplayCampaignID').AsInteger));
+                  O.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
+                  O.AddPair('IsPrimary', TJSONBool.Create(Q.FieldByName('IsPrimary').AsBoolean));
+                  Arr.AddElement(O);
+                  Q.Next;
+                end;
+                var Root := TJSONObject.Create; try
+                  Root.AddPair('value', Arr);
+                  Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+                finally Root.Free; end;
+              finally Arr.Free; end;
+            finally Q.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'PUT') then
+          begin
+            if TryReplayIdempotency(Camp.OrganizationId) then Exit;
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var DisplayIdsVal := Body.GetValue('DisplayIds');
+              if (DisplayIdsVal=nil) or (not (DisplayIdsVal is TJSONArray)) then begin JSONError(400,'Missing DisplayIds'); Exit; end;
+              var SetPrimary := Body.GetValue<Boolean>('SetPrimary', True);
+
+              // Remove assignments for displays not in the new set
+              var Csv := '';
+              for var v in (DisplayIdsVal as TJSONArray) do
+              begin
+                var did := StrToIntDef(v.Value,0);
+                if did>0 then
+                begin
+                  if Csv<>'' then Csv := Csv + ',';
+                  Csv := Csv + IntToStr(did);
+                end;
+              end;
+
+              var QDel := TFDQuery.Create(nil);
+              try
+                QDel.Connection := C;
+                // Replace full set for this campaign (avoids relying on UNIQUE/ON CONFLICT constraints)
+                QDel.SQL.Text := 'delete from DisplayCampaigns where CampaignID=:C';
+                QDel.ParamByName('C').AsInteger := CampId;
+                QDel.ExecSQL;
+              finally QDel.Free; end;
+
+              // Upsert assignments for the new set
+              if Csv<>'' then
+              begin
+                var QIns := TFDQuery.Create(nil);
+                try
+                  QIns.Connection := C;
+                  QIns.SQL.Text :=
+                    'insert into DisplayCampaigns (DisplayID, CampaignID, IsPrimary) ' +
+                    'select distinct d.DisplayID, :C as CampaignID, :P as IsPrimary ' +
+                    'from Displays d ' +
+                    'join unnest(string_to_array(:Ids,'','')) as x on d.DisplayID = x::int ' +
+                    'where d.OrganizationID = :Org';
+                  QIns.ParamByName('C').AsInteger := CampId;
+                  QIns.ParamByName('P').AsBoolean := SetPrimary;
+                  QIns.ParamByName('Ids').AsString := Csv;
+                  QIns.ParamByName('Org').AsInteger := Camp.OrganizationId;
+                  QIns.ExecSQL;
+                finally QIns.Free; end;
+
+                // Enforce: a display can have either campaigns OR menus assigned.
+                // When assigning a campaign, remove any menu assignments for those displays.
+                var QClearMenus := TFDQuery.Create(nil);
+                try
+                  QClearMenus.Connection := C;
+                  QClearMenus.SQL.Text :=
+                    'delete from DisplayMenus dm using Displays d ' +
+                    'where dm.DisplayID = d.DisplayID ' +
+                    'and d.OrganizationID = :Org ' +
+                    'and dm.DisplayID = any(string_to_array(:Ids,'','')::int[])';
+                  QClearMenus.ParamByName('Org').AsInteger := Camp.OrganizationId;
+                  QClearMenus.ParamByName('Ids').AsString := Csv;
+                  QClearMenus.ExecSQL;
+                finally QClearMenus.Free; end;
+
+                if SetPrimary then
+                begin
+                  // Clear other primaries on those displays and set this campaign primary.
+                  var Qp := TFDQuery.Create(nil);
+                  try
+                    Qp.Connection := C;
+                    Qp.SQL.Text :=
+                      'update DisplayCampaigns dc set IsPrimary=false ' +
+                      'from Displays d ' +
+                      'where dc.DisplayID = d.DisplayID ' +
+                      'and d.OrganizationID = :Org ' +
+                      'and dc.DisplayID = any(string_to_array(:Ids,'','')::int[]) ' +
+                      'and dc.CampaignID<>:C';
+                    Qp.ParamByName('Ids').AsString := Csv;
+                    Qp.ParamByName('C').AsInteger := CampId;
+                    Qp.ParamByName('Org').AsInteger := Camp.OrganizationId;
+                    Qp.ExecSQL;
+                    Qp.SQL.Text :=
+                      'update DisplayCampaigns dc set IsPrimary=true ' +
+                      'from Displays d ' +
+                      'where dc.DisplayID = d.DisplayID ' +
+                      'and d.OrganizationID = :Org ' +
+                      'and dc.DisplayID = any(string_to_array(:Ids,'','')::int[]) ' +
+                      'and dc.CampaignID=:C';
+                    Qp.ExecSQL;
+                  finally Qp.Free; end;
+                end;
+              end;
+
+              Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+            finally Body.Free; end;
+            Exit;
+          end;
+        finally C.Free; end;
+      finally Camp.Free; end;
+    end;
+
+    // Bulk: list/replace menu assignments for a menu: /menus/{id}/display-assignments
+    if (Copy(NormalizedPath, 1, 7) = '/menus/') and (Pos('/display-assignments', NormalizedPath) > 0) then
+    begin
+      var Tail := Copy(NormalizedPath, 8, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var MenuId := StrToIntDef(IdStr,0); if MenuId=0 then begin JSONError(400,'Invalid menu id'); Exit; end;
+      var M0 := TMenuRepository.GetById(MenuId);
+      if M0=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['assignments:read'], TokOrg, TokUser, TokRole) then Exit;
+        end
+        else
+        begin
+          if not RequireAuth(['assignments:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>M0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        var C := NewConnection;
+        try
+          if SameText(Request.Method,'GET') then
+          begin
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text := 'select DisplayMenuID, DisplayID, IsPrimary from DisplayMenus where MenuID=:M order by DisplayMenuID';
+              Q.ParamByName('M').AsInteger := MenuId;
+              Q.Open;
+              var Arr := TJSONArray.Create;
+              try
+                while not Q.Eof do
+                begin
+                  var O := TJSONObject.Create;
+                  O.AddPair('Id', TJSONNumber.Create(Q.FieldByName('DisplayMenuID').AsInteger));
+                  O.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
+                  O.AddPair('IsPrimary', TJSONBool.Create(Q.FieldByName('IsPrimary').AsBoolean));
+                  Arr.AddElement(O);
+                  Q.Next;
+                end;
+                var Root := TJSONObject.Create; try
+                  Root.AddPair('value', Arr);
+                  Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+                finally Root.Free; end;
+              finally Arr.Free; end;
+            finally Q.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'PUT') then
+          begin
+            if TryReplayIdempotency(M0.OrganizationId) then Exit;
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var DisplayIdsVal := Body.GetValue('DisplayIds');
+              if (DisplayIdsVal=nil) or (not (DisplayIdsVal is TJSONArray)) then begin JSONError(400,'Missing DisplayIds'); Exit; end;
+              var SetPrimary := Body.GetValue<Boolean>('SetPrimary', True);
+
+              var Csv := '';
+              for var v in (DisplayIdsVal as TJSONArray) do
+              begin
+                var did := StrToIntDef(v.Value,0);
+                if did>0 then
+                begin
+                  if Csv<>'' then Csv := Csv + ',';
+                  Csv := Csv + IntToStr(did);
+                end;
+              end;
+
+              var QDel := TFDQuery.Create(nil);
+              try
+                QDel.Connection := C;
+                // Replace full set for this menu (avoids relying on UNIQUE/ON CONFLICT constraints)
+                QDel.SQL.Text := 'delete from DisplayMenus where MenuID=:M';
+                QDel.ParamByName('M').AsInteger := MenuId;
+                QDel.ExecSQL;
+              finally QDel.Free; end;
+
+              if Csv<>'' then
+              begin
+                // Ensure a display only has one menu at a time: clear any existing menu assignments on these displays
+                // before inserting the new menu assignments (avoids UNIQUE(DisplayID) conflicts).
+                var QClearOtherMenus := TFDQuery.Create(nil);
+                try
+                  QClearOtherMenus.Connection := C;
+                  QClearOtherMenus.SQL.Text :=
+                    'delete from DisplayMenus dm using Displays d ' +
+                    'where dm.DisplayID = d.DisplayID ' +
+                    'and d.OrganizationID = :Org ' +
+                    'and dm.DisplayID = any(string_to_array(:Ids,'','')::int[])';
+                  QClearOtherMenus.ParamByName('Org').AsInteger := M0.OrganizationId;
+                  QClearOtherMenus.ParamByName('Ids').AsString := Csv;
+                  QClearOtherMenus.ExecSQL;
+                finally QClearOtherMenus.Free; end;
+
+                var QIns := TFDQuery.Create(nil);
+                try
+                  QIns.Connection := C;
+                  QIns.SQL.Text :=
+                    'insert into DisplayMenus (DisplayID, MenuID, IsPrimary) ' +
+                    'select distinct d.DisplayID, :M as MenuID, :P as IsPrimary ' +
+                    'from Displays d ' +
+                    'join unnest(string_to_array(:Ids,'','')) as x on d.DisplayID = x::int ' +
+                    'where d.OrganizationID = :Org';
+                  QIns.ParamByName('M').AsInteger := MenuId;
+                  QIns.ParamByName('P').AsBoolean := SetPrimary;
+                  QIns.ParamByName('Ids').AsString := Csv;
+                  QIns.ParamByName('Org').AsInteger := M0.OrganizationId;
+                  QIns.ExecSQL;
+                finally QIns.Free; end;
+
+                // Enforce: a display can have either menus OR campaigns assigned.
+                // When assigning a menu, remove any campaign assignments for those displays.
+                var QClearCampaigns := TFDQuery.Create(nil);
+                try
+                  QClearCampaigns.Connection := C;
+                  QClearCampaigns.SQL.Text :=
+                    'delete from DisplayCampaigns dc using Displays d ' +
+                    'where dc.DisplayID = d.DisplayID ' +
+                    'and d.OrganizationID = :Org ' +
+                    'and dc.DisplayID = any(string_to_array(:Ids,'','')::int[])';
+                  QClearCampaigns.ParamByName('Org').AsInteger := M0.OrganizationId;
+                  QClearCampaigns.ParamByName('Ids').AsString := Csv;
+                  QClearCampaigns.ExecSQL;
+                finally QClearCampaigns.Free; end;
+
+                if SetPrimary then
+                begin
+                  // Clear other primaries (menus) on those displays and set this menu primary.
+                  var Qp := TFDQuery.Create(nil);
+                  try
+                    Qp.Connection := C;
+                    Qp.SQL.Text :=
+                      'update DisplayMenus dm set IsPrimary=false ' +
+                      'from Displays d ' +
+                      'where dm.DisplayID = d.DisplayID ' +
+                      'and d.OrganizationID = :Org ' +
+                      'and dm.DisplayID = any(string_to_array(:Ids,'','')::int[]) ' +
+                      'and dm.MenuID<>:M';
+                    Qp.ParamByName('Ids').AsString := Csv;
+                    Qp.ParamByName('M').AsInteger := MenuId;
+                    Qp.ParamByName('Org').AsInteger := M0.OrganizationId;
+                    Qp.ExecSQL;
+                    Qp.SQL.Text :=
+                      'update DisplayMenus dm set IsPrimary=true ' +
+                      'from Displays d ' +
+                      'where dm.DisplayID = d.DisplayID ' +
+                      'and d.OrganizationID = :Org ' +
+                      'and dm.DisplayID = any(string_to_array(:Ids,'','')::int[]) ' +
+                      'and dm.MenuID=:M';
+                    Qp.ExecSQL;
+                  finally Qp.Free; end;
+                end;
+              end;
+
+              Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+            finally Body.Free; end;
+            Exit;
+          end;
+        finally C.Free; end;
+      finally M0.Free; end;
     end;
 
     // Campaigns and items
@@ -2433,6 +3936,104 @@ begin
       PathInfo := Copy(PathInfo,5,MaxInt); // strip /api
 
     // ===== Media Files CRUD & Analytics =====
+
+    // Public: resolve a media file to a signed download URL scoped by a menu public token.
+    // This allows menu boards to reference private media without making the entire bucket public.
+    // GET /public/menus/{token}/media-files/{id}/download-url
+    if (Copy(PathInfo, 1, 14) = '/public/menus/') and (Pos('/media-files/', PathInfo) > 0) and (Pos('/download-url', PathInfo) > 0) and
+       SameText(Request.Method, 'GET') then
+    begin
+      var Tail := Copy(PathInfo, 15, MaxInt); // {token}/media-files/{id}/download-url
+      var Slash := Pos('/', Tail);
+      if Slash = 0 then begin JSONError(400,'Invalid token'); Exit; end;
+      var PublicToken := Copy(Tail, 1, Slash-1);
+      var Rest := Copy(Tail, Slash+1, MaxInt);
+      if Copy(Rest, 1, 12) <> 'media-files/' then begin JSONError(400,'Invalid path'); Exit; end;
+      Rest := Copy(Rest, 13, MaxInt); // {id}/download-url
+      Slash := Pos('/', Rest);
+      if Slash = 0 then begin JSONError(400,'Invalid media id'); Exit; end;
+      var IdStr := Copy(Rest, 1, Slash-1);
+      var MediaId := StrToIntDef(IdStr, 0);
+      if MediaId = 0 then begin JSONError(400,'Invalid media id'); Exit; end;
+
+      var M := TMenuRepository.GetByPublicToken(PublicToken);
+      if M = nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var MF := TMediaFileRepository.GetById(MediaId);
+        if MF = nil then begin JSONError(404,'Not found'); Exit; end;
+        try
+          if MF.OrganizationId <> M.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var InternalEndpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
+          var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT','');
+          // If not configured, infer from the incoming request (supports multiple domains and local dev).
+          if PublicEndpoint = '' then
+          begin
+            var ReqProto := Request.GetFieldByName('X-Forwarded-Proto');
+            if ReqProto = '' then ReqProto := 'http';
+            var ReqHost := Request.GetFieldByName('X-Forwarded-Host');
+            if ReqHost = '' then ReqHost := Request.GetFieldByName('Host');
+            if ReqHost <> '' then PublicEndpoint := ReqProto + '://' + ReqHost + '/minio';
+          end;
+          if PublicEndpoint = '' then PublicEndpoint := InternalEndpoint;
+
+          var Access := GetEnv('MINIO_ACCESS_KEY','minioadmin');
+          var Secret := GetEnv('MINIO_SECRET_KEY','minioadmin');
+          var Region := GetEnv('MINIO_REGION','us-east-1');
+
+          // Parse bucket/key from StorageURL (supports both internal and public endpoints)
+          var Path := Trim(MF.StorageURL);
+          if Path='' then begin JSONError(400,'Missing storage path'); Exit; end;
+          if Path.StartsWith(PublicEndpoint) then
+            Path := Copy(Path, Length(PublicEndpoint)+1, MaxInt)
+          else if Path.StartsWith(InternalEndpoint) then
+            Path := Copy(Path, Length(InternalEndpoint)+1, MaxInt);
+          if (Length(Path)>0) and (Path[1]='/') then Path := Copy(Path,2,MaxInt);
+
+          // Backward-compat: StorageURL may include a reverse-proxy prefix (e.g. https://api.../minio/{bucket}/{key}).
+          // If endpoint stripping didn't remove it, strip a leading "minio/" segment before bucket/key parsing.
+          if (Length(Path) >= 6) and SameText(Copy(Path, 1, 6), 'minio/') then
+            Path := Copy(Path, 7, MaxInt);
+          var SchemePos := Pos('://', Path);
+          if SchemePos>0 then
+          begin
+            var HostEndIdx := SchemePos + 3;
+            var SlashAfterHost := 0;
+            var i := HostEndIdx;
+            while i <= Length(Path) do begin if Path[i]='/' then begin SlashAfterHost := i; Break; end; Inc(i); end;
+            if SlashAfterHost>0 then Path := Copy(Path, SlashAfterHost+1, MaxInt);
+          end;
+
+          if (Length(Path) >= 6) and SameText(Copy(Path, 1, 6), 'minio/') then
+            Path := Copy(Path, 7, MaxInt);
+          var p := Pos('/', Path);
+          if p=0 then begin JSONError(400,'Invalid storage path'); Exit; end;
+          var Bucket := Copy(Path,1,p-1);
+          var Key := Copy(Path,p+1, MaxInt);
+          if (Bucket='') or (Key='') then begin JSONError(400,'Invalid storage path'); Exit; end;
+
+          var Params: TS3PresignParams;
+          Params.Endpoint:=PublicEndpoint;
+          Params.Region:=Region;
+          Params.Bucket:=Bucket;
+          Params.ObjectKey:=Key;
+          Params.AccessKey:=Access;
+          Params.SecretKey:=Secret;
+          Params.Method:='GET';
+          Params.ExpiresSeconds:=900;
+          var Url: string;
+          if not BuildS3PresignedUrl(Params, Url) then begin JSONError(500,'Failed to generate URL'); Exit; end;
+
+          var Obj := TJSONObject.Create;
+          Obj.AddPair('DownloadUrl', Url);
+          Obj.AddPair('Success', TJSONBool.Create(True));
+          Obj.AddPair('Message', '');
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Obj.ToJSON; Response.SendResponse; Obj.Free;
+        finally MF.Free; end;
+      finally M.Free; end;
+      Exit;
+    end;
+
     // List media files for organization
     if (Pos('/organizations/', PathInfo)=1) and (Pos('/media-files', PathInfo)>0) and SameText(Request.Method,'GET') then
     begin
@@ -2627,7 +4228,25 @@ begin
         // Use the same default bucket name created by docker compose (minio-setup)
         var Bucket := GetEnv('MINIO_BUCKET','displaydeck-media');
         var InternalEndpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
-        var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT', InternalEndpoint);
+        var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT','');
+        // If not configured, infer from the incoming request (supports multiple domains and local dev).
+        if PublicEndpoint = '' then
+        begin
+          var ReqProto := Request.GetFieldByName('X-Forwarded-Proto');
+          if ReqProto = '' then ReqProto := 'http';
+          var ReqHost := Request.GetFieldByName('X-Forwarded-Host');
+          if ReqHost = '' then ReqHost := Request.GetFieldByName('Host');
+          if ReqHost <> '' then PublicEndpoint := ReqProto + '://' + ReqHost + '/minio';
+        end;
+        // Prefer inferred endpoint when running under localhost but a fixed prod URL is configured.
+        var HostHdr := Request.GetFieldByName('Host');
+        if (HostHdr <> '') and (Pos('localhost', LowerCase(HostHdr)) > 0) and (Pos(HostHdr, PublicEndpoint) = 0) then
+        begin
+          var ReqProto := Request.GetFieldByName('X-Forwarded-Proto');
+          if ReqProto = '' then ReqProto := 'http';
+          PublicEndpoint := ReqProto + '://' + HostHdr + '/minio';
+        end;
+        if PublicEndpoint = '' then PublicEndpoint := InternalEndpoint;
         var Access := GetEnv('MINIO_ACCESS_KEY','minioadmin');
         var Secret := GetEnv('MINIO_SECRET_KEY','minioadmin');
         var Region := GetEnv('MINIO_REGION','us-east-1');
@@ -2663,7 +4282,23 @@ begin
       try
         if TokOrg<>MF.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
         var InternalEndpoint := GetEnv('MINIO_ENDPOINT','http://minio:9000');
-        var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT', InternalEndpoint);
+        var PublicEndpoint := GetEnv('MINIO_PUBLIC_ENDPOINT','');
+        if PublicEndpoint = '' then
+        begin
+          var ReqProto := Request.GetFieldByName('X-Forwarded-Proto');
+          if ReqProto = '' then ReqProto := 'http';
+          var ReqHost := Request.GetFieldByName('X-Forwarded-Host');
+          if ReqHost = '' then ReqHost := Request.GetFieldByName('Host');
+          if ReqHost <> '' then PublicEndpoint := ReqProto + '://' + ReqHost + '/minio';
+        end;
+        var HostHdr := Request.GetFieldByName('Host');
+        if (HostHdr <> '') and (Pos('localhost', LowerCase(HostHdr)) > 0) and (Pos(HostHdr, PublicEndpoint) = 0) then
+        begin
+          var ReqProto := Request.GetFieldByName('X-Forwarded-Proto');
+          if ReqProto = '' then ReqProto := 'http';
+          PublicEndpoint := ReqProto + '://' + HostHdr + '/minio';
+        end;
+        if PublicEndpoint = '' then PublicEndpoint := InternalEndpoint;
         var Access := GetEnv('MINIO_ACCESS_KEY','minioadmin');
         var Secret := GetEnv('MINIO_SECRET_KEY','minioadmin');
         var Region := GetEnv('MINIO_REGION','us-east-1');
@@ -2676,6 +4311,10 @@ begin
         else if Path.StartsWith(InternalEndpoint) then
           Path := Copy(Path, Length(InternalEndpoint)+1, MaxInt);
         if (Length(Path)>0) and (Path[1]='/') then Path := Copy(Path,2,MaxInt);
+
+        // Backward-compat: StorageURL may include a reverse-proxy prefix (e.g. https://api.../minio/{bucket}/{key}).
+        if (Length(Path) >= 6) and SameText(Copy(Path, 1, 6), 'minio/') then
+          Path := Copy(Path, 7, MaxInt);
         // Fallback: if still contains scheme://host because endpoints changed, strip host portion.
         var SchemePos := Pos('://', Path);
         if SchemePos>0 then
@@ -2688,6 +4327,9 @@ begin
           if SlashAfterHost>0 then
             Path := Copy(Path, SlashAfterHost+1, MaxInt);
         end;
+
+        if (Length(Path) >= 6) and SameText(Copy(Path, 1, 6), 'minio/') then
+          Path := Copy(Path, 7, MaxInt);
         var p := Pos('/', Path);
         if p=0 then begin JSONError(400,'Invalid storage path'); Exit; end;
         var Bucket := Copy(Path,1,p-1);
@@ -3048,7 +4690,15 @@ procedure TWebModule1.HandleHealth(Response: TWebResponse);
 begin
   Response.StatusCode := 200;
   Response.ContentType := 'application/json';
-  Response.Content := '{"value":"OK"}';
+  var Obj := TJSONObject.Create;
+  try
+    Obj.AddPair('value', 'OK');
+    Obj.AddPair('EmailConfigured', TJSONBool.Create(GetEnvironmentVariable('SMTP_HOST') <> ''));
+    Obj.AddPair('PublicWebUrlConfigured', TJSONBool.Create(GetEnvironmentVariable('PUBLIC_WEB_URL') <> ''));
+    Response.Content := Obj.ToJSON;
+  finally
+    Obj.Free;
+  end;
   Response.SendResponse;
 end;
 

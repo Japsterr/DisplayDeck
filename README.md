@@ -89,6 +89,7 @@ Server reads configuration from env vars (see `.env.example`):
 - SERVER_DEBUG (default "false"; gates debug endpoints)
 - SIGV4_DEBUG (default "false"; prints SigV4 canonical request when true)
 - SERVER_TAG (image tag used by compose; defaults to `latest` if unset)
+- APP_VERSION (optional; surfaced in dashboard as "UI build")
 
 The compose file `docker-compose.yml` sets sane defaults. Override via environment or an `.env` file.
 Key overrides:
@@ -194,11 +195,81 @@ If you are hosting from a home PC (dynamic IP, no open ports), use **Cloudflare 
     -   Move your domain's nameservers to Cloudflare (Free).
     -   Go to **Zero Trust > Access > Tunnels**.
     -   Create a new tunnel and get the `TUNNEL_TOKEN`.
-    -   In the Public Hostnames tab, map your subdomains:
-        -   `api.displaydeck.co.za` -> `http://server:2001`
-        -   `minio.displaydeck.co.za` -> `http://minio:9000`
-        -   `console.displaydeck.co.za` -> `http://minio:9001`
-        -   `docs.displaydeck.co.za` -> `http://swagger-ui:8080`
+  -   In the Public Hostnames tab, if you want to use **only `displaydeck.co.za`**:
+    -   `displaydeck.co.za` -> `http://nginx:80`
+    -   `www.displaydeck.co.za` -> `http://nginx:80` (optional)
+
+  With this setup, Nginx routes services by path on the same domain:
+  - API: `https://displaydeck.co.za/api/...`
+  - MinIO API: `https://displaydeck.co.za/minio/...`
+  - Swagger UI: `https://displaydeck.co.za/swagger/`
+
+  If you prefer subdomains instead, you can still map:
+  - `api.displaydeck.co.za` -> `http://nginx:80`
+  - `minio.displaydeck.co.za` -> `http://nginx:80`
+  - `console.displaydeck.co.za` -> `http://nginx:80`
+  - `docs.displaydeck.co.za` -> `http://nginx:80`
+
+  #### Troubleshooting: Cloudflare Tunnel Error 1033
+
+  Cloudflare **Error 1033** (“Tunnel error / unable to resolve”) almost always means Cloudflare has **no active connector** for the tunnel (cloudflared is stopped, crashed, or has an invalid/expired token).
+
+  On the host machine running DisplayDeck:
+
+  1) Verify the cloudflared container is running
+
+  Linux/macOS:
+
+  ```bash
+  docker ps --format "table {{.Names}}\t{{.Status}}" | grep -i tunnel
+  ```
+
+  Windows PowerShell:
+
+  ```powershell
+  docker ps --format "table {{.Names}}\t{{.Status}}" | Select-String -Pattern tunnel
+  ```
+
+  2) Check cloudflared logs for token/auth issues
+
+  ```bash
+  docker logs displaydeck-tunnel --tail 200
+  ```
+
+  3) Confirm `TUNNEL_TOKEN` is set in your `.env`, then restart the tunnel
+
+  ```bash
+  docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.tunnel.yml up -d tunnel
+  ```
+
+  In Cloudflare Zero Trust:
+
+  - Go to **Zero Trust → Networks → Tunnels** and confirm the tunnel shows a healthy/connected connector.
+  - If the tunnel token was rotated or the tunnel was deleted/recreated, update `.env` with the new `TUNNEL_TOKEN` and restart.
+
+  #### Troubleshooting: “I don’t see dashboard/UI changes”
+
+  The **website** container is built from the `website/` folder. If you pull new code but don’t rebuild, you will keep serving the old UI (e.g. you’ll only see the "Classic" template).
+
+  Rebuild/restart the stack:
+
+  ```powershell
+  # with tunnel
+  docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.tunnel.yml up -d --build
+
+  # without tunnel
+  docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+  ```
+
+  After deploying, open any menu editor page and confirm it shows `UI build: ...` under the Template selector.
+
+  #### Database migrations (existing DB volumes)
+
+  For existing databases (non-fresh volumes), apply migrations from `migrations/`.
+
+  ```powershell
+  docker compose --env-file .env -f docker-compose.prod.yml --profile migrate up --abort-on-container-exit db-migrate
+  ```
 
 2.  **Run**:
     Set your token in `.env` (`TUNNEL_TOKEN=...`) and run:

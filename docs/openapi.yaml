@@ -2,6 +2,13 @@ openapi: 3.0.3
 info:
   title: DisplayDeck API
   version: "1.0.0"
+  description: |
+    Authentication
+
+    - Preferred: Authorization: Bearer <token>
+    - Also supported (fallback): X-Auth-Token: <token>
+
+    Some endpoints may also support API keys (X-Api-Key).
 servers:
   - url: http://localhost:2001/api
 paths:
@@ -940,6 +947,26 @@ paths:
         '204':
           description: No Content
 
+  /menus/{Id}/duplicate:
+    post:
+      summary: Duplicate menu (clone sections and items)
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: Id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Menu'
+
   /menus/{MenuId}/sections:
     get:
       summary: List sections for menu
@@ -1780,7 +1807,9 @@ components:
         Id: { type: integer }
         MenuSectionId: { type: integer }
         Name: { type: string }
+        Sku: { type: string, nullable: true }
         Description: { type: string, nullable: true }
+        ImageUrl: { type: string, nullable: true }
         PriceCents: { type: integer, nullable: true }
         IsAvailable: { type: boolean }
         DisplayOrder: { type: integer }
@@ -1790,11 +1819,21 @@ components:
       type: object
       properties:
         Name: { type: string }
+        Sku: { type: string, nullable: true }
         Description: { type: string, nullable: true }
+        ImageUrl: { type: string, nullable: true }
         PriceCents: { type: integer, nullable: true }
         IsAvailable: { type: boolean }
         DisplayOrder: { type: integer }
       required: [Name]
+      example:
+        Name: "Cheese Burger"
+        Sku: "POS-123"
+        Description: "200g beef patty, cheddar, pickles"
+        ImageUrl: "https://cdn.example.com/menu/cheese-burger.jpg"
+        PriceCents: 8999
+        IsAvailable: true
+        DisplayOrder: 1
     PublicMenu:
       type: object
       properties:
@@ -2044,3 +2083,7 @@ components:
       type: apiKey
       in: header
       name: X-Api-Key
+    XAuthToken:
+      type: apiKey
+      in: header
+      name: X-Auth-Token

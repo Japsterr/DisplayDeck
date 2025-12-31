@@ -1,0 +1,6 @@
+<resources>
+  <item type="id" name="webview"/>
+  <item type="id" name="editDeviceName"/>
+  <item type="id" name="editDisplayUrl"/>
+  <item type="id" name="btnSave"/>
+</resources>

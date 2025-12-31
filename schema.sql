@@ -14,10 +14,35 @@ CREATE TABLE Users (
     Email VARCHAR(255) NOT NULL UNIQUE,
     PasswordHash VARCHAR(255) NOT NULL,
     Role VARCHAR(50) NOT NULL, -- e.g., 'Owner', 'ContentManager', 'Viewer'
+    EmailVerifiedAt TIMESTAMP WITH TIME ZONE,
     CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (OrganizationID) REFERENCES Organizations(OrganizationID) ON DELETE CASCADE
 );
+
+-- Email verification tokens
+CREATE TABLE IF NOT EXISTS EmailVerificationTokens (
+    EmailVerificationTokenID SERIAL PRIMARY KEY,
+    UserID INT NOT NULL,
+    TokenHash VARCHAR(64) NOT NULL UNIQUE,
+    ExpiresAt TIMESTAMP WITH TIME ZONE NOT NULL,
+    UsedAt TIMESTAMP WITH TIME ZONE,
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS IX_EmailVerificationTokens_UserID ON EmailVerificationTokens(UserID);
+
+-- Password reset tokens
+CREATE TABLE IF NOT EXISTS PasswordResetTokens (
+    PasswordResetTokenID SERIAL PRIMARY KEY,
+    UserID INT NOT NULL,
+    TokenHash VARCHAR(64) NOT NULL UNIQUE,
+    ExpiresAt TIMESTAMP WITH TIME ZONE NOT NULL,
+    UsedAt TIMESTAMP WITH TIME ZONE,
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (UserID) REFERENCES Users(UserID) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS IX_PasswordResetTokens_UserID ON PasswordResetTokens(UserID);
 
 -- 2. Subscription Management Tables
 CREATE TABLE Plans (
@@ -111,7 +136,9 @@ CREATE TABLE MenuItems (
         MenuItemID SERIAL PRIMARY KEY,
         MenuSectionID INT NOT NULL,
         Name VARCHAR(255) NOT NULL,
+    Sku VARCHAR(128),
         Description TEXT,
+    ImageUrl VARCHAR(1024),
         PriceCents INT,
         IsAvailable BOOLEAN NOT NULL DEFAULT TRUE,
         DisplayOrder INT NOT NULL DEFAULT 0,
@@ -166,6 +193,24 @@ CREATE TABLE DisplayCampaigns (
     FOREIGN KEY (DisplayID) REFERENCES Displays(DisplayID) ON DELETE CASCADE,
     FOREIGN KEY (CampaignID) REFERENCES Campaigns(CampaignID) ON DELETE CASCADE
 );
+
+-- Avoid duplicates (required for ON CONFLICT upserts)
+ALTER TABLE DisplayCampaigns
+    ADD CONSTRAINT uq_displaycampaigns_display_campaign UNIQUE (DisplayID, CampaignID);
+
+CREATE TABLE DisplayMenus (
+    DisplayMenuID SERIAL PRIMARY KEY,
+    DisplayID INT NOT NULL,
+    MenuID INT NOT NULL,
+    IsPrimary BOOLEAN NOT NULL DEFAULT TRUE,
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (DisplayID) REFERENCES Displays(DisplayID) ON DELETE CASCADE,
+    FOREIGN KEY (MenuID) REFERENCES Menus(MenuID) ON DELETE CASCADE
+);
+
+-- Avoid duplicates (required for ON CONFLICT upserts)
+ALTER TABLE DisplayMenus
+    ADD CONSTRAINT uq_displaymenus_display_menu UNIQUE (DisplayID, MenuID);
 
 -- 5. Analytics Table
 CREATE TABLE PlaybackLogs (

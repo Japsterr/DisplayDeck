@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:padding="16dp">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Device name" />
+
+    <EditText
+      android:id="@+id/editDeviceName"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:hint="e.g. Lobby Screen 1" />
+
+    <Space
+      android:layout_width="match_parent"
+      android:layout_height="12dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Display URL" />
+
+    <EditText
+      android:id="@+id/editDisplayUrl"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:hint="https://.../display/..." />
+
+    <Space
+      android:layout_width="match_parent"
+      android:layout_height="16dp" />
+
+    <Button
+      android:id="@+id/btnSave"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="Save" />
+
+  </LinearLayout>
+</ScrollView>

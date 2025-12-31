@@ -32,6 +32,43 @@ services:
       - ./schema.sql:/docker-entrypoint-initdb.d/02-schema.sql
     # No ports exposed to host, only internal network
 
+  # DB migrations runner (optional)
+  # Run with: docker compose --env-file .env -f docker-compose.prod.yml --profile migrate up --abort-on-container-exit db-migrate
+  db-migrate:
+    image: postgres:15-alpine
+    depends_on:
+      - postgres
+    volumes:
+      - ./migrations:/migrations:ro
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${DB_NAME}
+      PGUSER: ${DB_USER}
+      PGPASSWORD: ${DB_PASSWORD}
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+        set -e
+        echo "Waiting for postgres..."
+        until pg_isready -h "$$PGHOST" -p "$$PGPORT" -U "$$PGUSER" -d "$$PGDATABASE"; do sleep 2; done
+        psql -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());"
+        for f in $$(ls -1 /migrations/*.sql 2>/dev/null | sort); do
+          name=$$(basename "$$f")
+          applied=$$(psql -tA -v ON_ERROR_STOP=1 -c "SELECT 1 FROM schema_migrations WHERE filename='$$name' LIMIT 1;")
+          if [ "$$applied" = "1" ]; then
+            echo "Skipping $$name (already applied)"
+          else
+            echo "Applying $$name"
+            psql -v ON_ERROR_STOP=1 -f "$$f"
+            psql -v ON_ERROR_STOP=1 -c "INSERT INTO schema_migrations(filename) VALUES ('$$name');"
+          fi
+        done
+        echo "Migrations complete."
+    restart: "no"
+    profiles: ["migrate"]
+
   # MinIO S3-Compatible Object Storage
   minio:
     image: minio/minio:latest
@@ -95,9 +132,19 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_REGION: ${MINIO_REGION}
       # Public endpoint for clients (via Nginx)
-      MINIO_PUBLIC_ENDPOINT: http://minio.displaydeck.co.za
+      MINIO_PUBLIC_ENDPOINT: https://minio.displaydeck.co.za
       JWT_SECRET: ${JWT_SECRET}
       SERVER_DEBUG: ${SERVER_DEBUG:-false}
+
+      # Auth / email flows
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-https://displaydeck.co.za}
+      AUTH_REQUIRE_EMAIL_VERIFICATION: ${AUTH_REQUIRE_EMAIL_VERIFICATION:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-no-reply@displaydeck.co.za}
+      SMTP_SECURE: ${SMTP_SECURE:-starttls}
     depends_on:
       - postgres
       - minio
@@ -110,12 +157,14 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: /api
+        NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-dev}
     container_name: displaydeck-website
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-dev}
 
 volumes:
   postgres_data:

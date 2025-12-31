@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2, Save, Clock, GripVertical, Image as ImageIcon, FileVideo, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
@@ -56,8 +56,33 @@ export default function EditCampaignPage() {
   const [items, setItems] = useState<CampaignItem[]>([]);
   const [mediaLibrary, setMediaLibrary] = useState<MediaFile[]>([]);
   const [menus, setMenus] = useState<Menu[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const ensurePreviewUrl = useCallback(
+    async (mediaFileId: number) => {
+      if (!mediaFileId) return;
+      if (previewUrls[mediaFileId]) return;
+
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+        const res = await fetch(`${apiUrl}/media-files/${mediaFileId}/download-url`, {
+          headers: { "X-Auth-Token": token },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const url = (data?.DownloadUrl || "") as string;
+        if (!url) return;
+        setPreviewUrls((prev) => ({ ...prev, [mediaFileId]: url }));
+      } catch {
+        // ignore thumbnail failures; user can still add items
+      }
+    },
+    [previewUrls]
+  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -135,6 +160,28 @@ export default function EditCampaignPage() {
 
     if (campaignId) fetchData();
   }, [campaignId, router]);
+
+  useEffect(() => {
+    if (!campaign) return;
+    const images = mediaLibrary
+      .filter((m) => m.Orientation === campaign.Orientation)
+      .filter((m) => m.FileType.startsWith("image/"))
+      .slice(0, 32);
+    images.forEach((m) => {
+      void ensurePreviewUrl(m.Id);
+    });
+  }, [campaign, mediaLibrary, ensurePreviewUrl]);
+
+  useEffect(() => {
+    const imageIds = items
+      .filter((it) => it.ItemType === "media")
+      .map((it) => it.MediaFile)
+      .filter((m): m is MediaFile => !!m && m.FileType.startsWith("image/"))
+      .map((m) => m.Id);
+    imageIds.forEach((id) => {
+      void ensurePreviewUrl(id);
+    });
+  }, [items, ensurePreviewUrl]);
 
   const handleAddItem = async (media: MediaFile) => {
     try {
@@ -379,12 +426,18 @@ export default function EditCampaignPage() {
                                     <UtensilsCrossed className="h-7 w-7 text-muted-foreground" />
                                   </div>
                                 ) : item.MediaFile?.FileType.startsWith("image/") ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={item.MediaFile.StorageURL}
-                                    alt={item.MediaFile.FileName}
-                                    className="w-full h-full object-cover"
-                                  />
+                                  previewUrls[item.MediaFile.Id] ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={previewUrls[item.MediaFile.Id]}
+                                      alt={item.MediaFile.FileName}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <ImageIcon className="h-7 w-7 text-muted-foreground" />
+                                    </div>
+                                  )
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center">
                                     <FileVideo className="h-8 w-8 text-muted-foreground" />
@@ -457,12 +510,18 @@ export default function EditCampaignPage() {
                       <div key={media.Id} className="group relative border rounded-lg overflow-hidden bg-muted/20 hover:border-primary transition-colors">
                         <div className="aspect-video flex items-center justify-center bg-black/5">
                           {media.FileType.startsWith("image/") ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={media.StorageURL}
-                              alt={media.FileName}
-                              className="w-full h-full object-cover"
-                            />
+                            previewUrls[media.Id] ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={previewUrls[media.Id]}
+                                alt={media.FileName}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <ImageIcon className="h-7 w-7 text-muted-foreground" />
+                              </div>
+                            )
                           ) : (
                             <FileVideo className="h-8 w-8 text-muted-foreground" />
                           )}

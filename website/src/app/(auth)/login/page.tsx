@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ const formSchema = z.object({
 
 export default function LoginPage() {
   const router = useRouter();
+  const [canResendVerification, setCanResendVerification] = useState(false);
+  const [resendEmail, setResendEmail] = useState<string>("");
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -47,6 +50,9 @@ export default function LoginPage() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
+      setCanResendVerification(false);
+      setResendEmail("");
+
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
       const response = await fetch(`${apiUrl}/auth/login`, {
         method: "POST",
@@ -60,8 +66,22 @@ export default function LoginPage() {
       });
 
       if (!response.ok) {
-        const text = await response.text();
+        let err: any = null;
+        try {
+          err = await response.json();
+        } catch {
+          // ignore
+        }
+
+        const text = err ? JSON.stringify(err) : await response.text();
         console.error("Login failed response:", text);
+
+        if (err?.code === "email_not_verified") {
+          setCanResendVerification(true);
+          setResendEmail(values.email);
+          throw new Error("Email not verified");
+        }
+
         throw new Error("Invalid credentials");
       }
 
@@ -73,9 +93,37 @@ export default function LoginPage() {
       
       toast.success("Logged in successfully");
       router.push("/dashboard");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
-      toast.error("Login failed. Please check your credentials.");
+      const msg = typeof error?.message === "string" ? error.message : "";
+      toast.error(
+        msg === "Email not verified"
+          ? "Email not verified. Check your inbox or resend verification."
+          : "Login failed. Please check your credentials."
+      );
+    }
+  }
+
+  async function resendVerification() {
+    if (!resendEmail) return;
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      const res = await fetch(`${apiUrl}/auth/resend-verification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ Email: resendEmail }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("Resend verification failed:", text);
+        throw new Error("Failed");
+      }
+      toast.success("If the account exists, a verification email has been sent.");
+    } catch (e) {
+      console.error(e);
+      toast.error("Could not resend verification email.");
     }
   }
 
@@ -120,6 +168,22 @@ export default function LoginPage() {
               <Button type="submit" className="w-full">
                 Sign in
               </Button>
+
+              <div className="flex items-center justify-between text-sm">
+                <Link href="/forgot-password" className="underline hover:text-primary">
+                  Forgot password?
+                </Link>
+                {canResendVerification ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0"
+                    onClick={resendVerification}
+                  >
+                    Resend verification
+                  </Button>
+                ) : null}
+              </div>
             </form>
           </Form>
         </CardContent>

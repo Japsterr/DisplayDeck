@@ -6,7 +6,14 @@ Base URL: `http://localhost:2001/api`
 
 Content-Type: `application/json`
 
-Authentication: Most endpoints require `Authorization: Bearer <token>` header.
+Authentication: Most endpoints require an auth token.
+
+Supported auth headers:
+
+- Preferred: `Authorization: Bearer <token>`
+- Also supported (fallback): `X-Auth-Token: <token>`
+
+Some endpoints may also accept an API key (where enabled) via `X-API-Key: <key>`.
 
 Timestamp format: "yyyy-MM-ddTHH:mm:ss" (ISO 8601).
 
@@ -132,6 +139,42 @@ Authenticated endpoints:
 - `PUT /menus/{Id}`
 - `DELETE /menus/{Id}`
 
+Example: create a menu
+
+```bash
+curl -X POST "http://localhost:2001/api/organizations/1/menus" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "Name": "Main Menu",
+    "Orientation": "Landscape",
+    "TemplateKey": "classic",
+    "ThemeConfig": {
+      "backgroundColor": "#0b0b0b",
+      "textColor": "#ffffff",
+      "accentColor": "#22c55e"
+    }
+  }'
+```
+
+Example response (shape)
+
+```json
+{
+  "Id": 55,
+  "OrganizationId": 1,
+  "Name": "Main Menu",
+  "Orientation": "Landscape",
+  "TemplateKey": "classic",
+  "PublicToken": "PUB-...",
+  "ThemeConfig": {
+    "backgroundColor": "#0b0b0b",
+    "textColor": "#ffffff",
+    "accentColor": "#22c55e"
+  }
+}
+```
+
 Menu sections:
 
 - `GET /menus/{MenuId}/sections` → `{ "value": [ ... ] }`
@@ -140,17 +183,96 @@ Menu sections:
 - `PUT /menu-sections/{Id}`
 - `DELETE /menu-sections/{Id}`
 
+Example: create a section
+
+```bash
+curl -X POST "http://localhost:2001/api/menus/55/sections" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "Name": "Burgers",
+    "DisplayOrder": 1
+  }'
+```
+
 Menu items:
 
 - `GET /menu-sections/{MenuSectionId}/items` → `{ "value": [ ... ] }`
 - `POST /menu-sections/{MenuSectionId}/items`
-  - Request: `{ "Name": "Cheeseburger", "Description": "...", "PriceCents": 8999, "IsAvailable": true, "DisplayOrder": 0 }`
+  - Request: `{ "Name": "Cheeseburger", "Sku": "POS-123", "Description": "...", "ImageUrl": "https://...", "PriceCents": 8999, "IsAvailable": true, "DisplayOrder": 0 }`
 - `PUT /menu-items/{Id}`
 - `DELETE /menu-items/{Id}`
+
+Notes:
+
+- `Sku` is intended to be the stable identifier used to sync pricing/items with a POS.
+- `ImageUrl` is an optional absolute URL shown on public menu templates.
+- `PriceCents` is stored as an integer (ZAR cents). Use `null` to indicate “no price”.
+
+Example: create an item
+
+```bash
+curl -X POST "http://localhost:2001/api/menu-sections/123/items" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "Name": "Cheese Burger",
+    "Sku": "POS-123",
+    "Description": "200g beef patty, cheddar, pickles",
+    "ImageUrl": "https://cdn.example.com/menu/cheese-burger.jpg",
+    "PriceCents": 8999,
+    "IsAvailable": true,
+    "DisplayOrder": 1
+  }'
+```
+
+Menu duplicate:
+
+- `POST /menus/{Id}/duplicate` → clones the menu, its sections, and items, and returns the new menu (including a new public token).
+
+Example: duplicate a menu
+
+```bash
+curl -X POST "http://localhost:2001/api/menus/55/duplicate" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{}'
+```
+
+CSV import (dashboard feature):
+
+The dashboard menu editor supports importing items from CSV. The CSV must include a header row.
+
+- Required columns: `Section`, `Name`
+- Optional columns: `Sku`, `Description`, `ImageUrl`, `Price` (ZAR, e.g. `89.99`), `PriceCents` (integer), `IsAvailable`, `DisplayOrder`
 
 Public endpoint (no auth):
 
 - `GET /public/menus/{Token}` → menu with its sections + items (for display players)
+
+Example response (shape)
+
+```json
+{
+  "Menu": { "Id": 55, "Name": "Main Menu", "TemplateKey": "classic", "PublicToken": "PUB-..." },
+  "Sections": [
+    { "Id": 123, "MenuId": 55, "Name": "Burgers", "DisplayOrder": 1 }
+  ],
+  "Items": [
+    {
+      "Id": 999,
+      "MenuSectionId": 123,
+      "Name": "Cheese Burger",
+      "Sku": "POS-123",
+      "Description": "200g beef patty, cheddar, pickles",
+      "ImageUrl": "https://cdn.example.com/menu/cheese-burger.jpg",
+      "PriceCents": 8999,
+      "IsAvailable": true,
+      "DisplayOrder": 1
+    }
+  ]
+}
+```
 
 ---
 

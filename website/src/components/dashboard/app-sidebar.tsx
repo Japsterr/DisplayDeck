@@ -3,10 +3,12 @@
 import * as React from "react"
 import {
   LayoutDashboard,
+  ListTodo,
   Monitor,
   Megaphone,
   UtensilsCrossed,
   Library,
+  Users,
   Settings,
   LogOut,
 } from "lucide-react"
@@ -34,6 +36,11 @@ const items = [
     icon: LayoutDashboard,
   },
   {
+    title: "Roadmap",
+    url: "/dashboard/roadmap",
+    icon: ListTodo,
+  },
+  {
     title: "Displays",
     url: "/dashboard/displays",
     icon: Monitor,
@@ -52,6 +59,11 @@ const items = [
     title: "Media Library",
     url: "/dashboard/media",
     icon: Library,
+  },
+  {
+    title: "Users",
+    url: "/dashboard/users",
+    icon: Users,
   },
   {
     title: "Settings",

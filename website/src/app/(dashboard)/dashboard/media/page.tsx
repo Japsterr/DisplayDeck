@@ -52,6 +52,27 @@ export default function MediaPage() {
   const [uploading, setUploading] = useState(false);
   const [orientation, setOrientation] = useState("Landscape");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [previewUrls, setPreviewUrls] = useState<Record<number, string>>({});
+
+  const ensurePreviewUrl = async (id: number) => {
+    if (previewUrls[id]) return previewUrls[id];
+    const token = localStorage.getItem("token");
+    if (!token) return "";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+    try {
+      const res = await fetch(`${apiUrl}/media-files/${id}/download-url`, {
+        headers: { "X-Auth-Token": token || "" },
+      });
+      if (!res.ok) return "";
+      const data = (await res.json()) as { DownloadUrl?: string };
+      const url = (data?.DownloadUrl || "").trim();
+      if (!url) return "";
+      setPreviewUrls((prev) => (prev[id] ? prev : { ...prev, [id]: url }));
+      return url;
+    } catch {
+      return "";
+    }
+  };
 
   const fetchMedia = async () => {
     try {
@@ -94,6 +115,12 @@ export default function MediaPage() {
   useEffect(() => {
     fetchMedia();
   }, []);
+
+  useEffect(() => {
+    const visible = mediaFiles.filter((f) => (f.FileType || "").startsWith("image/")).slice(0, 48);
+    for (const f of visible) void ensurePreviewUrl(f.Id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaFiles]);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,11 +296,11 @@ export default function MediaPage() {
                     {file.FileType.startsWith("image/") ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img 
-                        src={file.StorageURL} 
+                        src={previewUrls[file.Id] || ""} 
                         alt={file.FileName} 
                         className="w-full h-full object-cover"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = "https://placehold.co/400?text=Error";
+                          (e.target as HTMLImageElement).style.display = "none";
                         }}
                       />
                     ) : (
@@ -294,8 +321,14 @@ export default function MediaPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => window.open(file.StorageURL, '_blank')}>
-                          View Original
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            const url = await ensurePreviewUrl(file.Id);
+                            if (url) window.open(url, "_blank");
+                            else toast.error("Failed to get download URL");
+                          }}
+                        >
+                          View
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteMedia(file.Id)}>

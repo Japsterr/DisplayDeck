@@ -79,6 +79,21 @@ export default function CampaignsPage() {
   const [selectedDisplayIds, setSelectedDisplayIds] = useState<number[]>([]);
   const [assigning, setAssigning] = useState(false);
 
+  const ensureDisplaysLoaded = async (): Promise<Display[]> => {
+    if (displays.length) return displays;
+    const token = localStorage.getItem("token");
+    const userStr = localStorage.getItem("user");
+    if (!token || !userStr) return [];
+    const user = JSON.parse(userStr);
+    const orgId = user.OrganizationId;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+    const res = await fetch(`${apiUrl}/organizations/${orgId}/displays`, { headers: { "X-Auth-Token": token } });
+    const data = await res.json().catch(() => ({ value: [] }));
+    const loaded = (data.value || []) as Display[];
+    setDisplays(loaded);
+    return loaded;
+  };
+
   const fetchDetails = async (currentCampaigns: Campaign[]) => {
     try {
       const token = localStorage.getItem("token");
@@ -97,22 +112,23 @@ export default function CampaignsPage() {
           .catch(() => ({ id: c.Id, count: 0 }))
       );
 
-      // 2. Fetch Displays and Assignments
+      // 2. Fetch Displays once (for assignment dialog UI)
       const displaysRes = await fetch(`${apiUrl}/organizations/${orgId}/displays`, { headers });
-      const displaysData = await displaysRes.json();
+      const displaysData = await displaysRes.json().catch(() => ({ value: [] }));
       const allDisplays = displaysData.value || [];
       setDisplays(allDisplays);
 
-      const assignmentPromises = allDisplays.map((d: any) => 
-        fetch(`${apiUrl}/displays/${d.Id}/campaign-assignments`, { headers })
-          .then(res => res.json())
-          .then(data => ({ displayId: d.Id, campaigns: data.value?.map((a: any) => a.CampaignId) || [] }))
-          .catch(() => ({ displayId: d.Id, campaigns: [] }))
+      // 3. Fetch active display counts per campaign using the bulk endpoint
+      const bulkCountsPromises = currentCampaigns.map((c) =>
+        fetch(`${apiUrl}/campaigns/${c.Id}/display-assignments`, { headers })
+          .then((res) => res.json())
+          .then((data) => ({ id: c.Id, count: (data.value || []).length as number }))
+          .catch(() => ({ id: c.Id, count: 0 }))
       );
 
-      const [itemResults, assignmentResults] = await Promise.all([
+      const [itemResults, bulkCounts] = await Promise.all([
         Promise.all(itemPromises),
-        Promise.all(assignmentPromises)
+        Promise.all(bulkCountsPromises),
       ]);
 
       // Process Item Counts
@@ -120,12 +136,9 @@ export default function CampaignsPage() {
       itemResults.forEach(r => newItemCounts[r.id] = r.count);
       setItemCounts(newItemCounts);
 
-      // Process Active Displays
       const newActiveDisplays: Record<number, number> = {};
-      assignmentResults.forEach((r: any) => {
-        r.campaigns.forEach((cId: number) => {
-          newActiveDisplays[cId] = (newActiveDisplays[cId] || 0) + 1;
-        });
+      bulkCounts.forEach((r) => {
+        newActiveDisplays[r.id] = r.count;
       });
       setActiveDisplays(newActiveDisplays);
 
@@ -240,20 +253,12 @@ export default function CampaignsPage() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
       const headers = { "X-Auth-Token": token || "" };
 
-      const assignedDisplayIds: number[] = [];
-      
-      // Check assignments for each display
-      await Promise.all(displays.map(async (d) => {
-        try {
-          const res = await fetch(`${apiUrl}/displays/${d.Id}/campaign-assignments`, { headers });
-          const data = await res.json();
-          const assignments = data.value || [];
-          if (assignments.some((a: any) => a.CampaignId === campaign.Id)) {
-            assignedDisplayIds.push(d.Id);
-          }
-        } catch (e) { console.error(e); }
-      }));
+      await ensureDisplaysLoaded();
 
+      const res = await fetch(`${apiUrl}/campaigns/${campaign.Id}/display-assignments`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const assignedDisplayIds = ((data.value || []) as any[]).map((a) => Number(a.DisplayId)).filter((n) => Number.isFinite(n));
       setSelectedDisplayIds(assignedDisplayIds);
     } catch (error) {
       console.error(error);
@@ -275,30 +280,12 @@ export default function CampaignsPage() {
         "X-Auth-Token": token || "" 
       };
 
-      await Promise.all(displays.map(async (d) => {
-        const res = await fetch(`${apiUrl}/displays/${d.Id}/campaign-assignments`, { headers });
-        const data = await res.json();
-        const assignments = data.value || [];
-        const existingAssignment = assignments.find((a: any) => a.CampaignId === selectedCampaign.Id);
-        const shouldBeAssigned = selectedDisplayIds.includes(d.Id);
-
-        if (shouldBeAssigned && !existingAssignment) {
-          await fetch(`${apiUrl}/displays/${d.Id}/campaign-assignments`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              DisplayId: d.Id,
-              CampaignId: selectedCampaign.Id,
-              IsPrimary: true
-            })
-          });
-        } else if (!shouldBeAssigned && existingAssignment) {
-          await fetch(`${apiUrl}/campaign-assignments/${existingAssignment.Id}`, {
-            method: "DELETE",
-            headers
-          });
-        }
-      }));
+      const res = await fetch(`${apiUrl}/campaigns/${selectedCampaign.Id}/display-assignments`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ DisplayIds: selectedDisplayIds, SetPrimary: true }),
+      });
+      if (!res.ok) throw new Error(await res.text());
 
       toast.success("Assignments updated");
       setIsAssignDialogOpen(false);

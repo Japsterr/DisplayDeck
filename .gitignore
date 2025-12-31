@@ -50,6 +50,35 @@ OSXARM64/
 
 # Environment secrets
 .env
+.env.*
+!.env.example
+
+# Common secret/key material (never commit)
+*.pem
+*.key
+*.crt
+*.cer
+*.pfx
+*.p12
+*.jks
+*.keystore
+
+# Android / Gradle local files
+**/local.properties
+**/.gradle/
+**/build/
+*.apk
+
+# Android Studio / IDE
+**/.idea/
+*.iml
+
+# android-player generated artifacts (do not commit)
+android-player/.android-sdk/
+android-player/app/bin/
+
+# Local recovery folders
+__recovery/
 
 # Local client state
 displaydeck-config.json

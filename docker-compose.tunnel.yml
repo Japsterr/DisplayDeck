@@ -4,12 +4,9 @@ services:
   # without opening ports on your router.
   tunnel:
     image: cloudflare/cloudflared:latest
-    container_name: displaydeck-tunnel
     restart: always
     command: tunnel run
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
     depends_on:
-      - server
-      - minio
-      - swagger-ui
+      - nginx

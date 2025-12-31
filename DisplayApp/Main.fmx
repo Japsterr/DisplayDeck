@@ -1,0 +1,180 @@
+object Form1: TForm1
+  Left = 0
+  Top = 0
+  Caption = 'DisplayDeck'
+  ClientHeight = 720
+  ClientWidth = 1280
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  DesignerMasterStyle = 3
+  OnCreate = FormCreate
+  object ToolBar1: TToolBar
+    Align = Top
+    Height = 48
+    Size.Width = 1280.000000000000000000
+    Size.Height = 48.000000000000000000
+    TabOrder = 0
+    object btnSettings: TButton
+      Align = Right
+      Position.X = 1176.000000000000000000
+      Size.Width = 104.000000000000000000
+      Size.Height = 48.000000000000000000
+      TabOrder = 0
+      Text = 'Settings'
+      OnClick = btnSettingsClick
+    end
+    object btnReload: TButton
+      Align = Right
+      Position.X = 1088.000000000000000000
+      Size.Width = 88.000000000000000000
+      Size.Height = 48.000000000000000000
+      TabOrder = 1
+      Text = 'Reload'
+      OnClick = btnReloadClick
+    end
+    object lblTitle: TLabel
+      Align = Client
+      Size.Width = 1088.000000000000000000
+      Size.Height = 48.000000000000000000
+      TabOrder = 2
+      Text = 'DisplayDeck Display'
+      TextSettings.Font.Size = 18.000000000000000000
+      TextSettings.HorzAlign = Center
+      TextSettings.VertAlign = Center
+    end
+  end
+  object TabControl1: TTabControl
+    Align = Client
+    Position.Y = 48.000000000000000000
+    Size.Width = 1280.000000000000000000
+    Size.Height = 672.000000000000000000
+    TabOrder = 1
+    TabPosition = None
+    object TabItemDisplay: TTabItem
+      Size.Width = 1280.000000000000000000
+      Size.Height = 672.000000000000000000
+      TabOrder = 0
+      Text = 'Display'
+      object WebBrowser1: TWebBrowser
+        Align = Client
+        Size.Width = 1280.000000000000000000
+        Size.Height = 672.000000000000000000
+        TabOrder = 0
+      end
+      object LayoutOverlay: TLayout
+        Align = Client
+        Size.Width = 1280.000000000000000000
+        Size.Height = 672.000000000000000000
+        TabOrder = 1
+        Visible = True
+        HitTest = False
+        object lblStatus: TLabel
+          Align = Center
+          Size.Width = 800.000000000000000000
+          Size.Height = 80.000000000000000000
+          Text = 'Loading...'
+          TextSettings.HorzAlign = Center
+          TextSettings.VertAlign = Center
+          TextSettings.Font.Size = 16.000000000000000000
+          WordWrap = True
+        end
+      end
+    end
+    object TabItemSettings: TTabItem
+      Size.Width = 1280.000000000000000000
+      Size.Height = 672.000000000000000000
+      TabOrder = 1
+      Text = 'Settings'
+      object VertScrollBox1: TVertScrollBox
+        Align = Client
+        Size.Width = 1280.000000000000000000
+        Size.Height = 672.000000000000000000
+        TabOrder = 0
+        object LayoutDeviceName: TLayout
+          Align = Top
+          Height = 96
+          Padding.Left = 16
+          Padding.Right = 16
+          Padding.Top = 12
+          Padding.Bottom = 12
+          object LabelDeviceName: TLabel
+            Align = Top
+            Height = 24
+            Text = 'Device name'
+          end
+          object EditDeviceName: TEdit
+            Align = Top
+            Height = 40
+            TabOrder = 0
+            TextPrompt = 'e.g. Lobby Screen 1'
+          end
+        end
+        object LayoutApiUrl: TLayout
+          Align = Top
+          Height = 96
+          Padding.Left = 16
+          Padding.Right = 16
+          Padding.Top = 12
+          Padding.Bottom = 12
+          object LabelApiUrl: TLabel
+            Align = Top
+            Height = 24
+            Text = 'API URL'
+          end
+          object EditApiUrl: TEdit
+            Align = Top
+            Height = 40
+            TabOrder = 0
+            TextPrompt = 'https://api.displaydeck.co.za'
+          end
+        end
+        object LayoutDisplayUrl: TLayout
+          Align = Top
+          Height = 112
+          Padding.Left = 16
+          Padding.Right = 16
+          Padding.Top = 12
+          Padding.Bottom = 12
+          object LabelDisplayUrl: TLabel
+            Align = Top
+            Height = 24
+            Text = 'Display URL (what the screen should show)'
+            WordWrap = True
+          end
+          object EditDisplayUrl: TEdit
+            Align = Top
+            Height = 40
+            TabOrder = 0
+            TextPrompt = 'https://your-domain/display/...'
+          end
+        end
+        object LayoutButtons: TLayout
+          Align = Top
+          Height = 72
+          Padding.Left = 16
+          Padding.Right = 16
+          Padding.Top = 12
+          Padding.Bottom = 12
+          object btnSave: TButton
+            Align = Left
+            Size.Width = 160.000000000000000000
+            Size.Height = 48.000000000000000000
+            TabOrder = 0
+            Text = 'Save & Open'
+            OnClick = btnSaveClick
+          end
+          object btnBackToDisplay: TButton
+            Align = Left
+            Position.X = 176.000000000000000000
+            Size.Width = 160.000000000000000000
+            Size.Height = 48.000000000000000000
+            TabOrder = 1
+            Text = 'Back'
+            OnClick = btnBackToDisplayClick
+          end
+        end
+      end
+    end
+  end
+end

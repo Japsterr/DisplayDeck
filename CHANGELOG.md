@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10 - 2025-12-29
+
+- **Deployment (Phase 2)**:
+  - Added optional `db-migrate` compose service to apply `migrations/*.sql` and record them in `schema_migrations`.
+  - Added `APP_VERSION` wiring so the dashboard can show the UI build version.
+  - Added simple prod deploy scripts: `scripts/deploy-prod.ps1` and `scripts/deploy-prod.sh`.
+
 ## 0.1.9 - 2025-12-29
 
 - **Menu Builder (Phase 1)**:
