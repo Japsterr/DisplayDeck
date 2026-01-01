@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-01-01
+
 - **Website / Dashboard**:
   - Fixed a public menu crash caused by React hook order violations.
   - Menu editor: improved media picking UX (search + thumbnail grid) for quickly selecting images.
@@ -9,7 +11,7 @@
 - **Media delivery / production reliability**:
   - Public menu rendering no longer relies on raw MinIO URLs in the browser/WebView.
   - Added a same-origin proxy for menu media (`/public-media/...`) that fetches via the API and serves short-cache responses.
-  - Nginx now proxies `/minio/` with CORS headers to support browser uploads (PUT to presigned URLs).
+  - Nginx proxies `/minio/` with CORS headers to support browser uploads (PUT to presigned URLs).
 - **Android player**:
   - Campaign images render via a minimal `object-fit: cover` wrapper (better portrait/fullscreen behavior).
   - Campaign videos play via native Media3/ExoPlayer (more reliable than WebView `<video>` on older devices).

@@ -15,10 +15,10 @@ export function Features() {
       <div className="container mx-auto px-4 md:px-6">
         <div className="flex flex-col items-center justify-center space-y-4 text-center mb-16">
           <h2 className="text-3xl font-bold tracking-tighter sm:text-5xl text-white">
-            Everything you need to run your screens.
+            The problem solved.
           </h2>
           <p className="max-w-[900px] text-neutral-400 md:text-xl/relaxed">
-            Built for developers, designed for scale. Manage thousands of displays with a single API.
+            Professional signage that looks great, stays online, and is easy to manage.
           </p>
         </div>
 
@@ -50,23 +50,23 @@ export function Features() {
 
 const items = [
   {
-    title: "Hardware Agnostic",
-    description: "Run on Raspberry Pi, Android TV, Linux, or any web browser. We don't sell hardware.",
+    title: "Complete Hardware Freedom",
+    description: "Stop buying expensive proprietary players. DisplayDeck works with the screens you already have—from Smart TVs to tablets and standard monitors.",
     icon: <Monitor className="h-6 w-6 text-blue-400" />,
   },
   {
-    title: "Real-Time Updates",
-    description: "Push content changes instantly to thousands of screens via WebSockets.",
+    title: "Visual Drag-and-Drop",
+    description: "No more messing with flash drives or static images. Use an intuitive canvas to build menus and layouts that fit your brand.",
     icon: <RefreshCw className="h-6 w-6 text-green-400" />,
   },
   {
-    title: "Enterprise Security",
-    description: "Role-based access control, audit logs, and secure device pairing tokens.",
+    title: "Enterprise-Level Reliability",
+    description: "Built for 24/7 operation. Whether you have one screen in a cafe or a hundred across a city, your content stays live and secure.",
     icon: <ShieldCheck className="h-6 w-6 text-red-400" />,
   },
   {
-    title: "Global Scale",
-    description: "Deploy worldwide with CDN-ready architecture and edge caching.",
+    title: "Global Sync & Scheduling",
+    description: "Manage your entire network from your phone or laptop. Schedule breakfast menus to switch to lunch automatically—no manual effort required.",
     icon: <Globe className="h-6 w-6 text-purple-400" />,
   },
 ];

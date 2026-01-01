@@ -16,7 +16,7 @@ export function Navbar() {
               className="transition-colors hover:text-foreground/80 text-foreground/60"
               href="/features"
             >
-              Features
+              Product
             </Link>
             <Link
               className="transition-colors hover:text-foreground/80 text-foreground/60"
@@ -28,7 +28,7 @@ export function Navbar() {
               className="transition-colors hover:text-foreground/80 text-foreground/60"
               href="/docs"
             >
-              Docs
+              Help
             </Link>
           </nav>
         </div>

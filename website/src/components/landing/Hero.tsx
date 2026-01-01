@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Terminal } from "lucide-react";
 import { DashboardPreview } from "./DashboardPreview";
 import { Logo3D } from "./Logo3D";
 
@@ -18,21 +17,23 @@ export function Hero() {
               <Logo3D className="mb-6" />
               
               <h1 className="text-5xl font-bold tracking-tighter sm:text-6xl xl:text-7xl/none text-white">
-                DisplayDeck
+                Your Content, Every Screen, One Platform.
               </h1>
-              <p className="text-xl font-medium text-blue-400/80 tracking-wide uppercase">
-                Programmable Digital Signage
-              </p>
-              
-              <p className="max-w-[600px] text-neutral-400 md:text-xl leading-relaxed">
-                The open-source digital signage platform for developers. Control screens, schedule content, and manage devices with a simple API.
+
+              <p className="max-w-[650px] text-neutral-300 md:text-xl leading-relaxed">
+                The ultimate digital signage suite for businesses. Design beautiful menus, schedule promotions, and manage an unlimited network of displays with zero technical effort.
               </p>
             </div>
             
             <div className="flex flex-col gap-4 min-[400px]:flex-row">
               <Link href="/register">
                 <Button size="lg" className="h-12 px-8 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white border-0 shadow-lg shadow-purple-500/20 rounded-full font-semibold text-base">
-                  Get Started
+                  Get Started Now
+                </Button>
+              </Link>
+              <Link href="/#templates">
+                <Button size="lg" variant="outline" className="h-12 px-8 rounded-full font-semibold text-base">
+                  View Template Gallery
                 </Button>
               </Link>
             </div>
