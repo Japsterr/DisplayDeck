@@ -85,3 +85,32 @@ Public display renderer
 
 Templates
 - `TemplateKey` is stored, but Phase 1 uses a single "classic/simple" rendering approach (future templates planned).
+
+### ThemeConfig gotchas (practical)
+
+- `ThemeConfig` is user-editable JSON. If it becomes invalid JSON (e.g. a missing quote/comma), the dashboard cannot safely read it.
+  The menu editor will show a warning and offer a **Reset ThemeConfig** action to restore a valid default.
+- If logo/background controls suddenly stop working, check for an invalid `ThemeConfig` first.
+
+## Media references in menus
+
+Menus commonly reference uploaded media files (logo, background images, item images). To avoid embedding fragile cross-origin object-storage URLs directly in public pages, the system uses **media references**.
+
+Convention:
+
+- A string value like `media:123` means “media file id 123”.
+
+Public menu rendering resolves `media:<id>` values to a same-origin URL:
+
+- `/public-media/menus/{token}/media-files/{id}`
+
+That route:
+
+- Calls the API to fetch a signed download URL for the media file.
+- Fetches the object via the signed URL.
+- Serves it from the website domain with a short cache.
+
+Why this matters:
+
+- Older Android WebViews tend to be more reliable with same-origin assets.
+- SigV4 signed URLs are host/header-sensitive, so avoiding client-side rewriting helps prevent intermittent 403 signatures.

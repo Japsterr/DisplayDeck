@@ -132,7 +132,9 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_REGION: ${MINIO_REGION}
       # Public endpoint for clients (via Nginx)
-      MINIO_PUBLIC_ENDPOINT: https://minio.displaydeck.co.za
+      # Use the main site domain (proxied to MinIO) so devices only need one origin.
+      # Note: SigV4 presigned URLs include the Host header; this must match what clients request.
+      MINIO_PUBLIC_ENDPOINT: ${PUBLIC_WEB_URL:-https://displaydeck.co.za}/minio
       JWT_SECRET: ${JWT_SECRET}
       SERVER_DEBUG: ${SERVER_DEBUG:-false}
 

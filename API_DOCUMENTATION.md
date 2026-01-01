@@ -250,6 +250,19 @@ Public endpoint (no auth):
 
 - `GET /public/menus/{Token}` → menu with its sections + items (for display players)
 
+Public menu media (no auth):
+
+- `GET /public/menus/{Token}/media-files/{MediaFileId}/download-url`
+  - Returns `{ "DownloadUrl": "..." }` (a short-lived signed URL)
+  - Used by the website to securely serve menu images without exposing private storage URLs.
+
+Website same-origin proxy (recommended for players):
+
+- `GET /public-media/menus/{Token}/media-files/{MediaFileId}`
+  - Implemented in the Next.js website.
+  - Fetches `download-url` from the API then streams the object back to the caller.
+  - Helps avoid cross-origin and DNS/cert issues on older Android WebViews.
+
 Example response (shape)
 
 ```json

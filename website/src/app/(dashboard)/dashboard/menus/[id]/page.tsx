@@ -419,6 +419,11 @@ export default function MenuEditorPage() {
   const [savingMenu, setSavingMenu] = useState(false);
   const [themeJsonText, setThemeJsonText] = useState<string>("{}");
 
+  const resetThemeConfig = () => {
+    setThemeJsonText("{}\n");
+    toast.success("ThemeConfig reset");
+  };
+
   const updateThemeJson = (updater: (theme: ThemeConfig) => ThemeConfig) => {
     let current: ThemeConfig = {};
     try {
@@ -1356,6 +1361,20 @@ export default function MenuEditorPage() {
                 <div className="text-xs text-muted-foreground">Quick controls (saved in ThemeConfig).</div>
               </div>
 
+              {parsedTheme == null ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+                  <div className="text-sm font-medium">ThemeConfig JSON is invalid</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Fix the JSON at the bottom, or reset it. Theme controls (logo/background/section images) are disabled until it’s valid.
+                  </div>
+                  <div className="mt-3">
+                    <Button type="button" variant="outline" onClick={resetThemeConfig}>
+                      Reset ThemeConfig
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <Label>Background</Label>
@@ -2187,17 +2206,18 @@ export default function MenuEditorPage() {
             {mediaLoading ? (
               <div className="text-sm text-muted-foreground">Loading media…</div>
             ) : (
-              <div className="max-h-[420px] overflow-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[72px]"></TableHead>
-                      <TableHead>File</TableHead>
-                      <TableHead className="w-[140px]">Orientation</TableHead>
-                      <TableHead className="w-[120px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+              <div className="max-h-[460px] overflow-auto rounded-md border p-3">
+                {mediaLibrary
+                  .filter((m) => (m.FileType || "").startsWith("image/"))
+                  .filter((m) => {
+                    const q = mediaQuery.trim().toLowerCase();
+                    if (!q) return true;
+                    return (m.FileName || "").toLowerCase().includes(q);
+                  })
+                  .slice(0, 1).length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">No images found.</div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {mediaLibrary
                       .filter((m) => (m.FileType || "").startsWith("image/"))
                       .filter((m) => {
@@ -2207,41 +2227,45 @@ export default function MenuEditorPage() {
                       })
                       .slice(0, 200)
                       .map((m) => (
-                        <TableRow key={m.Id}>
-                          <TableCell>
-                            <img
-                              src={mediaPreviewUrls[m.Id] || ""}
-                              alt={m.FileName}
-                              className="h-12 w-12 rounded object-cover border"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).style.display = "none";
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="font-medium truncate">{m.FileName}</div>
-                            <div className="text-xs text-muted-foreground">{m.FileType}</div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm">{m.Orientation}</span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={async () => {
-                                await applyImageUrlToTarget(makeMediaRef(m.Id));
-                                void ensureMediaPreviewUrl(m.Id);
-                                setIsMediaPickerOpen(false);
-                              }}
-                            >
-                              Select
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                        <button
+                          key={m.Id}
+                          type="button"
+                          className="group rounded-md border bg-background hover:bg-accent/10 text-left overflow-hidden"
+                          onClick={async () => {
+                            await applyImageUrlToTarget(makeMediaRef(m.Id));
+                            void ensureMediaPreviewUrl(m.Id);
+                            setIsMediaPickerOpen(false);
+                          }}
+                        >
+                          <div className="aspect-square bg-black/20">
+                            {mediaPreviewUrls[m.Id] ? (
+                              <img
+                                src={mediaPreviewUrls[m.Id]}
+                                alt={m.FileName}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
+                                Preview loading…
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-2">
+                            <div className="text-xs font-medium truncate" title={m.FileName}>
+                              {m.FileName}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground truncate">
+                              {m.Orientation}
+                            </div>
+                          </div>
+                        </button>
                       ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                )}
               </div>
             )}
           </div>

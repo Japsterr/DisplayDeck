@@ -1,9 +1,12 @@
 # Authentication Guide
 
-## Important: Use `X-Auth-Token` Header
+## Preferred: `Authorization: Bearer <token>`
 
-The backend server uses a component (Indy) that has strict handling of the `Authorization` header.
-To avoid "Unsupported authorization scheme" errors, please use the `X-Auth-Token` header for authenticated requests instead of `Authorization: Bearer ...`.
+Most endpoints accept `Authorization: Bearer <token>`.
+
+If you're behind a proxy, CDN, or older client stack that strips/blocks `Authorization`, you can use the fallback header:
+
+- `X-Auth-Token: <token>`
 
 ### Example (JavaScript/TypeScript)
 
@@ -11,7 +14,18 @@ To avoid "Unsupported authorization scheme" errors, please use the `X-Auth-Token
 const response = await fetch('/api/organizations', {
   headers: {
     'Content-Type': 'application/json',
-    'X-Auth-Token': token // Use this instead of Authorization
+    'Authorization': `Bearer ${token}`
+  }
+});
+```
+
+Fallback if `Authorization` is being stripped by something in front of the API:
+
+```typescript
+const response = await fetch('/api/organizations', {
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Auth-Token': token
   }
 });
 ```
@@ -20,6 +34,12 @@ const response = await fetch('/api/organizations', {
 
 ```powershell
 Invoke-RestMethod -Uri "..." -Headers @{ "X-Auth-Token" = $token }
+```
+
+Preferred PowerShell example:
+
+```powershell
+Invoke-RestMethod -Uri "..." -Headers @{ "Authorization" = "Bearer $token" }
 ```
 
 ## API Proxying

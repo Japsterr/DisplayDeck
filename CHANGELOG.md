@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Website / Dashboard**:
+  - Fixed a public menu crash caused by React hook order violations.
+  - Menu editor: improved media picking UX (search + thumbnail grid) for quickly selecting images.
+  - Menu editor: detects invalid `ThemeConfig` JSON and offers a reset so logo/background controls can be re-enabled.
+- **Media delivery / production reliability**:
+  - Public menu rendering no longer relies on raw MinIO URLs in the browser/WebView.
+  - Added a same-origin proxy for menu media (`/public-media/...`) that fetches via the API and serves short-cache responses.
+  - Nginx now proxies `/minio/` with CORS headers to support browser uploads (PUT to presigned URLs).
+- **Android player**:
+  - Campaign images render via a minimal `object-fit: cover` wrapper (better portrait/fullscreen behavior).
+  - Campaign videos play via native Media3/ExoPlayer (more reliable than WebView `<video>` on older devices).
+  - Android TV support: Leanback launcher category and boot auto-start receiver.
+
 ## 0.1.10 - 2025-12-29
 
 - **Deployment (Phase 2)**:

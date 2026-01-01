@@ -333,6 +333,38 @@ docker push <your-dockerhub-username>/displaydeck-server:latest
 
 ## Troubleshooting
 
+### Media delivery: how it works (and why)
+
+There are three distinct ways media may be accessed depending on *who* is consuming it:
+
+- **Dashboard uploads (browser)**: the dashboard calls `POST /media-files/upload-url` to get a presigned PUT URL, then uploads directly to object storage.
+- **Authenticated downloads (dashboard)**: the dashboard calls `GET /media-files/{id}/download-url` and uses that signed URL to download/preview.
+- **Public menu rendering (players)**: public menu pages avoid embedding raw object-storage URLs in the page.
+  Instead, menu image references are resolved to a same-origin proxy route on the website.
+
+Why the proxy for public menus?
+
+- Older Android WebViews and some locked-down networks are fragile with cross-origin fetches.
+- Signed URLs are host/header-sensitive (SigV4). If a client “rewrites” hostnames, signatures can break.
+
+See the dedicated notes in docs:
+
+- docs/media-delivery.md
+
+### Production: `/minio/` proxy and CORS
+
+In production, Nginx proxies object storage under the main domain:
+
+- MinIO API via path: `https://displaydeck.co.za/minio/...`
+
+This exists primarily to make **browser PUT uploads** work consistently. The Nginx `/minio/` location adds CORS headers and preserves the `Host` header.
+
+If uploads fail in the browser:
+
+- Confirm the presigned upload URL host matches what the client uses (don’t rewrite it).
+- Confirm `MINIO_PUBLIC_ENDPOINT` is set correctly for the public-facing hostname.
+- Confirm Nginx `/minio/` is enabled and includes CORS headers.
+
 - **Website Build Errors (React 19)**:
   - The project uses React 19, which may cause peer dependency conflicts with some libraries (like `@hello-pangea/dnd`).
   - The `Dockerfile` for the website uses `npm ci --legacy-peer-deps` to resolve this.

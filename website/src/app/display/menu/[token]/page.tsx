@@ -388,55 +388,16 @@ export default function DisplayMenuPage() {
 
   const apiUrl = useMemo(() => getApiUrl(), []);
 
-  const resolveMediaRefs = async (m: PublicMenu): Promise<PublicMenu> => {
+  const resolveMediaRefs = (m: PublicMenu): PublicMenu => {
     const theme = (m.ThemeConfig || {}) as ThemeConfig;
 
-    const ids = new Set<number>();
-    const maybeAdd = (v: unknown) => {
-      if (typeof v !== "string") return;
-      const id = parseMediaRef(v);
-      if (id) ids.add(id);
-    };
-
-    // Theme refs
-    maybeAdd(theme.logoUrl);
-    maybeAdd(theme.backgroundImageUrl);
-    const bgList = theme.backgroundImageUrls;
-    if (Array.isArray(bgList)) for (const v of bgList) maybeAdd(v);
-
-    const secImages = theme.sectionImages;
-    if (secImages && typeof secImages === "object" && !Array.isArray(secImages)) {
-      for (const v of Object.values(secImages as Record<string, unknown>)) maybeAdd(v);
-    }
-
-    // Item refs
-    for (const s of m.Sections || []) {
-      for (const it of s.Items || []) maybeAdd(it.ImageUrl);
-    }
-
-    if (ids.size === 0) return m;
-
-    const pairs = await Promise.all(
-      Array.from(ids).map(async (id) => {
-        try {
-          const res = await fetch(`${apiUrl}/public/menus/${token}/media-files/${id}/download-url`, { cache: "no-store" });
-          if (!res.ok) return [id, ""] as const;
-          const data = (await res.json()) as { DownloadUrl?: string };
-          return [id, (data?.DownloadUrl || "").trim()] as const;
-        } catch {
-          return [id, ""] as const;
-        }
-      })
-    );
-
-    const resolved: Record<number, string> = {};
-    for (const [id, url] of pairs) if (url) resolved[id] = url;
-
+    // Prefer a same-origin proxy path. This avoids relying on the MinIO domain
+    // from the browser/WebView (CSP, DNS, cert, and cross-origin quirks).
     const replace = (v: unknown) => {
       if (typeof v !== "string") return v;
       const id = parseMediaRef(v);
       if (!id) return v;
-      return resolved[id] || "";
+      return `/public-media/menus/${encodeURIComponent(token)}/media-files/${id}`;
     };
 
     const nextTheme: ThemeConfig = { ...(theme || {}) };
@@ -466,7 +427,7 @@ export default function DisplayMenuPage() {
       const res = await fetch(`${apiUrl}/public/menus/${token}`, { cache: "no-store" });
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as PublicMenu;
-      const resolved = await resolveMediaRefs(data);
+      const resolved = resolveMediaRefs(data);
       setMenu(resolved);
     } catch (e) {
       console.error(e);

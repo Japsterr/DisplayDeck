@@ -14,7 +14,7 @@ This note summarizes the current “server ↔ OpenAPI ↔ tests ↔ clients” 
 - **XData-era artifacts removed**: the old XData/Sparkle-style server/client prototypes and stale `/tms/xdata` URL references were removed.
 - **Production Deployment Prep**: Docker Compose configurations for production with Nginx reverse proxy are being finalized.
 - **Website Integration**: Added Next.js frontend (`website/`) to the stack, served via Nginx on `displaydeck.co.za`.
-- **CORS Handling**: Configured Nginx to handle CORS for `api.displaydeck.co.za` allowing requests from the website.
+- **CORS + uploads**: Nginx includes CORS headers on `/minio/` so browsers can PUT directly to presigned MinIO URLs.
 
 ## Recent Fixes (Dec 28, 2025)
 
@@ -34,6 +34,10 @@ This note summarizes the current “server ↔ OpenAPI ↔ tests ↔ clients” 
 - SigV4 presigned URLs depend on the host/header used during signing.
 - If a client “rewrites” `http://minio:9000/...` to `http://localhost:9000/...`, the signature can become invalid.
 - **Mitigation**: In production, `MINIO_PUBLIC_ENDPOINT` should be set to the actual domain (e.g., `https://minio.displaydeck.co.za`).
+
+Additional mitigation (recommended for players):
+
+- Public menu pages resolve `media:<id>` references to a same-origin website proxy (`/public-media/...`) to avoid cross-origin quirks on older Android WebViews.
 
 3) **Client configuration drift (low/medium risk)**
 - Clients persist base URL/token state locally; this can mask environment issues (e.g., one client points at `/api`, another at root).

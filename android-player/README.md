@@ -1,16 +1,32 @@
-# DisplayDeck Android Player (V1)
+# DisplayDeck Android Player
 
-This is a minimal Android (Kotlin) player app.
+Kotlin-based player app used to pair a display and render assigned content.
 
-Current behavior:
-- On first launch it shows a 6-character pairing code (no user input).
-- You enter that code on the website when adding a display.
-- Once paired, the device switches to showing the display name.
+## Current behavior
 
-Notes:
-- API base is fixed to `https://api.displaydeck.co.za`.
+- On first launch, shows a 6-character pairing code.
+- After pairing, polls the backend for assignments.
+- Can display:
+  - **Menus** (loads the public menu page in WebView)
+  - **Campaigns** (plays a manifest of items)
 
-Roadmap (next): after pairing, switch from "show name" -> "play assigned content" + offline manifest + cached media + proof-of-play telemetry.
+Campaign item support:
+
+- **Menu items**: loads the website menu renderer (`/display/menu/{token}`) in WebView.
+- **Image items**: rendered via a minimal HTML wrapper using CSS `object-fit: cover` to better fill the screen (especially portrait images).
+- **Video items**: rendered via native Media3/ExoPlayer for better reliability on older devices/boxes.
+
+## Android TV notes
+
+- The app advertises `LEANBACK_LAUNCHER` so it can appear in Android TV launchers.
+- A `BOOT_COMPLETED` receiver is registered to start the app when the device boots.
+
+Important: many low-cost Android TV boxes have OEM “Auto start / Startup manager / Background restrictions” settings.
+If the app does not start at boot:
+
+- Launch the app once manually after installing.
+- Enable auto-start for DisplayDeck in the box settings.
+- Disable battery optimizations/restrictions for the app (if present).
 
 ## Build (Docker)
 
@@ -70,6 +86,18 @@ chmod +x ./gradlew
 Notes:
 - `compileSdk` is 34 because modern AndroidX libraries require it; this does NOT mean the device must run Android 14.
 - Device support is controlled by `minSdk` (currently 24 = Android 7.0).
+
+## Quick install
+
+APK output:
+
+- android-player/app/build/outputs/apk/debug/app-debug.apk
+
+Install via ADB:
+
+```powershell
+adb install -r "android-player\app\build\outputs\apk\debug\app-debug.apk"
+```
 
 ## Build (Android Studio)
 
