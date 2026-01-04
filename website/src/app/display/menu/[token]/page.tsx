@@ -3,6 +3,69 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
+// CSS for staggered fade-in animations
+const animationStyles = `
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes menuSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pricePop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.menu-section {
+  animation: menuFadeIn 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.menu-item {
+  animation: menuFadeIn 0.4s ease-out forwards;
+  opacity: 0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.menu-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+}
+
+.menu-price {
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.menu-price:hover {
+  animation: pricePop 0.3s ease;
+}
+
+.menu-image {
+  transition: transform 0.3s ease;
+}
+
+.menu-item:hover .menu-image {
+  transform: scale(1.05);
+}
+`;
+
 type ThemeConfig = Record<string, unknown>;
 
 type HeaderMode = "auto" | "none" | "logo" | "image" | "text";
@@ -395,21 +458,25 @@ function renderClassic(args: {
       ) : null}
 
       <div className={`${gridTopClass} grid ${sectionCols} ${gridGapClass}`}>
-        {sections.map((s) => {
+        {sections.map((s, sectionIdx) => {
           const items = (s.Items || [])
             .filter((i) => i.IsAvailable !== false)
             .slice()
             .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
 
           return (
-            <div key={s.Id} className={sectionCardClass}>
+            <div 
+              key={s.Id} 
+              className={`${sectionCardClass} menu-section`}
+              style={{ animationDelay: `${sectionIdx * 0.1}s` }}
+            >
               <div className="flex items-baseline justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   {sectionImages?.[String(s.Id)] ? (
                     <img
                       src={sectionImages[String(s.Id)]}
                       alt=""
-                      className="h-16 w-16 rounded-lg object-cover border border-white/10"
+                      className="h-16 w-16 rounded-lg object-cover border border-white/10 menu-image"
                       loading="lazy"
                     />
                   ) : null}
@@ -424,9 +491,15 @@ function renderClassic(args: {
                     No items
                   </div>
                 ) : (
-                  items.map((it) => {
+                  items.map((it, itemIdx) => {
                     return (
-                      <MenuItemCard key={it.Id} it={it} muted={muted} accent={accent} style={itemCardStyle} />
+                      <div 
+                        key={it.Id} 
+                        className="menu-item" 
+                        style={{ animationDelay: `${(sectionIdx * 0.1) + (itemIdx * 0.05)}s` }}
+                      >
+                        <MenuItemCard it={it} muted={muted} accent={accent} style={itemCardStyle} />
+                      </div>
                     );
                   })
                 )}
@@ -655,14 +728,18 @@ function renderQsr(args: {
       )}
 
       <div className={`grid ${args.sectionCols} gap-3 sm:gap-4`}>
-        {sections.map((s) => {
+        {sections.map((s, sectionIdx) => {
           const items = (s.Items || [])
             .filter((i) => i.IsAvailable !== false)
             .slice()
             .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
 
           return (
-            <div key={s.Id} className="rounded-xl border border-white/15 bg-white/[0.04] overflow-hidden">
+            <div 
+              key={s.Id} 
+              className="rounded-xl border border-white/15 bg-white/[0.04] overflow-hidden menu-section"
+              style={{ animationDelay: `${sectionIdx * 0.1}s` }}
+            >
               {/* Section header with optional image */}
               <div 
                 className="px-3 py-2 sm:px-4 sm:py-3 border-b border-white/10"
@@ -673,7 +750,7 @@ function renderQsr(args: {
                     <img
                       src={sectionImages[String(s.Id)]}
                       alt=""
-                      className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg object-cover border border-white/20"
+                      className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg object-cover border border-white/20 menu-image"
                       loading="lazy"
                     />
                   )}
@@ -686,14 +763,19 @@ function renderQsr(args: {
               {/* Items grid - image-focused cards */}
               <div className="p-2 sm:p-3">
                 <div className={`grid ${items.length <= 4 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-3'} gap-2 sm:gap-3`}>
-                  {items.map((it) => (
-                    <QsrItemCard
+                  {items.map((it, itemIdx) => (
+                    <div 
                       key={it.Id}
-                      it={it}
-                      muted={muted}
-                      accent={accent}
-                      priceBg={priceBg}
-                    />
+                      className="menu-item"
+                      style={{ animationDelay: `${(sectionIdx * 0.1) + (itemIdx * 0.05)}s` }}
+                    >
+                      <QsrItemCard
+                        it={it}
+                        muted={muted}
+                        accent={accent}
+                        priceBg={priceBg}
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
@@ -791,7 +873,7 @@ function renderDrivethru(args: {
 
       {/* Full-width sections with numbered items for easy ordering */}
       <div className={`grid ${args.sectionCols} gap-2 sm:gap-3`}>
-        {sections.map((s) => {
+        {sections.map((s, sectionIdx) => {
           const items = (s.Items || [])
             .filter((i) => i.IsAvailable !== false)
             .slice()
@@ -800,8 +882,12 @@ function renderDrivethru(args: {
           return (
             <div 
               key={s.Id} 
-              className="rounded-lg overflow-hidden"
-              style={{ backgroundColor: `${accent}10`, border: `2px solid ${accent}40` }}
+              className="rounded-lg overflow-hidden menu-section"
+              style={{ 
+                backgroundColor: `${accent}10`, 
+                border: `2px solid ${accent}40`,
+                animationDelay: `${sectionIdx * 0.1}s`
+              }}
             >
               {/* Bold section header */}
               <div 
@@ -813,7 +899,7 @@ function renderDrivethru(args: {
                     <img
                       src={sectionImages[String(s.Id)]}
                       alt=""
-                      className="h-8 w-8 sm:h-10 sm:w-10 rounded object-cover"
+                      className="h-8 w-8 sm:h-10 sm:w-10 rounded object-cover menu-image"
                       loading="lazy"
                     />
                   )}
@@ -826,13 +912,18 @@ function renderDrivethru(args: {
               {/* Items in a simple list format for easy reading */}
               <div className="p-2 sm:p-3 space-y-1 sm:space-y-2">
                 {items.map((it, idx) => (
-                  <DrivethruItemRow
+                  <div 
                     key={it.Id}
-                    it={it}
-                    number={idx + 1}
-                    muted={muted}
-                    accent={accent}
-                  />
+                    className="menu-item"
+                    style={{ animationDelay: `${(sectionIdx * 0.1) + (idx * 0.03)}s` }}
+                  >
+                    <DrivethruItemRow
+                      it={it}
+                      number={idx + 1}
+                      muted={muted}
+                      accent={accent}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
@@ -1143,17 +1234,19 @@ export default function DisplayMenuPage() {
   const dense = isLandscapeViewport && !isCompact;
 
   return (
-    <div
-      className="fixed inset-0 overflow-hidden"
-      style={{
-        backgroundColor: bg,
-        color: text,
-        backgroundImage: bgImage ? `url(${bgImage})` : undefined,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-      }}
-    >
+    <>
+      <style dangerouslySetInnerHTML={{ __html: animationStyles }} />
+      <div
+        className="fixed inset-0 overflow-hidden"
+        style={{
+          backgroundColor: bg,
+          color: text,
+          backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
       {bgImage ? (
         <div
           className="fixed inset-0"
@@ -1244,5 +1337,6 @@ export default function DisplayMenuPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

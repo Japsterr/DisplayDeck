@@ -15,7 +15,9 @@ import {
   Upload,
   Image as ImageIcon,
   Palette,
+  GripVertical,
 } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1496,6 +1498,85 @@ export default function MenuEditorPage() {
     }
   };
 
+  // Drag-and-drop reordering handler
+  const handleDragEnd = async (result: DropResult) => {
+    const { source, destination, type } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    if (type === "section") {
+      // Reorder sections
+      const sortedSections = sections.slice().sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+      const [movedSection] = sortedSections.splice(source.index, 1);
+      sortedSections.splice(destination.index, 0, movedSection);
+
+      // Assign new DisplayOrder values
+      const updatedSections = sortedSections.map((s, idx) => ({ ...s, DisplayOrder: idx + 1 }));
+      setSections(updatedSections);
+
+      // Persist all reordered sections
+      const auth = getAuth();
+      if (!auth) return;
+      const apiUrl = getApiUrl();
+
+      for (const section of updatedSections) {
+        try {
+          await fetch(`${apiUrl}/menu-sections/${section.Id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Auth-Token": auth.token,
+            },
+            body: JSON.stringify({ Name: section.Name, DisplayOrder: section.DisplayOrder }),
+          });
+        } catch (e) {
+          console.error("Failed to update section order", e);
+        }
+      }
+      toast.success("Sections reordered");
+    } else if (type === "item") {
+      // Reorder items within a section
+      const sectionId = parseInt(source.droppableId.replace("items-", ""), 10);
+      const sectionItems = (itemsBySection[sectionId] || []).slice().sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+
+      const [movedItem] = sectionItems.splice(source.index, 1);
+      sectionItems.splice(destination.index, 0, movedItem);
+
+      // Assign new DisplayOrder values
+      const updatedItems = sectionItems.map((item, idx) => ({ ...item, DisplayOrder: idx + 1 }));
+      setItemsBySection((prev) => ({ ...prev, [sectionId]: updatedItems }));
+
+      // Persist all reordered items
+      const auth = getAuth();
+      if (!auth) return;
+      const apiUrl = getApiUrl();
+
+      for (const item of updatedItems) {
+        try {
+          await fetch(`${apiUrl}/menu-items/${item.Id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Auth-Token": auth.token,
+            },
+            body: JSON.stringify({
+              Name: item.Name,
+              Sku: item.Sku,
+              Description: item.Description,
+              ImageUrl: item.ImageUrl,
+              PriceCents: item.PriceCents,
+              IsAvailable: item.IsAvailable,
+              DisplayOrder: item.DisplayOrder,
+            }),
+          });
+        } catch (e) {
+          console.error("Failed to update item order", e);
+        }
+      }
+      toast.success("Items reordered");
+    }
+  };
+
   const handleCopyPublicUrl = async () => {
     if (!publicUrl) return;
     try {
@@ -2437,66 +2518,88 @@ export default function MenuEditorPage() {
             {sections.length === 0 ? (
               <div className="py-10 text-center text-muted-foreground">No sections yet. Add one to start.</div>
             ) : (
-              <div className="space-y-6">
-                {sections
-                  .slice()
-                  .sort((a, b) => a.DisplayOrder - b.DisplayOrder)
-                  .map((s) => {
-                    const sectionItems = (itemsBySection[s.Id] || []).slice().sort((a, b) => a.DisplayOrder - b.DisplayOrder);
-                    const sectionImageUrl =
-                      parsedTheme && typeof (parsedTheme as any).sectionImages === "object" && (parsedTheme as any).sectionImages
-                        ? String(((parsedTheme as any).sectionImages as any)[String(s.Id)] || "")
-                        : "";
-                    return (
-                      <Card key={s.Id} className="border-dashed">
-                        <CardHeader className="pb-2">
-                          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-                            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <div className="grid gap-2 md:col-span-2">
-                                <Label>Section name</Label>
-                                <Input
-                                  value={s.Name}
-                                  onChange={(e) =>
-                                    setSections((prev) => prev.map((x) => (x.Id === s.Id ? { ...x, Name: e.target.value } : x)))
-                                  }
-                                  onBlur={() => {
-                                    const latest = sections.find((x) => x.Id === s.Id) || s;
-                                    handleUpdateSection(latest);
-                                  }}
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label>Order</Label>
-                                <Input
-                                  type="number"
-                                  value={s.DisplayOrder}
-                                  onChange={(e) =>
-                                    setSections((prev) =>
-                                      prev.map((x) => (x.Id === s.Id ? { ...x, DisplayOrder: parseInt(e.target.value) || 0 } : x))
-                                    )
-                                  }
-                                  onBlur={() => {
-                                    const latest = sections.find((x) => x.Id === s.Id) || s;
-                                    handleUpdateSection(latest);
-                                  }}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button variant="outline" onClick={() => openAddItem(s.Id)}>
-                                <Plus className="mr-2 h-4 w-4" /> Add item
-                              </Button>
-                              <Button variant="destructive" onClick={() => handleDeleteSection(s.Id)}>
-                                <Trash2 className="mr-2 h-4 w-4" /> Delete
-                              </Button>
-                            </div>
-                          </div>
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <Droppable droppableId="sections" type="section">
+                  {(provided) => (
+                    <div 
+                      className="space-y-6"
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                    >
+                      {sections
+                        .slice()
+                        .sort((a, b) => a.DisplayOrder - b.DisplayOrder)
+                        .map((s, sectionIndex) => {
+                          const sectionItems = (itemsBySection[s.Id] || []).slice().sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+                          const sectionImageUrl =
+                            parsedTheme && typeof (parsedTheme as any).sectionImages === "object" && (parsedTheme as any).sectionImages
+                              ? String(((parsedTheme as any).sectionImages as any)[String(s.Id)] || "")
+                              : "";
+                          return (
+                            <Draggable key={s.Id} draggableId={`section-${s.Id}`} index={sectionIndex}>
+                              {(dragProvided, dragSnapshot) => (
+                                <Card 
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  className={`border-dashed transition-shadow ${dragSnapshot.isDragging ? "shadow-lg ring-2 ring-primary" : ""}`}
+                                >
+                                  <CardHeader className="pb-2">
+                                    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+                                      <div className="flex items-center gap-2 flex-1">
+                                        <div 
+                                          {...dragProvided.dragHandleProps}
+                                          className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted"
+                                          title="Drag to reorder section"
+                                        >
+                                          <GripVertical className="h-5 w-5 text-muted-foreground" />
+                                        </div>
+                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                          <div className="grid gap-2 md:col-span-2">
+                                            <Label>Section name</Label>
+                                            <Input
+                                              value={s.Name}
+                                              onChange={(e) =>
+                                                setSections((prev) => prev.map((x) => (x.Id === s.Id ? { ...x, Name: e.target.value } : x)))
+                                              }
+                                              onBlur={() => {
+                                                const latest = sections.find((x) => x.Id === s.Id) || s;
+                                                handleUpdateSection(latest);
+                                              }}
+                                            />
+                                          </div>
+                                          <div className="grid gap-2">
+                                            <Label>Order</Label>
+                                            <Input
+                                              type="number"
+                                              value={s.DisplayOrder}
+                                              onChange={(e) =>
+                                                setSections((prev) =>
+                                                  prev.map((x) => (x.Id === s.Id ? { ...x, DisplayOrder: parseInt(e.target.value) || 0 } : x))
+                                                )
+                                              }
+                                              onBlur={() => {
+                                                const latest = sections.find((x) => x.Id === s.Id) || s;
+                                                handleUpdateSection(latest);
+                                              }}
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Button variant="outline" onClick={() => openAddItem(s.Id)}>
+                                          <Plus className="mr-2 h-4 w-4" /> Add item
+                                        </Button>
+                                        <Button variant="destructive" onClick={() => handleDeleteSection(s.Id)}>
+                                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                        </Button>
+                                      </div>
+                                    </div>
 
-                          <div className="mt-3 grid gap-2">
-                            <Label>Section image (optional)</Label>
-                            <div className="flex items-center gap-2">
-                              <Input
-                                value={sectionImageUrl}
+                                    <div className="mt-3 grid gap-2">
+                                      <Label>Section image (optional)</Label>
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          value={sectionImageUrl}
                                 onChange={(e) => {
                                   const url = e.target.value.trim();
                                   updateThemeJson((theme) => {
@@ -2550,6 +2653,7 @@ export default function MenuEditorPage() {
                             <Table>
                               <TableHeader>
                                 <TableRow>
+                                  <TableHead className="w-[40px]"></TableHead>
                                   <TableHead>Name</TableHead>
                                   <TableHead className="w-[160px]">SKU</TableHead>
                                   <TableHead>Description</TableHead>
@@ -2560,91 +2664,108 @@ export default function MenuEditorPage() {
                                   <TableHead className="w-[70px]"></TableHead>
                                 </TableRow>
                               </TableHeader>
-                              <TableBody>
-                                {sectionItems.map((it) => (
-                                  <TableRow key={it.Id}>
-                                    <TableCell>
-                                      <Input
-                                        value={it.Name}
-                                        onChange={(e) =>
-                                          setItemsBySection((prev) => ({
-                                            ...prev,
-                                            [s.Id]: (prev[s.Id] || []).map((x) => (x.Id === it.Id ? { ...x, Name: e.target.value } : x)),
-                                          }))
-                                        }
-                                        onBlur={() => {
-                                          const latest = (itemsBySection[s.Id] || []).find((x) => x.Id === it.Id) || it;
-                                          handleUpdateItem(latest);
-                                        }}
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        value={it.Sku ?? ""}
-                                        onChange={(e) =>
-                                          setItemsBySection((prev) => ({
-                                            ...prev,
-                                            [s.Id]: (prev[s.Id] || []).map((x) => (x.Id === it.Id ? { ...x, Sku: e.target.value || null } : x)),
-                                          }))
-                                        }
-                                        onBlur={() => {
-                                          const latest = (itemsBySection[s.Id] || []).find((x) => x.Id === it.Id) || it;
-                                          handleUpdateItem(latest);
-                                        }}
-                                        placeholder="Optional"
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <Input
-                                        value={it.Description ?? ""}
-                                        onChange={(e) =>
-                                          setItemsBySection((prev) => ({
-                                            ...prev,
-                                            [s.Id]: (prev[s.Id] || []).map((x) => (x.Id === it.Id ? { ...x, Description: e.target.value || null } : x)),
-                                          }))
-                                        }
-                                        onBlur={() => {
-                                          const latest = (itemsBySection[s.Id] || []).find((x) => x.Id === it.Id) || it;
-                                          handleUpdateItem(latest);
-                                        }}
-                                        placeholder="Optional"
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center gap-2">
-                                        <Input
-                                          value={it.ImageUrl ?? ""}
-                                          onChange={(e) =>
-                                            setItemsBySection((prev) => ({
-                                              ...prev,
-                                              [s.Id]: (prev[s.Id] || []).map((x) => (x.Id === it.Id ? { ...x, ImageUrl: e.target.value || null } : x)),
-                                            }))
-                                          }
-                                          onBlur={() => {
-                                            const latest = (itemsBySection[s.Id] || []).find((x) => x.Id === it.Id) || it;
-                                            handleUpdateItem(latest);
-                                          }}
-                                          placeholder="Optional"
-                                        />
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="icon"
-                                          onClick={() => openMediaPicker({ kind: "existing", sectionId: s.Id, itemId: it.Id })}
-                                          aria-label="Pick image from media library"
-                                        >
-                                          <ImageIcon className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                      {it.ImageUrl ? (
-                                        <div className="mt-2 flex items-center gap-2">
-                                          <img
-                                            src={resolvePreviewSrc(it.ImageUrl)}
-                                            alt=""
-                                            className="h-10 w-10 rounded object-cover border"
-                                            onError={(e) => {
-                                              (e.currentTarget as HTMLImageElement).style.display = "none";
-                                            }}
+                              <Droppable droppableId={`items-${s.Id}`} type="item">
+                                {(itemsProvided) => (
+                                  <TableBody ref={itemsProvided.innerRef} {...itemsProvided.droppableProps}>
+                                    {sectionItems.map((it, itemIndex) => (
+                                      <Draggable key={it.Id} draggableId={`item-${it.Id}`} index={itemIndex}>
+                                        {(itemDragProvided, itemDragSnapshot) => (
+                                          <TableRow 
+                                            ref={itemDragProvided.innerRef}
+                                            {...itemDragProvided.draggableProps}
+                                            className={itemDragSnapshot.isDragging ? "bg-muted shadow-lg" : ""}
+                                          >
+                                            <TableCell>
+                                              <div 
+                                                {...itemDragProvided.dragHandleProps}
+                                                className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted"
+                                                title="Drag to reorder item"
+                                              >
+                                                <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                              </div>
+                                            </TableCell>
+                                            <TableCell>
+                                              <Input
+                                                value={it.Name}
+                                                onChange={(e) =>
+                                                  setItemsBySection((prev) => ({
+                                                    ...prev,
+                                                    [s.Id]: (prev[s.Id] || []).map((x) => (x.Id === it.Id ? { ...x, Name: e.target.value } : x)),
+                                                  }))
+                                                }
+                                                onBlur={() => {
+                                                  const latest = (itemsBySection[s.Id] || []).find((x) => x.Id === it.Id) || it;
+                                                  handleUpdateItem(latest);
+                                                }}
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <Input
+                                                value={it.Sku ?? ""}
+                                                onChange={(e) =>
+                                                  setItemsBySection((prev) => ({
+                                                    ...prev,
+                                                    [s.Id]: (prev[s.Id] || []).map((x) => (x.Id === it.Id ? { ...x, Sku: e.target.value || null } : x)),
+                                                  }))
+                                                }
+                                                onBlur={() => {
+                                                  const latest = (itemsBySection[s.Id] || []).find((x) => x.Id === it.Id) || it;
+                                                  handleUpdateItem(latest);
+                                                }}
+                                                placeholder="Optional"
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <Input
+                                                value={it.Description ?? ""}
+                                                onChange={(e) =>
+                                                  setItemsBySection((prev) => ({
+                                                    ...prev,
+                                                    [s.Id]: (prev[s.Id] || []).map((x) => (x.Id === it.Id ? { ...x, Description: e.target.value || null } : x)),
+                                                  }))
+                                                }
+                                                onBlur={() => {
+                                                  const latest = (itemsBySection[s.Id] || []).find((x) => x.Id === it.Id) || it;
+                                                  handleUpdateItem(latest);
+                                                }}
+                                                placeholder="Optional"
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <div className="flex items-center gap-2">
+                                                <Input
+                                                  value={it.ImageUrl ?? ""}
+                                                  onChange={(e) =>
+                                                    setItemsBySection((prev) => ({
+                                                      ...prev,
+                                                      [s.Id]: (prev[s.Id] || []).map((x) => (x.Id === it.Id ? { ...x, ImageUrl: e.target.value || null } : x)),
+                                                    }))
+                                                  }
+                                                  onBlur={() => {
+                                                    const latest = (itemsBySection[s.Id] || []).find((x) => x.Id === it.Id) || it;
+                                                    handleUpdateItem(latest);
+                                                  }}
+                                                  placeholder="Optional"
+                                                />
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="icon"
+                                                  onClick={() => openMediaPicker({ kind: "existing", sectionId: s.Id, itemId: it.Id })}
+                                                  aria-label="Pick image from media library"
+                                                >
+                                                  <ImageIcon className="h-4 w-4" />
+                                                </Button>
+                                              </div>
+                                              {it.ImageUrl ? (
+                                                <div className="mt-2 flex items-center gap-2">
+                                                  <img
+                                                    src={resolvePreviewSrc(it.ImageUrl)}
+                                                    alt=""
+                                                    className="h-10 w-10 rounded object-cover border"
+                                                    onError={(e) => {
+                                                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                                                    }}
                                           />
                                           <span className="text-[11px] text-muted-foreground truncate">Preview</span>
                                         </div>
@@ -2703,21 +2824,32 @@ export default function MenuEditorPage() {
                                         }}
                                       />
                                     </TableCell>
-                                    <TableCell>
-                                      <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(it)}>
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
+                                            <TableCell>
+                                              <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(it)}>
+                                                <Trash2 className="h-4 w-4" />
+                                              </Button>
+                                            </TableCell>
+                                          </TableRow>
+                                        )}
+                                      </Draggable>
+                                    ))}
+                                    {itemsProvided.placeholder}
+                                  </TableBody>
+                                )}
+                              </Droppable>
                             </Table>
                           )}
                         </CardContent>
                       </Card>
-                    );
-                  })}
-              </div>
+                              )}
+                            </Draggable>
+                          );
+                        })}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
             )}
           </CardContent>
         </Card>
