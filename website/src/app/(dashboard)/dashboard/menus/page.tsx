@@ -349,9 +349,11 @@ export default function MenusPage() {
                       <SelectItem value="classic">Classic</SelectItem>
                       <SelectItem value="minimal">Minimal</SelectItem>
                       <SelectItem value="neon">Neon</SelectItem>
+                      <SelectItem value="qsr">QSR Board (Fast Food)</SelectItem>
+                      <SelectItem value="drivethru">Drive-Thru</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Templates: classic, minimal, neon</p>
+                  <p className="text-xs text-muted-foreground">Templates: classic, minimal, neon, qsr, drivethru</p>
                 </div>
 
                 <div className="grid gap-2">

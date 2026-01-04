@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Menu Builder (Phase 2 — QSR Templates)**:
+  - Added two new professional templates: `qsr` (Quick Service Restaurant) and `drivethru` for fast-food style displays.
+  - QSR template features large product images with price badges, section cards, and grid layouts.
+  - Drive-thru template provides numbered items for easy ordering and maximum outdoor legibility.
+  - Added 6 new fast-food themed color palettes: Burger Red, Golden Arches, Fried Crispy, Pizza Parlor, Fresh Salad, Coffee Roast.
+  - New ThemeConfig options: `priceBadgeColor`, `sectionHeaderColor` for advanced styling.
+  - Database enhancements for professional menus:
+    - MenuItems: badges, calories, variants (size pricing), combo items, promo flags
+    - MenuSections: panel index (multi-screen), per-section colors, layout styles
+    - New tables: `MenuPromos` for promotional banners, `MenuCombos` for meal deals
+  - Badge system with support for NEW, HOT, SPICY, BESTSELLER, VEGAN, HALAL, and more.
+  - Variant pricing for size-based options (Small/Medium/Large).
+  - Combo support with included items list.
+  - Multi-panel display support for drive-thru configurations.
+
 - **Provisioning audit / observability**:
   - Added `ProvisioningTokenEvents` table to record token lifecycle and device history.
   - New org endpoints:

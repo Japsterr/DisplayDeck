@@ -270,10 +270,94 @@ function MenuItemCard(props: {
   );
 }
 
-function getTemplateKey(raw: string | undefined): "classic" | "minimal" | "neon" {
+function getTemplateKey(raw: string | undefined): "classic" | "minimal" | "neon" | "qsr" | "drivethru" {
   const key = (raw || "classic").toLowerCase();
-  if (key === "minimal" || key === "neon" || key === "classic") return key;
+  if (key === "minimal" || key === "neon" || key === "classic" || key === "qsr" || key === "drivethru") return key;
   return "classic";
+}
+
+// Badge component for item labels (NEW, HOT, SPICY, BESTSELLER, etc.)
+function ItemBadge({ type, label, accent }: { type: string; label?: string; accent: string }) {
+  const badgeConfigs: Record<string, { bg: string; text: string; defaultLabel: string }> = {
+    new: { bg: "#22c55e", text: "#ffffff", defaultLabel: "NEW" },
+    hot: { bg: "#ef4444", text: "#ffffff", defaultLabel: "HOT" },
+    spicy: { bg: "#f97316", text: "#ffffff", defaultLabel: "🌶️" },
+    bestseller: { bg: "#eab308", text: "#1a1a1a", defaultLabel: "★ BEST" },
+    popular: { bg: "#8b5cf6", text: "#ffffff", defaultLabel: "POPULAR" },
+    vegan: { bg: "#22c55e", text: "#ffffff", defaultLabel: "🌱 VEGAN" },
+    vegetarian: { bg: "#84cc16", text: "#1a1a1a", defaultLabel: "VEG" },
+    glutenfree: { bg: "#06b6d4", text: "#ffffff", defaultLabel: "GF" },
+    halal: { bg: "#10b981", text: "#ffffff", defaultLabel: "HALAL" },
+    limited: { bg: "#ec4899", text: "#ffffff", defaultLabel: "LIMITED" },
+    promo: { bg: accent, text: "#ffffff", defaultLabel: "DEAL" },
+  };
+
+  const config = badgeConfigs[type.toLowerCase()] || { bg: accent, text: "#ffffff", defaultLabel: type.toUpperCase() };
+  const displayLabel = label || config.defaultLabel;
+
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] sm:text-xs font-bold uppercase tracking-wide"
+      style={{ backgroundColor: config.bg, color: config.text }}
+    >
+      {displayLabel}
+    </span>
+  );
+}
+
+// Variant price display (Small, Medium, Large with different prices)
+function VariantPrices({ variants, accent }: { variants: Array<{ name: string; priceCents: number }>; accent: string }) {
+  if (!variants || variants.length === 0) return null;
+  
+  return (
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      {variants.map((v, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <span className="text-xs sm:text-sm opacity-70">{v.name}</span>
+          <span className="text-sm sm:text-base font-semibold" style={{ color: accent }}>
+            {formatCurrencyZarFromCents(v.priceCents)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Combo/meal items included list
+function ComboIncludes({ items, muted }: { items: Array<{ name: string; imageUrl?: string }>; muted: string }) {
+  if (!items || items.length === 0) return null;
+  
+  return (
+    <div className="flex items-center gap-2 mt-2">
+      <span className="text-xs" style={{ color: muted }}>Includes:</span>
+      <div className="flex items-center gap-1 flex-wrap">
+        {items.map((item, i) => (
+          <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-white/10">
+            {item.imageUrl && (
+              <img src={item.imageUrl} alt="" className="h-4 w-4 rounded-full object-cover" />
+            )}
+            {item.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Promo price with strikethrough original
+function PromoPrice({ priceCents, originalPriceCents, accent }: { priceCents: number; originalPriceCents?: number | null; accent: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      {originalPriceCents && originalPriceCents > priceCents && (
+        <span className="text-sm line-through opacity-50">
+          {formatCurrencyZarFromCents(originalPriceCents)}
+        </span>
+      )}
+      <span className="text-lg sm:text-xl font-bold" style={{ color: accent }}>
+        {formatCurrencyZarFromCents(priceCents)}
+      </span>
+    </div>
+  );
 }
 
 function renderClassic(args: {
@@ -531,6 +615,283 @@ function renderNeon(args: {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// QSR (Quick Service Restaurant) Template - Professional fast food style
+// Optimized for large screens with big product images and clear pricing
+function renderQsr(args: {
+  menuName: string;
+  muted: string;
+  accent: string;
+  itemCardStyle: ItemCardStyle;
+  sectionCols: string;
+  sections: PublicMenuSection[];
+  dense?: boolean;
+  logoUrl?: string;
+  sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
+  priceBackground?: string;
+}) {
+  const { menuName, muted, accent, sections, dense, logoUrl, sectionImages, headerMode, headerImageUrl, priceBackground } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
+  const priceBg = priceBackground || accent;
+
+  return (
+    <div className="min-h-screen px-3 sm:px-4 py-3 sm:py-4">
+      {/* Header bar with logo */}
+      {headerSrc && (
+        <div className="flex justify-center mb-4">
+          <img src={headerSrc} alt="" className="h-10 sm:h-14 w-auto object-contain" />
+        </div>
+      )}
+      
+      {headerMode === "text" && (
+        <div className="text-center mb-4">
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight">{menuName}</h1>
+        </div>
+      )}
+
+      <div className={`grid ${args.sectionCols} gap-3 sm:gap-4`}>
+        {sections.map((s) => {
+          const items = (s.Items || [])
+            .filter((i) => i.IsAvailable !== false)
+            .slice()
+            .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+
+          return (
+            <div key={s.Id} className="rounded-xl border border-white/15 bg-white/[0.04] overflow-hidden">
+              {/* Section header with optional image */}
+              <div 
+                className="px-3 py-2 sm:px-4 sm:py-3 border-b border-white/10"
+                style={{ backgroundColor: `${accent}15` }}
+              >
+                <div className="flex items-center gap-3">
+                  {sectionImages?.[String(s.Id)] && (
+                    <img
+                      src={sectionImages[String(s.Id)]}
+                      alt=""
+                      className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg object-cover border border-white/20"
+                      loading="lazy"
+                    />
+                  )}
+                  <h2 className="text-xl sm:text-2xl font-bold uppercase tracking-wide" style={{ color: accent }}>
+                    {s.Name}
+                  </h2>
+                </div>
+              </div>
+
+              {/* Items grid - image-focused cards */}
+              <div className="p-2 sm:p-3">
+                <div className={`grid ${items.length <= 4 ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-3'} gap-2 sm:gap-3`}>
+                  {items.map((it) => (
+                    <QsrItemCard
+                      key={it.Id}
+                      it={it}
+                      muted={muted}
+                      accent={accent}
+                      priceBg={priceBg}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// QSR-style item card with prominent image and price badge
+function QsrItemCard({ it, muted, accent, priceBg }: { 
+  it: PublicMenuItem; 
+  muted: string; 
+  accent: string; 
+  priceBg: string;
+}) {
+  const price = it.PriceCents != null ? formatCurrencyZarFromCents(it.PriceCents) : "";
+  const hasImage = Boolean(it.ImageUrl);
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] overflow-hidden hover:bg-white/[0.05] transition-colors">
+      {/* Product image with price badge */}
+      <div className="relative aspect-square bg-black/20">
+        {hasImage ? (
+          <img
+            src={it.ImageUrl || ""}
+            alt={it.Name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-4xl opacity-30">
+            🍔
+          </div>
+        )}
+        
+        {/* Price badge - positioned in corner */}
+        {price && (
+          <div 
+            className="absolute top-1 right-1 sm:top-2 sm:right-2 rounded-full px-2 py-0.5 sm:px-3 sm:py-1 text-xs sm:text-sm font-bold shadow-lg"
+            style={{ backgroundColor: priceBg, color: "#ffffff" }}
+          >
+            {price}
+          </div>
+        )}
+      </div>
+
+      {/* Item name and description */}
+      <div className="p-2 sm:p-3">
+        <h3 className="font-semibold text-sm sm:text-base leading-tight line-clamp-2">{it.Name}</h3>
+        {it.Description && (
+          <p className="mt-1 text-xs leading-snug line-clamp-2" style={{ color: muted }}>
+            {it.Description}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Drive-thru Template - Optimized for outdoor viewing with maximum legibility
+// Uses larger fonts, high contrast, and simplified layout
+function renderDrivethru(args: {
+  menuName: string;
+  muted: string;
+  accent: string;
+  itemCardStyle: ItemCardStyle;
+  sectionCols: string;
+  sections: PublicMenuSection[];
+  dense?: boolean;
+  logoUrl?: string;
+  sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
+}) {
+  const { menuName, muted, accent, sections, logoUrl, sectionImages, headerMode, headerImageUrl } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
+
+  return (
+    <div className="min-h-screen p-2 sm:p-4">
+      {/* Compact header */}
+      {headerSrc && (
+        <div className="flex justify-center mb-3">
+          <img src={headerSrc} alt="" className="h-8 sm:h-12 w-auto object-contain" />
+        </div>
+      )}
+
+      {headerMode === "text" && (
+        <div className="text-center mb-3">
+          <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider">{menuName}</h1>
+        </div>
+      )}
+
+      {/* Full-width sections with numbered items for easy ordering */}
+      <div className={`grid ${args.sectionCols} gap-2 sm:gap-3`}>
+        {sections.map((s) => {
+          const items = (s.Items || [])
+            .filter((i) => i.IsAvailable !== false)
+            .slice()
+            .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+
+          return (
+            <div 
+              key={s.Id} 
+              className="rounded-lg overflow-hidden"
+              style={{ backgroundColor: `${accent}10`, border: `2px solid ${accent}40` }}
+            >
+              {/* Bold section header */}
+              <div 
+                className="px-3 py-2 sm:py-3"
+                style={{ backgroundColor: accent }}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  {sectionImages?.[String(s.Id)] && (
+                    <img
+                      src={sectionImages[String(s.Id)]}
+                      alt=""
+                      className="h-8 w-8 sm:h-10 sm:w-10 rounded object-cover"
+                      loading="lazy"
+                    />
+                  )}
+                  <h2 className="text-lg sm:text-2xl font-black uppercase text-white tracking-wider text-center">
+                    {s.Name}
+                  </h2>
+                </div>
+              </div>
+
+              {/* Items in a simple list format for easy reading */}
+              <div className="p-2 sm:p-3 space-y-1 sm:space-y-2">
+                {items.map((it, idx) => (
+                  <DrivethruItemRow
+                    key={it.Id}
+                    it={it}
+                    number={idx + 1}
+                    muted={muted}
+                    accent={accent}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Drive-thru item row - optimized for legibility at distance
+function DrivethruItemRow({ it, number, muted, accent }: { 
+  it: PublicMenuItem; 
+  number: number;
+  muted: string; 
+  accent: string; 
+}) {
+  const price = it.PriceCents != null ? formatCurrencyZarFromCents(it.PriceCents) : "";
+  const hasImage = Boolean(it.ImageUrl);
+
+  return (
+    <div className="flex items-center gap-2 sm:gap-3 rounded-lg bg-black/20 p-2 sm:p-3">
+      {/* Number for easy ordering */}
+      <div 
+        className="shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm"
+        style={{ backgroundColor: accent, color: "#ffffff" }}
+      >
+        {number}
+      </div>
+
+      {/* Small product image */}
+      {hasImage && (
+        <img
+          src={it.ImageUrl || ""}
+          alt={it.Name}
+          className="shrink-0 w-10 h-10 sm:w-14 sm:h-14 rounded object-cover"
+          loading="lazy"
+        />
+      )}
+
+      {/* Name and description */}
+      <div className="flex-1 min-w-0">
+        <h3 className="font-bold text-sm sm:text-lg leading-tight truncate">{it.Name}</h3>
+        {it.Description && (
+          <p className="text-xs truncate" style={{ color: muted }}>
+            {it.Description}
+          </p>
+        )}
+      </div>
+
+      {/* Price - large and prominent */}
+      {price && (
+        <div 
+          className="shrink-0 rounded px-2 py-1 sm:px-3 sm:py-2 text-sm sm:text-xl font-black"
+          style={{ backgroundColor: "#ffffff", color: "#000000" }}
+        >
+          {price}
+        </div>
+      )}
     </div>
   );
 }
@@ -838,19 +1199,47 @@ export default function DisplayMenuPage() {
                     headerMode,
                     headerImageUrl: headerImageUrl || undefined,
                   })
-                : renderClassic({
-                    menuName: menu.Name,
-                    muted,
-                    accent,
-                    itemCardStyle,
-                    sectionCols,
-                    sections,
-                    dense,
-                    logoUrl: logoUrl || undefined,
-                    sectionImages,
-                    headerMode,
-                    headerImageUrl: headerImageUrl || undefined,
-                  })}
+                : templateKey === "qsr"
+                  ? renderQsr({
+                      menuName: menu.Name,
+                      muted,
+                      accent,
+                      itemCardStyle,
+                      sectionCols,
+                      sections,
+                      dense,
+                      logoUrl: logoUrl || undefined,
+                      sectionImages,
+                      headerMode,
+                      headerImageUrl: headerImageUrl || undefined,
+                    })
+                  : templateKey === "drivethru"
+                    ? renderDrivethru({
+                        menuName: menu.Name,
+                        muted,
+                        accent,
+                        itemCardStyle,
+                        sectionCols,
+                        sections,
+                        dense,
+                        logoUrl: logoUrl || undefined,
+                        sectionImages,
+                        headerMode,
+                        headerImageUrl: headerImageUrl || undefined,
+                      })
+                    : renderClassic({
+                        menuName: menu.Name,
+                        muted,
+                        accent,
+                        itemCardStyle,
+                        sectionCols,
+                        sections,
+                        dense,
+                        logoUrl: logoUrl || undefined,
+                        sectionImages,
+                        headerMode,
+                        headerImageUrl: headerImageUrl || undefined,
+                      })}
           </div>
         </div>
       </div>

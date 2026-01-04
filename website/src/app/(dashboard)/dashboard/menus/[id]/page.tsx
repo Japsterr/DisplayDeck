@@ -152,6 +152,61 @@ const THEME_PALETTES: ThemePalette[] = [
     mutedTextColor: "#475569",
     accentColor: "#2563eb",
   },
+  // QSR / Fast Food Themed Palettes
+  {
+    id: "burger-red",
+    name: "Burger Red",
+    description: "Classic fast food red & yellow. High visibility for drive-thrus.",
+    backgroundColor: "#1a0a0a",
+    textColor: "#ffffff",
+    mutedTextColor: "#fca5a5",
+    accentColor: "#ef4444",
+  },
+  {
+    id: "golden-arches",
+    name: "Golden Arches",
+    description: "Bold yellow on dark. Perfect for QSR and drive-thru displays.",
+    backgroundColor: "#0f0f0f",
+    textColor: "#ffffff",
+    mutedTextColor: "#fcd34d",
+    accentColor: "#fbbf24",
+  },
+  {
+    id: "fried-crispy",
+    name: "Fried Crispy",
+    description: "Warm orange tones evoking crispy fried goodness.",
+    backgroundColor: "#1c1917",
+    textColor: "#fef3c7",
+    mutedTextColor: "#fdba74",
+    accentColor: "#f97316",
+  },
+  {
+    id: "pizza-parlor",
+    name: "Pizza Parlor",
+    description: "Italian-inspired red and cream for pizzerias.",
+    backgroundColor: "#fef2f2",
+    textColor: "#450a0a",
+    mutedTextColor: "#991b1b",
+    accentColor: "#dc2626",
+  },
+  {
+    id: "fresh-salad",
+    name: "Fresh Salad",
+    description: "Healthy greens for salad bars and health-focused venues.",
+    backgroundColor: "#f0fdf4",
+    textColor: "#14532d",
+    mutedTextColor: "#15803d",
+    accentColor: "#22c55e",
+  },
+  {
+    id: "coffee-roast",
+    name: "Coffee Roast",
+    description: "Rich brown tones for coffee shops and cafes.",
+    backgroundColor: "#1c1917",
+    textColor: "#fef3c7",
+    mutedTextColor: "#a3a3a3",
+    accentColor: "#a16207",
+  },
 ];
 
 type ThemeConfig = Record<string, unknown>;
@@ -1555,6 +1610,8 @@ export default function MenuEditorPage() {
                   <SelectItem value="classic">Classic</SelectItem>
                   <SelectItem value="minimal">Minimal</SelectItem>
                   <SelectItem value="neon">Neon</SelectItem>
+                  <SelectItem value="qsr">QSR Board (Fast Food)</SelectItem>
+                  <SelectItem value="drivethru">Drive-Thru</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">UI build: {APP_VERSION}</p>
@@ -1784,6 +1841,56 @@ export default function MenuEditorPage() {
                       placeholder="#22c55e"
                     />
                   </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Price badge color</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="color"
+                      value={parsedTheme ? readThemeString(parsedTheme, "priceBadgeColor", "") || readThemeString(parsedTheme, "accentColor", "#22c55e") : "#22c55e"}
+                      disabled={!parsedTheme}
+                      onChange={(e) => updateThemeJson((t) => ({ ...t, priceBadgeColor: e.target.value }))}
+                      className="h-10 w-14 p-1"
+                    />
+                    <Input
+                      value={parsedTheme ? readThemeString(parsedTheme, "priceBadgeColor", "") : ""}
+                      disabled={!parsedTheme}
+                      onChange={(e) => updateThemeJson((t) => {
+                        const next = { ...t };
+                        if (e.target.value.trim()) (next as any).priceBadgeColor = e.target.value;
+                        else delete (next as any).priceBadgeColor;
+                        return next;
+                      })}
+                      placeholder="Same as accent"
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground">Used in QSR/Drive-thru templates for price badges</div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Section header color</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="color"
+                      value={parsedTheme ? readThemeString(parsedTheme, "sectionHeaderColor", "") || readThemeString(parsedTheme, "accentColor", "#22c55e") : "#22c55e"}
+                      disabled={!parsedTheme}
+                      onChange={(e) => updateThemeJson((t) => ({ ...t, sectionHeaderColor: e.target.value }))}
+                      className="h-10 w-14 p-1"
+                    />
+                    <Input
+                      value={parsedTheme ? readThemeString(parsedTheme, "sectionHeaderColor", "") : ""}
+                      disabled={!parsedTheme}
+                      onChange={(e) => updateThemeJson((t) => {
+                        const next = { ...t };
+                        if (e.target.value.trim()) (next as any).sectionHeaderColor = e.target.value;
+                        else delete (next as any).sectionHeaderColor;
+                        return next;
+                      })}
+                      placeholder="Same as accent"
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground">Background color for section headers</div>
                 </div>
               </div>
 

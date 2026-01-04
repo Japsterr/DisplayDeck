@@ -127,6 +127,10 @@ CREATE TABLE MenuSections (
         MenuID INT NOT NULL,
         Name VARCHAR(255) NOT NULL,
         DisplayOrder INT NOT NULL DEFAULT 0,
+        PanelIndex INT DEFAULT 0,
+        BackgroundColor VARCHAR(9),
+        TitleColor VARCHAR(9),
+        LayoutStyle VARCHAR(32),
         CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (MenuID) REFERENCES Menus(MenuID) ON DELETE CASCADE
@@ -142,10 +146,60 @@ CREATE TABLE MenuItems (
         PriceCents INT,
         IsAvailable BOOLEAN NOT NULL DEFAULT TRUE,
         DisplayOrder INT NOT NULL DEFAULT 0,
+        Badges JSONB DEFAULT '[]'::jsonb,
+        Calories INT,
+        Variants JSONB DEFAULT '[]'::jsonb,
+        ComboItems JSONB DEFAULT '[]'::jsonb,
+        IsPromo BOOLEAN NOT NULL DEFAULT FALSE,
+        PromoLabel VARCHAR(64),
+        OriginalPriceCents INT,
         CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (MenuSectionID) REFERENCES MenuSections(MenuSectionID) ON DELETE CASCADE
 );
+
+CREATE TABLE MenuPromos (
+    MenuPromoID SERIAL PRIMARY KEY,
+    MenuID INT NOT NULL,
+    Title VARCHAR(255) NOT NULL,
+    Subtitle VARCHAR(512),
+    ImageUrl VARCHAR(1024),
+    BackgroundColor VARCHAR(9),
+    TextColor VARCHAR(9),
+    PriceCents INT,
+    PromoLabel VARCHAR(64),
+    ValidUntil TIMESTAMP WITH TIME ZONE,
+    DisplayOrder INT NOT NULL DEFAULT 0,
+    IsActive BOOLEAN NOT NULL DEFAULT TRUE,
+    PanelIndex INT DEFAULT 0,
+    LayoutPosition VARCHAR(32) DEFAULT 'top',
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (MenuID) REFERENCES Menus(MenuID) ON DELETE CASCADE
+);
+
+CREATE TABLE MenuCombos (
+    MenuComboID SERIAL PRIMARY KEY,
+    MenuID INT NOT NULL,
+    MenuSectionID INT,
+    Name VARCHAR(255) NOT NULL,
+    Description TEXT,
+    ImageUrl VARCHAR(1024),
+    PriceCents INT,
+    OriginalPriceCents INT,
+    Badges JSONB DEFAULT '[]'::jsonb,
+    IncludedItems JSONB NOT NULL DEFAULT '[]'::jsonb,
+    DisplayOrder INT NOT NULL DEFAULT 0,
+    IsAvailable BOOLEAN NOT NULL DEFAULT TRUE,
+    CreatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (MenuID) REFERENCES Menus(MenuID) ON DELETE CASCADE,
+    FOREIGN KEY (MenuSectionID) REFERENCES MenuSections(MenuSectionID) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_menupromos_menuid ON MenuPromos(MenuID);
+CREATE INDEX idx_menucombos_menuid ON MenuCombos(MenuID);
+CREATE INDEX idx_menucombos_sectionid ON MenuCombos(MenuSectionID);
 
 ALTER TABLE CampaignItems
     ADD CONSTRAINT fk_campaignitems_menuid FOREIGN KEY (MenuID) REFERENCES Menus(MenuID) ON DELETE CASCADE;

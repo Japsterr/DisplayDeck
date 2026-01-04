@@ -77,15 +77,46 @@ Capabilities:
 
 ### 6) Menu builder (dynamic menu boards)
 
-Purpose: create structured menus (menus → sections → items) that can be shown as a campaign item.
+Purpose: create structured menus (menus → sections → items) that can be shown as a campaign item. Perfect for restaurants, cafes, QSR chains, and any venue with changing menus.
 
 Capabilities:
 
-- create a menu board (choose a template/theme)
-- create sections and items
+- create a menu board (choose from 5 templates)
+- create sections and items with images, prices, descriptions
 - optionally import menu items from CSV (faster onboarding)
 - attach uploaded media to menu items
 - preview a menu via a public token link
+
+#### Professional Templates
+
+| Template | Best For |
+|----------|----------|
+| **Classic** | Restaurants, cafes — clean sections with cards |
+| **Minimal** | Modern venues — simple, elegant design |
+| **Neon** | Nightlife, entertainment — glowing effects |
+| **QSR Board** | Fast food, takeaway — large product images with price badges |
+| **Drive-Thru** | Outdoor displays — numbered items, maximum legibility |
+
+#### Theme Customization
+
+- 16+ pre-built color palettes (including fast-food themes: Burger Red, Golden Arches, Fried Crispy)
+- Custom colors for background, text, accent, price badges, section headers
+- Logo and background image support
+- Per-section images and styling
+
+#### Item Features
+
+- Product images with automatic price badge overlays
+- Badges: NEW, HOT, SPICY, BESTSELLER, VEGAN, HALAL, and more
+- Variant pricing (Small/Medium/Large with different prices)
+- Combo/meal support with included items display
+- Promotional pricing with strikethrough original price
+
+#### Multi-Panel Support
+
+- Assign sections to different screens for drive-thru configurations
+- Promotional banners with expiration countdowns
+- Panel-aware rendering for 3-screen setups
 
 ### 7) Displays (device management)
 
