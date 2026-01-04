@@ -7,7 +7,7 @@ export default function DownloadTvPage() {
   const sha256 = (process.env.NEXT_PUBLIC_TV_APK_SHA256 || "").trim();
 
   // Default: serve from Next's public/ folder (no auth)
-  const localPath = "/downloads/displaydeck-tv.apk";
+  const localPath = "/downloads/displaydeck-player.apk";
   const downloadUrl = externalUrl || localPath;
 
   return (
@@ -24,7 +24,7 @@ export default function DownloadTvPage() {
           <Button asChild className="rounded-full px-6">
             <a
               href={downloadUrl}
-              download={externalUrl ? undefined : "displaydeck-tv.apk"}
+              download={externalUrl ? undefined : "displaydeck-player.apk"}
               target={externalUrl ? "_blank" : undefined}
               rel={externalUrl ? "noreferrer" : undefined}
             >

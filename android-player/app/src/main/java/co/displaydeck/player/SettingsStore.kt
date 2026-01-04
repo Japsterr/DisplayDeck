@@ -10,11 +10,9 @@ object SettingsStore {
   private const val KEY_PAIRING_CODE = "pairingCode"
   private const val KEY_PAIRED_DISPLAY_NAME = "pairedDisplayName"
 
-  // Hardcoded online API endpoint for now; device has zero user input.
-  const val API_BASE_URL: String = "https://api.displaydeck.co.za"
-
-  // Public website host for rendering display pages (e.g. /display/menu/{token}).
-  const val PUBLIC_BASE_URL: String = "https://displaydeck.co.za"
+  // Production endpoints
+  const val API_BASE_URL = "https://api.displaydeck.co.za"
+  const val PUBLIC_BASE_URL = "https://displaydeck.co.za"
 
   fun getOrCreateHardwareId(ctx: Context): String {
     val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

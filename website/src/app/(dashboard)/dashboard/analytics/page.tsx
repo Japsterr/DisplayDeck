@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatDistanceToNow, isValid, parseISO, subDays } from "date-fns";
-import { BarChart3, Download, FileDown, RefreshCw } from "lucide-react";
+import { formatDistanceToNow, isValid, parseISO, subDays, format, differenceInDays, eachDayOfInterval } from "date-fns";
+import { BarChart3, Download, FileDown, RefreshCw, Monitor, PlayCircle, TrendingUp, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -337,6 +338,59 @@ export default function AnalyticsPage() {
     return Array.from(groups.values()).sort((a, b) => b.plays - a.plays);
   }, [displays, plays]);
 
+  // Daily plays chart data
+  const dailyPlaysData = useMemo(() => {
+    if (!fromISO || !toISO) return [];
+    const start = parseISO(fromISO);
+    const end = parseISO(toISO);
+    if (!isValid(start) || !isValid(end)) return [];
+    
+    const days = eachDayOfInterval({ start, end });
+    const playsByDay = new Map<string, number>();
+    
+    for (const day of days) {
+      playsByDay.set(format(day, "yyyy-MM-dd"), 0);
+    }
+    
+    for (const play of plays) {
+      if (!play.PlaybackTimestamp) continue;
+      const date = parseISO(play.PlaybackTimestamp);
+      if (!isValid(date)) continue;
+      const key = format(date, "yyyy-MM-dd");
+      if (playsByDay.has(key)) {
+        playsByDay.set(key, (playsByDay.get(key) || 0) + 1);
+      }
+    }
+    
+    return Array.from(playsByDay.entries()).map(([date, count]) => ({
+      date,
+      label: format(parseISO(date), "MMM d"),
+      count,
+    }));
+  }, [plays, fromISO, toISO]);
+
+  const maxDailyPlays = useMemo(() => Math.max(1, ...dailyPlaysData.map(d => d.count)), [dailyPlaysData]);
+
+  // Calculate average plays per day
+  const avgPlaysPerDay = useMemo(() => {
+    if (dailyPlaysData.length === 0) return 0;
+    const total = dailyPlaysData.reduce((sum, d) => sum + d.count, 0);
+    return Math.round(total / dailyPlaysData.length);
+  }, [dailyPlaysData]);
+
+  // Peak hour calculation
+  const peakHour = useMemo(() => {
+    const hourCounts = new Array(24).fill(0);
+    for (const play of plays) {
+      if (!play.PlaybackTimestamp) continue;
+      const date = parseISO(play.PlaybackTimestamp);
+      if (!isValid(date)) continue;
+      hourCounts[date.getHours()]++;
+    }
+    const maxHour = hourCounts.indexOf(Math.max(...hourCounts));
+    return { hour: maxHour, count: hourCounts[maxHour] };
+  }, [plays]);
+
   const exportCsv = () => {
     const headers = [
       "PlaybackTimestamp",
@@ -378,7 +432,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+    <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
       <div className="flex items-start justify-between gap-4 print:hidden">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Analytics</h2>
@@ -397,6 +451,62 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      {/* Key Metrics Summary */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Plays</CardTitle>
+            <PlayCircle className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{plays.length.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {avgPlaysPerDay.toLocaleString()} avg/day
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Displays Online</CardTitle>
+            <Monitor className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{displayHealth.online}/{displayHealth.total}</div>
+            <div className="flex items-center gap-2 mt-1">
+              <Progress value={displayHealth.onlineRateNow} className="h-2" />
+              <span className="text-xs text-muted-foreground">{displayHealth.onlineRateNow}%</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Campaigns</CardTitle>
+            <TrendingUp className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{topCampaigns.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {campaigns.length} total campaigns
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Peak Hour</CardTitle>
+            <Clock className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{peakHour.hour.toString().padStart(2, "0")}:00</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {peakHour.count.toLocaleString()} plays at peak
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="hidden print:block">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5" />
@@ -406,6 +516,43 @@ export default function AnalyticsPage() {
           Range: {fromISO ? new Date(fromISO).toLocaleString() : ""} – {toISO ? new Date(toISO).toLocaleString() : ""}
         </div>
       </div>
+
+      {/* Daily Plays Chart */}
+      {dailyPlaysData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Daily Plays
+            </CardTitle>
+            <CardDescription>Playback activity over the selected date range.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-1 h-40">
+              {dailyPlaysData.map((day) => (
+                <div
+                  key={day.date}
+                  className="flex-1 flex flex-col items-center gap-1 group"
+                >
+                  <div className="relative w-full flex justify-center">
+                    <div
+                      className="w-full max-w-8 bg-primary/80 hover:bg-primary rounded-t transition-all cursor-default"
+                      style={{ height: `${Math.max(4, (day.count / maxDailyPlays) * 128)}px` }}
+                      title={`${day.label}: ${day.count.toLocaleString()} plays`}
+                    />
+                    <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium bg-background border rounded px-1 py-0.5 shadow-sm">
+                      {day.count}
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground rotate-45 origin-left whitespace-nowrap">
+                    {day.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="print:hidden">
         <CardHeader>
@@ -497,48 +644,69 @@ export default function AnalyticsPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle>Display health</CardTitle>
-            <CardDescription>Derived from current display status + last seen.</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              {displayHealth.offline.length > 0 ? (
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+              )}
+              Display Health
+            </CardTitle>
+            <CardDescription>Real-time status + SLA compliance.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">Online rate now</div>
-              <div className="font-semibold">{displayHealth.onlineRateNow}%</div>
+              <div className="text-sm text-muted-foreground">Online rate</div>
+              <div className="flex items-center gap-2">
+                <Progress value={displayHealth.onlineRateNow} className="w-20 h-2" />
+                <span className="font-semibold text-green-500">{displayHealth.onlineRateNow}%</span>
+              </div>
             </div>
             <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">Seen within {displayHealth.slaMinutes} min</div>
+              <div className="text-sm text-muted-foreground">Within SLA ({displayHealth.slaMinutes}m)</div>
               <div className="font-semibold">{displayHealth.seenRecently}/{displayHealth.total}</div>
             </div>
             <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">Playback-active (range)</div>
-              <div className="font-semibold">{displayHealth.playbackActiveRate}%</div>
+              <div className="text-sm text-muted-foreground">Playback active</div>
+              <div className="flex items-center gap-2">
+                <Progress value={displayHealth.playbackActiveRate} className="w-20 h-2" />
+                <span className="font-semibold">{displayHealth.playbackActiveRate}%</span>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              True uptime% needs historical online/offline tracking; this is a strong near-term KPI for sales + ops.
-            </div>
+            {displayHealth.offline.length > 0 && (
+              <div className="pt-2 border-t">
+                <div className="text-xs text-amber-500 font-medium">{displayHealth.offline.length} display{displayHealth.offline.length > 1 ? "s" : ""} offline</div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Top campaigns</CardTitle>
-            <CardDescription>By plays in the selected range.</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-purple-500" />
+              Top Campaigns
+            </CardTitle>
+            <CardDescription>By plays in selected range.</CardDescription>
           </CardHeader>
           <CardContent>
             {topCampaigns.length === 0 ? (
               <div className="text-sm text-muted-foreground">No data.</div>
             ) : (
               <div className="space-y-2">
-                {topCampaigns.slice(0, 6).map((c) => (
+                {topCampaigns.slice(0, 6).map((c, idx) => (
                   <div key={c.CampaignId} className="flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      className="text-sm underline underline-offset-4 truncate"
-                      onClick={() => router.push(`/dashboard/campaigns/${c.CampaignId}`)}
-                    >
-                      {c.CampaignName || `#${c.CampaignId}`}
-                    </button>
-                    <Badge variant="secondary">{c.Plays}</Badge>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
+                      <button
+                        type="button"
+                        className="text-sm hover:text-primary truncate transition-colors"
+                        onClick={() => router.push(`/dashboard/campaigns/${c.CampaignId}`)}
+                      >
+                        {c.CampaignName || `#${c.CampaignId}`}
+                      </button>
+                    </div>
+                    <Badge variant="secondary" className="shrink-0">{c.Plays.toLocaleString()}</Badge>
                   </div>
                 ))}
               </div>

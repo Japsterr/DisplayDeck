@@ -7,6 +7,7 @@ import {
   Monitor,
   Megaphone,
   UtensilsCrossed,
+  LayoutGrid,
   Library,
   BarChart3,
   Users,
@@ -15,7 +16,10 @@ import {
   ChevronsLeft,
   ChevronsRight,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react"
+import { useTheme } from "next-themes"
 
 import {
   Sidebar,
@@ -71,6 +75,11 @@ const items = [
     icon: UtensilsCrossed,
   },
   {
+    title: "Info Boards",
+    url: "/dashboard/infoboards",
+    icon: LayoutGrid,
+  },
+  {
     title: "Media Library",
     url: "/dashboard/media",
     icon: Library,
@@ -90,12 +99,22 @@ const items = [
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
   const { state, toggleSidebar } = useSidebar();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     // Force a hard reload to clear any in-memory state
     window.location.href = "/login";
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
   };
 
   return (
@@ -132,6 +151,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={toggleTheme}
+              tooltip={mounted ? (theme === "dark" ? "Switch to light mode" : "Switch to dark mode") : "Toggle theme"}
+            >
+              {mounted && theme === "dark" ? <Sun /> : <Moon />}
+              <span>{mounted ? (theme === "dark" ? "Light Mode" : "Dark Mode") : "Theme"}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={toggleSidebar}

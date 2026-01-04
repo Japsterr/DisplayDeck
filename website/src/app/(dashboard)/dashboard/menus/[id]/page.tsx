@@ -1693,6 +1693,10 @@ export default function MenuEditorPage() {
                   <SelectItem value="neon">Neon</SelectItem>
                   <SelectItem value="qsr">QSR Board (Fast Food)</SelectItem>
                   <SelectItem value="drivethru">Drive-Thru</SelectItem>
+                  <SelectItem value="elegant">Elegant (Fine Dining)</SelectItem>
+                  <SelectItem value="retro">Retro (Vintage Diner)</SelectItem>
+                  <SelectItem value="modern">Modern (Contemporary)</SelectItem>
+                  <SelectItem value="chalkboard">Chalkboard (Artisan Cafe)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">UI build: {APP_VERSION}</p>

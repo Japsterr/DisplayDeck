@@ -1739,7 +1739,7 @@ components:
         CampaignId: { type: integer }
         ItemType:
           type: string
-          description: "media" (default) or "menu"
+          description: media (default) or menu
           enum: [media, menu]
         MediaFileId: { type: integer, nullable: true }
         MenuId: { type: integer, nullable: true }

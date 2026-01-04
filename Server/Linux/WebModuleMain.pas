@@ -39,6 +39,9 @@ uses
   DisplayMenuRepository,
   ScheduleRepository,
   MediaFileRepository,
+  InfoBoardRepository,
+  InfoBoardSectionRepository,
+  InfoBoardItemRepository,
   UserRepository,
   RefreshTokenRepository,
   EmailVerificationTokenRepository,
@@ -2196,8 +2199,15 @@ begin
         var HardwareId := Body.GetValue<string>('HardwareId',''); if HardwareId='' then begin JSONError(400,'Missing HardwareId'); Exit; end;
         // 6-char code for manual pairing on the website. TTL is long enough to avoid frustration during onboarding.
         var Info := TProvisioningTokenRepository.CreatePairingCode(3600, 6);
-        // Optionally store hardware id
+        // Optionally store hardware id, and clean up old unclaimed tokens for this device
         var C := NewConnection; try
+          // Delete any old unclaimed tokens for this HardwareId (prevents stale pairing codes)
+          var QDel := TFDQuery.Create(nil); try
+            QDel.Connection := C;
+            QDel.SQL.Text := 'delete from ProvisioningTokens where HardwareId=:H and Claimed=false';
+            QDel.ParamByName('H').AsString := HardwareId;
+            QDel.ExecSQL;
+          finally QDel.Free; end;
           var Q := TFDQuery.Create(nil); try
             Q.Connection := C; Q.SQL.Text := 'update ProvisioningTokens set HardwareId=:H where Token=:T';
             Q.ParamByName('H').AsString := HardwareId; Q.ParamByName('T').AsString := Info.Token; Q.ExecSQL;
@@ -2389,10 +2399,11 @@ begin
               Qu.Free;
             end;
 
-            // Determine current assignment: prefer primary campaign; else primary menu.
+            // Determine current assignment: prefer primary campaign; else primary menu; else primary infoboard.
             var AssignType := 'none';
             var MenuToken := '';
             var CampaignId := 0;
+            var InfoBoardToken := '';
 
             var Qc := TFDQuery.Create(nil);
             try
@@ -2424,6 +2435,24 @@ begin
                 end;
               finally
                 Qm.Free;
+              end;
+            end;
+
+            if AssignType='none' then
+            begin
+              var Qib := TFDQuery.Create(nil);
+              try
+                Qib.Connection := C;
+                Qib.SQL.Text := 'select ib.PublicToken from DisplayInfoBoards dib join InfoBoards ib on ib.InfoBoardID=dib.InfoBoardID where dib.DisplayID=:D and dib.IsPrimary=true order by dib.DisplayInfoBoardID desc limit 1';
+                Qib.ParamByName('D').AsInteger := DisplayId;
+                Qib.Open;
+                if not Qib.Eof then
+                begin
+                  AssignType := 'infoboard';
+                  InfoBoardToken := Qib.FieldByName('PublicToken').AsString;
+                end;
+              finally
+                Qib.Free;
               end;
             end;
 
@@ -2495,6 +2524,10 @@ begin
                   AObj.AddPair('CampaignId', TJSONNumber.Create(CampaignId))
                 else
                   AObj.AddPair('CampaignId', TJSONNull.Create);
+                if (AssignType='infoboard') and (InfoBoardToken<>'') then
+                  AObj.AddPair('InfoBoardPublicToken', InfoBoardToken)
+                else
+                  AObj.AddPair('InfoBoardPublicToken', TJSONNull.Create);
                 OutObj.AddPair('Assignment', AObj);
 
                 Response.StatusCode := 200; Response.ContentType := 'application/json';
@@ -4187,6 +4220,826 @@ begin
           end;
         finally C.Free; end;
       finally M0.Free; end;
+    end;
+
+    // Organization info boards: /organizations/{OrganizationId}/infoboards
+    if (Copy(NormalizedPath, 1, 15) = '/organizations/') and
+       (Pos('/infoboards', NormalizedPath) > 0) and
+       (Pos('/sections', NormalizedPath) = 0) and (Pos('/items', NormalizedPath) = 0) then
+    begin
+      var OrgIdStr := Copy(NormalizedPath, 16, MaxInt);
+      var Slash := Pos('/', OrgIdStr); if Slash>0 then OrgIdStr := Copy(OrgIdStr, 1, Slash-1);
+      var OrgId := StrToIntDef(OrgIdStr,0); if OrgId=0 then begin JSONError(400,'Invalid organization id'); Exit; end;
+
+      if SameText(Request.Method,'GET') then
+      begin
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
+        var L := TInfoBoardRepository.ListByOrganization(OrgId);
+        try
+          var Arr := TJSONArray.Create; try
+            for var B in L do
+            begin
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(B.Id));
+              O.AddPair('OrganizationId', TJSONNumber.Create(B.OrganizationId));
+              O.AddPair('Name', B.Name);
+              O.AddPair('BoardType', B.BoardType);
+              O.AddPair('Orientation', B.Orientation);
+              O.AddPair('TemplateKey', B.TemplateKey);
+              O.AddPair('PublicToken', B.PublicToken);
+              var Theme := TJSONObject.ParseJSONValue(B.ThemeConfigJson);
+              if Theme=nil then Theme := TJSONObject.Create;
+              O.AddPair('ThemeConfig', Theme);
+              Arr.AddElement(O);
+            end;
+            var Wrapper := TJSONObject.Create; try
+              Wrapper.AddPair('value', Arr);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+            finally Wrapper.Free; end;
+          finally Arr.Free; end;
+        finally L.Free; end;
+        Exit;
+      end
+      else if SameText(Request.Method,'POST') then
+      begin
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>OrgId then begin JSONError(403,'Forbidden'); Exit; end;
+        if TryReplayIdempotency(OrgId) then Exit;
+        var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+        try
+          if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+          var Name := Body.GetValue<string>('Name','');
+          var BoardType := Body.GetValue<string>('BoardType','');
+          var Orientation := Body.GetValue<string>('Orientation','');
+          var TemplateKey := Body.GetValue<string>('TemplateKey','');
+          var ThemeVal := Body.GetValue('ThemeConfig');
+          var ThemeJson := '{}';
+          if (ThemeVal<>nil) and (not (ThemeVal is TJSONNull)) then ThemeJson := ThemeVal.ToJSON;
+          if Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+          if BoardType='' then BoardType := 'directory';
+          if Orientation='' then Orientation := 'Landscape';
+          if TemplateKey='' then TemplateKey := 'standard';
+          var PublicToken := TGUID.NewGuid.ToString.Replace('{','').Replace('}','').Replace('-','');
+          var B := TInfoBoardRepository.CreateInfoBoard(OrgId, Name, BoardType, Orientation, TemplateKey, ThemeJson, PublicToken);
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(B.Id));
+            O.AddPair('OrganizationId', TJSONNumber.Create(B.OrganizationId));
+            O.AddPair('Name', B.Name);
+            O.AddPair('BoardType', B.BoardType);
+            O.AddPair('Orientation', B.Orientation);
+            O.AddPair('TemplateKey', B.TemplateKey);
+            O.AddPair('PublicToken', B.PublicToken);
+            var Theme := TJSONObject.ParseJSONValue(B.ThemeConfigJson);
+            if Theme=nil then Theme := TJSONObject.Create;
+            O.AddPair('ThemeConfig', Theme);
+            var OutBody := O.ToJSON;
+            O.Free;
+            StoreIdempotency(OrgId, 201, OutBody);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+          finally B.Free; end;
+        finally Body.Free; end;
+        Exit;
+      end;
+    end;
+
+    // Info Board CRUD: /infoboards/{id}
+    if (Copy(NormalizedPath, 1, 12) = '/infoboards/') and
+       (Pos('/display-assignments', NormalizedPath) = 0) and
+       (Pos('/sections', NormalizedPath) = 0) and
+       (Pos('/duplicate', NormalizedPath) = 0) then
+    begin
+      var Tail := Copy(NormalizedPath, 13, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var BoardId := StrToIntDef(IdStr,0); if BoardId=0 then begin JSONError(400,'Invalid info board id'); Exit; end;
+
+      var B := TInfoBoardRepository.GetById(BoardId);
+      if B=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+        end
+        else
+        begin
+          if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>B.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        if SameText(Request.Method,'GET') then
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(B.Id));
+          O.AddPair('OrganizationId', TJSONNumber.Create(B.OrganizationId));
+          O.AddPair('Name', B.Name);
+          O.AddPair('BoardType', B.BoardType);
+          O.AddPair('Orientation', B.Orientation);
+          O.AddPair('TemplateKey', B.TemplateKey);
+          O.AddPair('PublicToken', B.PublicToken);
+          var Theme := TJSONObject.ParseJSONValue(B.ThemeConfigJson);
+          if Theme=nil then Theme := TJSONObject.Create;
+          O.AddPair('ThemeConfig', Theme);
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+          O.Free;
+          Exit;
+        end
+        else if SameText(Request.Method,'PUT') or SameText(Request.Method,'PATCH') then
+        begin
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var NewName := Body.GetValue<string>('Name','');
+            var NewBoardType := Body.GetValue<string>('BoardType','');
+            var NewOrientation := Body.GetValue<string>('Orientation','');
+            var NewTemplateKey := Body.GetValue<string>('TemplateKey','');
+            var ThemeVal := Body.GetValue('ThemeConfig');
+            var NewThemeJson := '';
+            if (ThemeVal<>nil) and (not (ThemeVal is TJSONNull)) then NewThemeJson := ThemeVal.ToJSON;
+            if NewName='' then NewName := B.Name;
+            if NewBoardType='' then NewBoardType := B.BoardType;
+            if NewOrientation='' then NewOrientation := B.Orientation;
+            if NewTemplateKey='' then NewTemplateKey := B.TemplateKey;
+            if NewThemeJson='' then NewThemeJson := B.ThemeConfigJson;
+            var Updated := TInfoBoardRepository.UpdateInfoBoard(BoardId, NewName, NewBoardType, NewOrientation, NewTemplateKey, NewThemeJson);
+            try
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(Updated.Id));
+              O.AddPair('OrganizationId', TJSONNumber.Create(Updated.OrganizationId));
+              O.AddPair('Name', Updated.Name);
+              O.AddPair('BoardType', Updated.BoardType);
+              O.AddPair('Orientation', Updated.Orientation);
+              O.AddPair('TemplateKey', Updated.TemplateKey);
+              O.AddPair('PublicToken', Updated.PublicToken);
+              var Theme := TJSONObject.ParseJSONValue(Updated.ThemeConfigJson);
+              if Theme=nil then Theme := TJSONObject.Create;
+              O.AddPair('ThemeConfig', Theme);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+              O.Free;
+            finally Updated.Free; end;
+          finally Body.Free; end;
+          Exit;
+        end
+        else if SameText(Request.Method,'DELETE') then
+        begin
+          TInfoBoardRepository.DeleteInfoBoard(BoardId);
+          Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+          Exit;
+        end;
+      finally B.Free; end;
+    end;
+
+    // Info Board duplicate: /infoboards/{id}/duplicate
+    if (Copy(NormalizedPath, 1, 12) = '/infoboards/') and (Pos('/duplicate', NormalizedPath) > 0) and SameText(Request.Method,'POST') then
+    begin
+      var Tail := Copy(NormalizedPath, 13, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var BoardId := StrToIntDef(IdStr,0); if BoardId=0 then begin JSONError(400,'Invalid info board id'); Exit; end;
+      var B := TInfoBoardRepository.GetById(BoardId);
+      if B=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        if TokOrg<>B.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+        var NewPublicToken := TGUID.NewGuid.ToString.Replace('{','').Replace('}','').Replace('-','');
+        var NewB := TInfoBoardRepository.CreateInfoBoard(B.OrganizationId, B.Name + ' (Copy)', B.BoardType, B.Orientation, B.TemplateKey, B.ThemeConfigJson, NewPublicToken);
+        try
+          // Copy sections and items
+          var Secs := TInfoBoardSectionRepository.ListByInfoBoard(B.Id);
+          try
+            for var Sec in Secs do
+            begin
+              var NewSec := TInfoBoardSectionRepository.CreateSection(NewB.Id, Sec.Name, Sec.Subtitle, Sec.IconEmoji, Sec.IconUrl, Sec.BackgroundColor, Sec.TitleColor, Sec.LayoutStyle, Sec.DisplayOrder);
+              try
+                var Items := TInfoBoardItemRepository.ListBySection(Sec.Id);
+                try
+                  for var Item in Items do
+                  begin
+                    TInfoBoardItemRepository.CreateItem(NewSec.Id, Item.ItemType, Item.Title, Item.Subtitle, Item.Description, Item.ImageUrl, Item.IconEmoji, Item.Location, Item.ContactInfo, Item.QrCodeUrl, Item.MapPositionJson, Item.TagsJson, Item.HighlightColor, Item.DisplayOrder, Item.IsVisible);
+                  end;
+                finally Items.Free; end;
+              finally NewSec.Free; end;
+            end;
+          finally Secs.Free; end;
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(NewB.Id));
+          O.AddPair('OrganizationId', TJSONNumber.Create(NewB.OrganizationId));
+          O.AddPair('Name', NewB.Name);
+          O.AddPair('BoardType', NewB.BoardType);
+          O.AddPair('Orientation', NewB.Orientation);
+          O.AddPair('TemplateKey', NewB.TemplateKey);
+          O.AddPair('PublicToken', NewB.PublicToken);
+          Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+          O.Free;
+        finally NewB.Free; end;
+      finally B.Free; end;
+      Exit;
+    end;
+
+    // Info Board display assignments: /infoboards/{id}/display-assignments
+    if (Copy(NormalizedPath, 1, 12) = '/infoboards/') and (Pos('/display-assignments', NormalizedPath) > 0) then
+    begin
+      var Tail := Copy(NormalizedPath, 13, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var BoardId := StrToIntDef(IdStr,0); if BoardId=0 then begin JSONError(400,'Invalid info board id'); Exit; end;
+      var B := TInfoBoardRepository.GetById(BoardId);
+      if B=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['assignments:read'], TokOrg, TokUser, TokRole) then Exit;
+        end
+        else
+        begin
+          if not RequireAuth(['assignments:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>B.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        var C := NewConnection;
+        try
+          if SameText(Request.Method,'GET') then
+          begin
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text := 'select DisplayInfoBoardID, DisplayID, IsPrimary from DisplayInfoBoards where InfoBoardID=:B';
+              Q.ParamByName('B').AsInteger := BoardId;
+              Q.Open;
+              var Arr := TJSONArray.Create;
+              while not Q.Eof do
+              begin
+                var O := TJSONObject.Create;
+                O.AddPair('DisplayInfoBoardId', TJSONNumber.Create(Q.FieldByName('DisplayInfoBoardID').AsInteger));
+                O.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
+                O.AddPair('IsPrimary', TJSONBool.Create(Q.FieldByName('IsPrimary').AsBoolean));
+                Arr.AddElement(O);
+                Q.Next;
+              end;
+              var Wrapper := TJSONObject.Create;
+              Wrapper.AddPair('value', Arr);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+              Wrapper.Free;
+            finally Q.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'PUT') then
+          begin
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var SetPrimary := Body.GetValue<Boolean>('SetPrimary', False);
+              var IdsArr := Body.GetValue<TJSONArray>('DisplayIds');
+              var Csv := '';
+              if IdsArr<>nil then
+              begin
+                for var i := 0 to IdsArr.Count-1 do
+                begin
+                  var v := IdsArr.Items[i];
+                  var idVal := 0;
+                  if v is TJSONNumber then idVal := (v as TJSONNumber).AsInt
+                  else if v is TJSONString then idVal := StrToIntDef((v as TJSONString).Value, 0);
+                  if idVal>0 then
+                  begin
+                    if Csv<>'' then Csv := Csv + ',';
+                    Csv := Csv + IntToStr(idVal);
+                  end;
+                end;
+              end;
+
+              // Delete existing assignments for this info board
+              var QDel := TFDQuery.Create(nil);
+              try
+                QDel.Connection := C;
+                QDel.SQL.Text := 'delete from DisplayInfoBoards where InfoBoardID=:B';
+                QDel.ParamByName('B').AsInteger := BoardId;
+                QDel.ExecSQL;
+              finally QDel.Free; end;
+
+              if Csv<>'' then
+              begin
+                // Clear other content assignments when assigning info board
+                var QClearMenus := TFDQuery.Create(nil);
+                try
+                  QClearMenus.Connection := C;
+                  QClearMenus.SQL.Text :=
+                    'delete from DisplayMenus dm using Displays d ' +
+                    'where dm.DisplayID = d.DisplayID ' +
+                    'and d.OrganizationID = :Org ' +
+                    'and dm.DisplayID = any(string_to_array(:Ids,'','')::int[])';
+                  QClearMenus.ParamByName('Org').AsInteger := B.OrganizationId;
+                  QClearMenus.ParamByName('Ids').AsString := Csv;
+                  QClearMenus.ExecSQL;
+                finally QClearMenus.Free; end;
+
+                var QClearCampaigns := TFDQuery.Create(nil);
+                try
+                  QClearCampaigns.Connection := C;
+                  QClearCampaigns.SQL.Text :=
+                    'delete from DisplayCampaigns dc using Displays d ' +
+                    'where dc.DisplayID = d.DisplayID ' +
+                    'and d.OrganizationID = :Org ' +
+                    'and dc.DisplayID = any(string_to_array(:Ids,'','')::int[])';
+                  QClearCampaigns.ParamByName('Org').AsInteger := B.OrganizationId;
+                  QClearCampaigns.ParamByName('Ids').AsString := Csv;
+                  QClearCampaigns.ExecSQL;
+                finally QClearCampaigns.Free; end;
+
+                // Insert new assignments
+                var QIns := TFDQuery.Create(nil);
+                try
+                  QIns.Connection := C;
+                  QIns.SQL.Text :=
+                    'insert into DisplayInfoBoards (DisplayID, InfoBoardID, IsPrimary) ' +
+                    'select distinct d.DisplayID, :B as InfoBoardID, :P as IsPrimary ' +
+                    'from Displays d ' +
+                    'join unnest(string_to_array(:Ids,'','')) as x on d.DisplayID = x::int ' +
+                    'where d.OrganizationID = :Org';
+                  QIns.ParamByName('B').AsInteger := BoardId;
+                  QIns.ParamByName('P').AsBoolean := SetPrimary;
+                  QIns.ParamByName('Ids').AsString := Csv;
+                  QIns.ParamByName('Org').AsInteger := B.OrganizationId;
+                  QIns.ExecSQL;
+                finally QIns.Free; end;
+              end;
+
+              Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+            finally Body.Free; end;
+            Exit;
+          end;
+        finally C.Free; end;
+      finally B.Free; end;
+    end;
+
+    // Public info board JSON: /public/infoboards/{token}
+    if (Copy(NormalizedPath, 1, 19) = '/public/infoboards/') and SameText(Request.Method,'GET') then
+    begin
+      var Token := Copy(NormalizedPath, 20, MaxInt);
+      if Token='' then begin JSONError(400,'Missing token'); Exit; end;
+      var B := TInfoBoardRepository.GetByPublicToken(Token);
+      if B=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var Root := TJSONObject.Create;
+        Root.AddPair('Id', TJSONNumber.Create(B.Id));
+        Root.AddPair('Name', B.Name);
+        Root.AddPair('BoardType', B.BoardType);
+        Root.AddPair('Orientation', B.Orientation);
+        Root.AddPair('TemplateKey', B.TemplateKey);
+        var Theme := TJSONObject.ParseJSONValue(B.ThemeConfigJson);
+        if Theme=nil then Theme := TJSONObject.Create;
+        Root.AddPair('ThemeConfig', Theme);
+
+        var SectionsArr := TJSONArray.Create;
+        var Secs := TInfoBoardSectionRepository.ListByInfoBoard(B.Id);
+        try
+          for var S in Secs do
+          begin
+            var SO := TJSONObject.Create;
+            SO.AddPair('Id', TJSONNumber.Create(S.Id));
+            SO.AddPair('Name', S.Name);
+            if Trim(S.Subtitle)<>'' then SO.AddPair('Subtitle', S.Subtitle) else SO.AddPair('Subtitle', TJSONNull.Create);
+            if Trim(S.IconEmoji)<>'' then SO.AddPair('IconEmoji', S.IconEmoji) else SO.AddPair('IconEmoji', TJSONNull.Create);
+            if Trim(S.IconUrl)<>'' then SO.AddPair('IconUrl', S.IconUrl) else SO.AddPair('IconUrl', TJSONNull.Create);
+            if Trim(S.BackgroundColor)<>'' then SO.AddPair('BackgroundColor', S.BackgroundColor) else SO.AddPair('BackgroundColor', TJSONNull.Create);
+            if Trim(S.TitleColor)<>'' then SO.AddPair('TitleColor', S.TitleColor) else SO.AddPair('TitleColor', TJSONNull.Create);
+            SO.AddPair('LayoutStyle', S.LayoutStyle);
+            SO.AddPair('DisplayOrder', TJSONNumber.Create(S.DisplayOrder));
+
+            var ItemsArr := TJSONArray.Create;
+            var Items := TInfoBoardItemRepository.ListBySection(S.Id);
+            try
+              for var It in Items do
+              begin
+                if not It.IsVisible then Continue;
+                var IO := TJSONObject.Create;
+                IO.AddPair('Id', TJSONNumber.Create(It.Id));
+                IO.AddPair('ItemType', It.ItemType);
+                IO.AddPair('Title', It.Title);
+                if Trim(It.Subtitle)<>'' then IO.AddPair('Subtitle', It.Subtitle) else IO.AddPair('Subtitle', TJSONNull.Create);
+                if Trim(It.Description)<>'' then IO.AddPair('Description', It.Description) else IO.AddPair('Description', TJSONNull.Create);
+                if Trim(It.ImageUrl)<>'' then IO.AddPair('ImageUrl', It.ImageUrl) else IO.AddPair('ImageUrl', TJSONNull.Create);
+                if Trim(It.IconEmoji)<>'' then IO.AddPair('IconEmoji', It.IconEmoji) else IO.AddPair('IconEmoji', TJSONNull.Create);
+                if Trim(It.Location)<>'' then IO.AddPair('Location', It.Location) else IO.AddPair('Location', TJSONNull.Create);
+                if Trim(It.ContactInfo)<>'' then IO.AddPair('ContactInfo', It.ContactInfo) else IO.AddPair('ContactInfo', TJSONNull.Create);
+                if Trim(It.QrCodeUrl)<>'' then IO.AddPair('QrCodeUrl', It.QrCodeUrl) else IO.AddPair('QrCodeUrl', TJSONNull.Create);
+                if Trim(It.HighlightColor)<>'' then IO.AddPair('HighlightColor', It.HighlightColor) else IO.AddPair('HighlightColor', TJSONNull.Create);
+                IO.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
+                ItemsArr.AddElement(IO);
+              end;
+            finally Items.Free; end;
+            SO.AddPair('Items', ItemsArr);
+            SectionsArr.AddElement(SO);
+          end;
+        finally Secs.Free; end;
+
+        Root.AddPair('Sections', SectionsArr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+        Exit;
+      finally B.Free; end;
+    end;
+
+    // InfoBoard Sections: /infoboards/{id}/sections
+    if (Copy(NormalizedPath, 1, 12) = '/infoboards/') and (Pos('/sections', NormalizedPath) > 0) and (Pos('/items', NormalizedPath) = 0) then
+    begin
+      var IdStr := Copy(NormalizedPath, 13, MaxInt);
+      var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
+      var BoardId := StrToIntDef(IdStr,0); if BoardId=0 then begin JSONError(400,'Invalid board id'); Exit; end;
+
+      var B := TInfoBoardRepository.GetById(BoardId);
+      if B=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['infoboards:read'], TokOrg, TokUser, TokRole) then Exit;
+        end
+        else
+        begin
+          if not RequireAuth(['infoboards:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>B.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        if SameText(Request.Method,'GET') then
+        begin
+          var L := TInfoBoardSectionRepository.ListByInfoBoard(BoardId);
+          try
+            var Arr := TJSONArray.Create;
+            for var S in L do
+            begin
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(S.Id));
+              O.AddPair('InfoBoardId', TJSONNumber.Create(S.InfoBoardId));
+              O.AddPair('Title', S.Name);
+              O.AddPair('DisplayOrder', TJSONNumber.Create(S.DisplayOrder));
+              O.AddPair('LayoutType', S.LayoutStyle);
+              if Trim(S.BackgroundColor)<>'' then O.AddPair('BackgroundColor', S.BackgroundColor) else O.AddPair('BackgroundColor', TJSONNull.Create);
+              if Trim(S.TitleColor)<>'' then O.AddPair('TextColor', S.TitleColor) else O.AddPair('TextColor', TJSONNull.Create);
+              Arr.AddElement(O);
+            end;
+            var Wrapper := TJSONObject.Create;
+            try
+              Wrapper.AddPair('value', Arr);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+            finally Wrapper.Free; end;
+          finally L.Free; end;
+          Exit;
+        end
+        else if SameText(Request.Method,'POST') then
+        begin
+          if TryReplayIdempotency(B.OrganizationId) then Exit;
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          try
+            if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+            var TitleVal := Body.GetValue('Title');
+            if (TitleVal=nil) or (TitleVal is TJSONNull) or (Trim(TitleVal.Value)='') then begin JSONError(400,'Title required'); Exit; end;
+
+            var LayoutVal := Body.GetValue('LayoutType');
+            var Layout := 'grid';
+            if (LayoutVal<>nil) and (not (LayoutVal is TJSONNull)) then Layout := LayoutVal.Value;
+
+            var OrderVal := Body.GetValue('DisplayOrder');
+            var Order := 1;
+            if (OrderVal<>nil) and (not (OrderVal is TJSONNull)) then
+            begin
+              if OrderVal is TJSONNumber then Order := TJSONNumber(OrderVal).AsInt else Order := StrToIntDef(OrderVal.Value, 1);
+            end;
+
+            var BgVal := Body.GetValue('BackgroundColor');
+            var Bg := '';
+            if (BgVal<>nil) and (not (BgVal is TJSONNull)) then Bg := BgVal.Value;
+
+            var TxVal := Body.GetValue('TextColor');
+            var Tx := '';
+            if (TxVal<>nil) and (not (TxVal is TJSONNull)) then Tx := TxVal.Value;
+
+            var S := TInfoBoardSectionRepository.CreateSection(BoardId, TitleVal.Value, '', '', '', Bg, Tx, Layout, Order);
+            try
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(S.Id));
+              O.AddPair('InfoBoardId', TJSONNumber.Create(S.InfoBoardId));
+              O.AddPair('Title', S.Name);
+              O.AddPair('DisplayOrder', TJSONNumber.Create(S.DisplayOrder));
+              O.AddPair('LayoutType', S.LayoutStyle);
+              if Trim(S.BackgroundColor)<>'' then O.AddPair('BackgroundColor', S.BackgroundColor) else O.AddPair('BackgroundColor', TJSONNull.Create);
+              if Trim(S.TitleColor)<>'' then O.AddPair('TextColor', S.TitleColor) else O.AddPair('TextColor', TJSONNull.Create);
+              var OutBody := O.ToJSON;
+              O.Free;
+              StoreIdempotency(B.OrganizationId, 201, OutBody);
+              Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+            finally S.Free; end;
+          finally Body.Free; end;
+          Exit;
+        end;
+      finally B.Free; end;
+    end;
+
+    // InfoBoard Section CRUD: /infoboard-sections/{id}
+    if (Copy(NormalizedPath, 1, 20) = '/infoboard-sections/') and (Pos('/items', NormalizedPath) = 0) then
+    begin
+      var IdStr := Copy(NormalizedPath, 21, MaxInt);
+      if Pos('/', IdStr) > 0 then IdStr := Copy(IdStr, 1, Pos('/', IdStr)-1);
+      var SectionId := StrToIntDef(IdStr,0); if SectionId=0 then begin JSONError(400,'Invalid section id'); Exit; end;
+
+      var S := TInfoBoardSectionRepository.GetById(SectionId);
+      if S=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var B := TInfoBoardRepository.GetById(S.InfoBoardId);
+        if B=nil then begin JSONError(404,'Board not found'); S.Free; Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['infoboards:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['infoboards:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>B.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          if SameText(Request.Method,'GET') then
+          begin
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(S.Id));
+            O.AddPair('InfoBoardId', TJSONNumber.Create(S.InfoBoardId));
+            O.AddPair('Title', S.Name);
+            O.AddPair('DisplayOrder', TJSONNumber.Create(S.DisplayOrder));
+            O.AddPair('LayoutType', S.LayoutStyle);
+            if Trim(S.BackgroundColor)<>'' then O.AddPair('BackgroundColor', S.BackgroundColor) else O.AddPair('BackgroundColor', TJSONNull.Create);
+            if Trim(S.TitleColor)<>'' then O.AddPair('TextColor', S.TitleColor) else O.AddPair('TextColor', TJSONNull.Create);
+            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+            O.Free;
+            Exit;
+          end
+          else if SameText(Request.Method,'PUT') then
+          begin
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var TitleVal := Body.GetValue('Title');
+              if (TitleVal<>nil) and (not (TitleVal is TJSONNull)) then S.Name := TitleVal.Value;
+
+              var LayoutVal := Body.GetValue('LayoutType');
+              if (LayoutVal<>nil) and (not (LayoutVal is TJSONNull)) then S.LayoutStyle := LayoutVal.Value;
+
+              var OrderVal := Body.GetValue('DisplayOrder');
+              if (OrderVal<>nil) and (not (OrderVal is TJSONNull)) then
+              begin
+                if OrderVal is TJSONNumber then S.DisplayOrder := TJSONNumber(OrderVal).AsInt else S.DisplayOrder := StrToIntDef(OrderVal.Value, S.DisplayOrder);
+              end;
+
+              var BgVal := Body.GetValue('BackgroundColor');
+              if (BgVal<>nil) and (not (BgVal is TJSONNull)) then S.BackgroundColor := BgVal.Value;
+
+              var TxVal := Body.GetValue('TextColor');
+              if (TxVal<>nil) and (not (TxVal is TJSONNull)) then S.TitleColor := TxVal.Value;
+
+              var UpdS := TInfoBoardSectionRepository.UpdateSection(S.Id, S.Name, S.Subtitle, S.IconEmoji, S.IconUrl, S.BackgroundColor, S.TitleColor, S.LayoutStyle, S.DisplayOrder);
+              try
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(UpdS.Id));
+                O.AddPair('InfoBoardId', TJSONNumber.Create(UpdS.InfoBoardId));
+                O.AddPair('Title', UpdS.Name);
+                O.AddPair('DisplayOrder', TJSONNumber.Create(UpdS.DisplayOrder));
+                O.AddPair('LayoutType', UpdS.LayoutStyle);
+                if Trim(UpdS.BackgroundColor)<>'' then O.AddPair('BackgroundColor', UpdS.BackgroundColor) else O.AddPair('BackgroundColor', TJSONNull.Create);
+                if Trim(UpdS.TitleColor)<>'' then O.AddPair('TextColor', UpdS.TitleColor) else O.AddPair('TextColor', TJSONNull.Create);
+                Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+                O.Free;
+              finally UpdS.Free; end;
+            finally Body.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'DELETE') then
+          begin
+            TInfoBoardSectionRepository.DeleteSection(SectionId);
+            Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+            Exit;
+          end;
+        finally B.Free; end;
+      finally S.Free; end;
+    end;
+
+    // InfoBoard Section Items: /infoboard-sections/{id}/items
+    if (Copy(NormalizedPath, 1, 20) = '/infoboard-sections/') and (Pos('/items', NormalizedPath) > 0) then
+    begin
+      var IdStr := Copy(NormalizedPath, 21, MaxInt);
+      var Slash := Pos('/', IdStr); if Slash>0 then IdStr := Copy(IdStr,1,Slash-1);
+      var SectionId := StrToIntDef(IdStr,0); if SectionId=0 then begin JSONError(400,'Invalid section id'); Exit; end;
+
+      var S := TInfoBoardSectionRepository.GetById(SectionId);
+      if S=nil then begin JSONError(404,'Section not found'); Exit; end;
+      try
+        var B := TInfoBoardRepository.GetById(S.InfoBoardId);
+        if B=nil then begin JSONError(404,'Board not found'); S.Free; Exit; end;
+        try
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if SameText(Request.Method,'GET') then
+          begin
+            if not RequireAuth(['infoboards:read'], TokOrg, TokUser, TokRole) then Exit;
+          end
+          else
+          begin
+            if not RequireAuth(['infoboards:write'], TokOrg, TokUser, TokRole) then Exit;
+          end;
+          if TokOrg<>B.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          if SameText(Request.Method,'GET') then
+          begin
+            var L := TInfoBoardItemRepository.ListBySection(SectionId);
+            try
+              var Arr := TJSONArray.Create;
+              for var It in L do
+              begin
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(It.Id));
+                O.AddPair('SectionId', TJSONNumber.Create(It.SectionId));
+                O.AddPair('ItemType', It.ItemType);
+                O.AddPair('Title', It.Title);
+                if Trim(It.Subtitle)<>'' then O.AddPair('Subtitle', It.Subtitle) else O.AddPair('Subtitle', TJSONNull.Create);
+                if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+                if Trim(It.ImageUrl)<>'' then O.AddPair('ImageUrl', It.ImageUrl) else O.AddPair('ImageUrl', TJSONNull.Create);
+                if Trim(It.Location)<>'' then O.AddPair('LinkUrl', It.Location) else O.AddPair('LinkUrl', TJSONNull.Create);
+                O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
+                Arr.AddElement(O);
+              end;
+              var Wrapper := TJSONObject.Create;
+              try
+                Wrapper.AddPair('value', Arr);
+                Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Wrapper.ToJSON; Response.SendResponse;
+              finally Wrapper.Free; end;
+            finally L.Free; end;
+            Exit;
+          end
+          else if SameText(Request.Method,'POST') then
+          begin
+            if TryReplayIdempotency(B.OrganizationId) then Exit;
+            var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+            try
+              if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+              var TitleVal := Body.GetValue('Title');
+              if (TitleVal=nil) or (TitleVal is TJSONNull) or (Trim(TitleVal.Value)='') then begin JSONError(400,'Title required'); Exit; end;
+
+              var ItemTypeVal := Body.GetValue('ItemType');
+              var ItemType := 'text';
+              if (ItemTypeVal<>nil) and (not (ItemTypeVal is TJSONNull)) then ItemType := ItemTypeVal.Value;
+
+              var SubtitleVal := Body.GetValue('Subtitle');
+              var Subtitle := '';
+              if (SubtitleVal<>nil) and (not (SubtitleVal is TJSONNull)) then Subtitle := SubtitleVal.Value;
+
+              var DescVal := Body.GetValue('Description');
+              var Desc := '';
+              if (DescVal<>nil) and (not (DescVal is TJSONNull)) then Desc := DescVal.Value;
+
+              var ImgVal := Body.GetValue('ImageUrl');
+              var ImgUrl := '';
+              if (ImgVal<>nil) and (not (ImgVal is TJSONNull)) then ImgUrl := ImgVal.Value;
+
+              var LinkVal := Body.GetValue('LinkUrl');
+              var LinkUrl := '';
+              if (LinkVal<>nil) and (not (LinkVal is TJSONNull)) then LinkUrl := LinkVal.Value;
+
+              var OrderVal := Body.GetValue('DisplayOrder');
+              var Order := 1;
+              if (OrderVal<>nil) and (not (OrderVal is TJSONNull)) then
+              begin
+                if OrderVal is TJSONNumber then
+                  Order := TJSONNumber(OrderVal).AsInt
+                else
+                  Order := StrToIntDef(OrderVal.Value, 1);
+              end;
+
+              var It := TInfoBoardItemRepository.CreateItem(SectionId, ItemType, TitleVal.Value, Subtitle, Desc, ImgUrl, '', LinkUrl, '', '', '', '', '', Order, True);
+              try
+                var O := TJSONObject.Create;
+                O.AddPair('Id', TJSONNumber.Create(It.Id));
+                O.AddPair('SectionId', TJSONNumber.Create(It.SectionId));
+                O.AddPair('ItemType', It.ItemType);
+                O.AddPair('Title', It.Title);
+                if Trim(It.Subtitle)<>'' then O.AddPair('Subtitle', It.Subtitle) else O.AddPair('Subtitle', TJSONNull.Create);
+                if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+                if Trim(It.ImageUrl)<>'' then O.AddPair('ImageUrl', It.ImageUrl) else O.AddPair('ImageUrl', TJSONNull.Create);
+                if Trim(It.Location)<>'' then O.AddPair('LinkUrl', It.Location) else O.AddPair('LinkUrl', TJSONNull.Create);
+                O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
+                var OutBody := O.ToJSON;
+                O.Free;
+                StoreIdempotency(B.OrganizationId, 201, OutBody);
+                Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+              finally It.Free; end;
+            finally Body.Free; end;
+            Exit;
+          end;
+        finally B.Free; end;
+      finally S.Free; end;
+    end;
+
+    // InfoBoard Item CRUD: /infoboard-items/{id}
+    if (Copy(NormalizedPath, 1, 17) = '/infoboard-items/') then
+    begin
+      var IdStr := Copy(NormalizedPath, 18, MaxInt);
+      if Pos('/', IdStr) > 0 then IdStr := Copy(IdStr, 1, Pos('/', IdStr)-1);
+      var ItemId := StrToIntDef(IdStr,0); if ItemId=0 then begin JSONError(400,'Invalid item id'); Exit; end;
+
+      var It := TInfoBoardItemRepository.GetById(ItemId);
+      if It=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var S := TInfoBoardSectionRepository.GetById(It.SectionId);
+        if S=nil then begin JSONError(404,'Section not found'); It.Free; Exit; end;
+        try
+          var B := TInfoBoardRepository.GetById(S.InfoBoardId);
+          if B=nil then begin JSONError(404,'Board not found'); S.Free; It.Free; Exit; end;
+          try
+            var TokOrg, TokUser: Integer; var TokRole: string;
+            if SameText(Request.Method,'GET') then
+            begin
+              if not RequireAuth(['infoboards:read'], TokOrg, TokUser, TokRole) then Exit;
+            end
+            else
+            begin
+              if not RequireAuth(['infoboards:write'], TokOrg, TokUser, TokRole) then Exit;
+            end;
+            if TokOrg<>B.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+            if SameText(Request.Method,'GET') then
+            begin
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(It.Id));
+              O.AddPair('SectionId', TJSONNumber.Create(It.SectionId));
+              O.AddPair('ItemType', It.ItemType);
+              O.AddPair('Title', It.Title);
+              if Trim(It.Subtitle)<>'' then O.AddPair('Subtitle', It.Subtitle) else O.AddPair('Subtitle', TJSONNull.Create);
+              if Trim(It.Description)<>'' then O.AddPair('Description', It.Description) else O.AddPair('Description', TJSONNull.Create);
+              if Trim(It.ImageUrl)<>'' then O.AddPair('ImageUrl', It.ImageUrl) else O.AddPair('ImageUrl', TJSONNull.Create);
+              if Trim(It.Location)<>'' then O.AddPair('LinkUrl', It.Location) else O.AddPair('LinkUrl', TJSONNull.Create);
+              O.AddPair('DisplayOrder', TJSONNumber.Create(It.DisplayOrder));
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+              O.Free;
+              Exit;
+            end
+            else if SameText(Request.Method,'PUT') then
+            begin
+              var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+              try
+                if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+                var TitleVal := Body.GetValue('Title');
+                if (TitleVal<>nil) and (not (TitleVal is TJSONNull)) then It.Title := TitleVal.Value;
+
+                var ItemTypeVal := Body.GetValue('ItemType');
+                if (ItemTypeVal<>nil) and (not (ItemTypeVal is TJSONNull)) then It.ItemType := ItemTypeVal.Value;
+
+                var SubtitleVal := Body.GetValue('Subtitle');
+                if (SubtitleVal<>nil) and (not (SubtitleVal is TJSONNull)) then It.Subtitle := SubtitleVal.Value;
+
+                var DescVal := Body.GetValue('Description');
+                if (DescVal<>nil) and (not (DescVal is TJSONNull)) then It.Description := DescVal.Value;
+
+                var ImgVal := Body.GetValue('ImageUrl');
+                if (ImgVal<>nil) and (not (ImgVal is TJSONNull)) then It.ImageUrl := ImgVal.Value;
+
+                var LinkVal := Body.GetValue('LinkUrl');
+                if (LinkVal<>nil) and (not (LinkVal is TJSONNull)) then It.Location := LinkVal.Value;
+
+                var OrderVal := Body.GetValue('DisplayOrder');
+                if (OrderVal<>nil) and (not (OrderVal is TJSONNull)) then
+                begin
+                  if OrderVal is TJSONNumber then It.DisplayOrder := TJSONNumber(OrderVal).AsInt else It.DisplayOrder := StrToIntDef(OrderVal.Value, It.DisplayOrder);
+                end;
+
+                var UpdIt := TInfoBoardItemRepository.UpdateItem(It.Id, It.ItemType, It.Title, It.Subtitle, It.Description, It.ImageUrl, It.IconEmoji, It.Location, It.ContactInfo, It.QrCodeUrl, It.MapPositionJson, It.TagsJson, It.HighlightColor, It.DisplayOrder, It.IsVisible);
+                try
+                  var O := TJSONObject.Create;
+                  O.AddPair('Id', TJSONNumber.Create(UpdIt.Id));
+                  O.AddPair('SectionId', TJSONNumber.Create(UpdIt.SectionId));
+                  O.AddPair('ItemType', UpdIt.ItemType);
+                  O.AddPair('Title', UpdIt.Title);
+                  if Trim(UpdIt.Subtitle)<>'' then O.AddPair('Subtitle', UpdIt.Subtitle) else O.AddPair('Subtitle', TJSONNull.Create);
+                  if Trim(UpdIt.Description)<>'' then O.AddPair('Description', UpdIt.Description) else O.AddPair('Description', TJSONNull.Create);
+                  if Trim(UpdIt.ImageUrl)<>'' then O.AddPair('ImageUrl', UpdIt.ImageUrl) else O.AddPair('ImageUrl', TJSONNull.Create);
+                  if Trim(UpdIt.Location)<>'' then O.AddPair('LinkUrl', UpdIt.Location) else O.AddPair('LinkUrl', TJSONNull.Create);
+                  O.AddPair('DisplayOrder', TJSONNumber.Create(UpdIt.DisplayOrder));
+                  Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+                  O.Free;
+                finally UpdIt.Free; end;
+              finally Body.Free; end;
+              Exit;
+            end
+            else if SameText(Request.Method,'DELETE') then
+            begin
+              TInfoBoardItemRepository.DeleteItem(ItemId);
+              Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+              Exit;
+            end;
+          finally B.Free; end;
+        finally S.Free; end;
+      finally It.Free; end;
     end;
 
     // Campaigns and items

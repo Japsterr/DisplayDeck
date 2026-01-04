@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
     debugOverlay = findViewById(R.id.debugOverlay)
     versionOverlay = findViewById(R.id.versionOverlay)
 
-    versionOverlay.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+    versionOverlay.text = "v${BuildConfig.VERSION_NAME}"
 
     webView.settings.javaScriptEnabled = true
     webView.settings.domStorageEnabled = true
@@ -305,7 +305,7 @@ class MainActivity : AppCompatActivity() {
     hideOverlay()
     codeContainer.visibility = View.VISIBLE
     titleText.text = name?.takeIf { it.isNotBlank() } ?: "Waiting for content"
-    subtitleText.text = "No menu/campaign assigned"
+    subtitleText.text = "No menu/campaign/infoboard assigned"
     subtitleText.visibility = View.VISIBLE
   }
 
@@ -317,13 +317,28 @@ class MainActivity : AppCompatActivity() {
     hideOverlay()
     codeContainer.visibility = View.VISIBLE
     titleText.text = name?.takeIf { it.isNotBlank() } ?: "Waiting for content"
-    subtitleText.text = "No menu/campaign assigned"
+    subtitleText.text = "No menu/campaign/infoboard assigned"
     subtitleText.visibility = View.VISIBLE
   }
 
   private fun showMenu(publicToken: String) {
     val url = "${SettingsStore.PUBLIC_BASE_URL}/display/menu-ssr/$publicToken"
     val key = "menu:$publicToken"
+    if (currentContentKey == key && webView.visibility == View.VISIBLE) return
+
+    currentContentKey = key
+    stopCampaignPlayback()
+    stopVideo()
+    codeContainer.visibility = View.GONE
+    playerView.visibility = View.GONE
+    webView.visibility = View.VISIBLE
+    hideOverlay()
+    webView.loadUrl(url)
+  }
+
+  private fun showInfoBoard(publicToken: String) {
+    val url = "${SettingsStore.PUBLIC_BASE_URL}/display/infoboard-ssr/$publicToken"
+    val key = "infoboard:$publicToken"
     if (currentContentKey == key && webView.visibility == View.VISIBLE) return
 
     currentContentKey = key
@@ -436,7 +451,7 @@ class MainActivity : AppCompatActivity() {
       <!doctype html>
       <html>
         <head>
-          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <style>
             html,body{margin:0;height:100%;background:#000;display:flex;align-items:center;justify-content:center}
             .box{max-width:92vw;color:#fff;font:14px/1.3 monospace;white-space:pre-wrap;opacity:.95}
@@ -445,9 +460,9 @@ class MainActivity : AppCompatActivity() {
           </style>
         </head>
         <body>
-          <div class=\"box\">
-            <div class=\"t\">$safeTitle</div>
-            <div class=\"m\">$safeMessage</div>
+          <div class="box">
+            <div class="t">$safeTitle</div>
+            <div class="m">$safeMessage</div>
           </div>
         </body>
       </html>
@@ -540,7 +555,7 @@ class MainActivity : AppCompatActivity() {
             <!doctype html>
             <html>
               <head>
-                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
                 <style>
                   html,body{margin:0;height:100%;background:#000;overflow:hidden}
                   video{width:100%;height:100%;object-fit:cover}
@@ -548,30 +563,30 @@ class MainActivity : AppCompatActivity() {
                 </style>
               </head>
               <body>
-                <div id=\"err\"></div>
-                <video id=\"m\" autoplay muted playsinline loop></video>
+                <div id="err"></div>
+                <video id="m" autoplay muted playsinline loop></video>
                 <script>
                   (function(){
-                    const v = document.getElementById('m');
-                    const err = document.getElementById('err');
+                    var v = document.getElementById('m');
+                    var err = document.getElementById('err');
                     function show(msg){ err.style.display='block'; err.textContent = msg; }
                     function hide(){ err.style.display='none'; }
                     hide();
 
                     try { if (window.DD && DD.onJsStatus) DD.onJsStatus('started'); } catch (e) {}
 
-                    let u = '';
+                    var u = '';
                     try { u = atob('$urlB64'); } catch (e) { show('Video URL decode failed\n' + e); return; }
 
                     try { if (window.DD && DD.onJsStatus) DD.onJsStatus('url decoded'); } catch (e) {}
 
-                    const t = setTimeout(function(){ show('Video load timed out\n' + u); }, 8000);
+                    var t = setTimeout(function(){ show('Video load timed out\n' + u); }, 8000);
                     v.onloadeddata = function(){ clearTimeout(t); hide(); if (window.DD && DD.onMediaLoaded) DD.onMediaLoaded(); };
                     v.onerror = function(){ clearTimeout(t); show('Video failed to load\n' + u); if (window.DD && DD.onMediaError) DD.onMediaError('video failed'); };
                     v.src = u;
 
                     try { if (window.DD && DD.onJsStatus) DD.onJsStatus('src set'); } catch (e) {}
-                    const p = v.play();
+                    var p = v.play();
                     if (p && p.catch) p.catch(function(e){ clearTimeout(t); show('Video play blocked\n' + e + '\n' + u); if (window.DD && DD.onMediaError) DD.onMediaError('video play blocked'); });
                   })();
                 </script>
@@ -583,7 +598,7 @@ class MainActivity : AppCompatActivity() {
             <!doctype html>
             <html>
               <head>
-                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
                 <style>
                   html,body{margin:0;height:100%;background:#000;overflow:hidden}
                   img{width:100%;height:100%;object-fit:cover}
@@ -591,24 +606,24 @@ class MainActivity : AppCompatActivity() {
                 </style>
               </head>
               <body>
-                <div id=\"err\">Loading image…</div>
-                <img id=\"m\" />
+                <div id="err">Loading image…</div>
+                <img id="m" />
                 <script>
                   (function(){
-                    const img = document.getElementById('m');
-                    const err = document.getElementById('err');
+                    var img = document.getElementById('m');
+                    var err = document.getElementById('err');
                     function show(msg){ err.style.display='block'; err.textContent = msg; }
                     function hide(){ err.style.display='none'; }
                     show('Loading image…');
 
                     try { if (window.DD && DD.onJsStatus) DD.onJsStatus('started'); } catch (e) {}
 
-                    let u = '';
+                    var u = '';
                     try { u = atob('$urlB64'); } catch (e) { show('Image URL decode failed\n' + e); return; }
 
                     try { if (window.DD && DD.onJsStatus) DD.onJsStatus('url decoded'); } catch (e) {}
 
-                    const t = setTimeout(function(){ show('Image load timed out\n' + u); }, 8000);
+                    var t = setTimeout(function(){ show('Image load timed out\n' + u); }, 8000);
                     img.onload = function(){ clearTimeout(t); hide(); if (window.DD && DD.onMediaLoaded) DD.onMediaLoaded(); };
                     img.onerror = function(){ clearTimeout(t); show('Image failed to load\n' + u); if (window.DD && DD.onMediaError) DD.onMediaError('image failed'); };
                     img.src = u;
@@ -638,7 +653,7 @@ class MainActivity : AppCompatActivity() {
       <!doctype html>
       <html>
         <head>
-          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <style>
             html,body{margin:0;height:100%;background:#000;overflow:hidden}
             img{width:100%;height:100%;object-fit:cover}
@@ -646,16 +661,16 @@ class MainActivity : AppCompatActivity() {
           </style>
         </head>
         <body>
-          <div id=\"err\"></div>
-          <img id=\"m\" src=\"$safeUrl\" />
+          <div id="err"></div>
+          <img id="m" src="$safeUrl" />
           <script>
             (function(){
-              const img = document.getElementById('m');
-              const err = document.getElementById('err');
+              var img = document.getElementById('m');
+              var err = document.getElementById('err');
               function show(msg){ err.style.display='block'; err.textContent = msg; }
               function hide(){ err.style.display='none'; }
               hide();
-              const t = setTimeout(function(){
+              var t = setTimeout(function(){
                 show('Image load timed out');
                 try { if (window.DD && DD.onMediaError) DD.onMediaError('image timeout'); } catch (e) {}
               }, 8000);
@@ -815,6 +830,10 @@ class MainActivity : AppCompatActivity() {
                   val cid = hb.campaignId
                   if (cid != null && cid > 0) showCampaign(cid, displayName) else showNoCampaignContent(displayName)
                 }
+                "infoboard" -> {
+                  val token = hb.infoBoardPublicToken
+                  if (!token.isNullOrBlank()) showInfoBoard(token) else showNoContent(displayName)
+                }
                 else -> showNoContent(displayName)
               }
             }
@@ -842,7 +861,8 @@ class MainActivity : AppCompatActivity() {
     val displayName: String?,
     val assignmentType: String,
     val menuPublicToken: String?,
-    val campaignId: Int?
+    val campaignId: Int?,
+    val infoBoardPublicToken: String?
   )
 
   private fun requestPairingCode(hardwareId: String): String {
@@ -883,7 +903,8 @@ class MainActivity : AppCompatActivity() {
     val type = assignmentObj?.optString("Type") ?: "none"
     val menuToken = assignmentObj?.optString("MenuPublicToken")?.takeIf { it.isNotBlank() }
     val campaignId = if (assignmentObj?.has("CampaignId") == true && !assignmentObj.isNull("CampaignId")) assignmentObj.optInt("CampaignId") else null
-    return HeartbeatStatus(displayName = displayName, assignmentType = type, menuPublicToken = menuToken, campaignId = campaignId)
+    val infoBoardToken = assignmentObj?.optString("InfoBoardPublicToken")?.takeIf { it.isNotBlank() }
+    return HeartbeatStatus(displayName = displayName, assignmentType = type, menuPublicToken = menuToken, campaignId = campaignId, infoBoardPublicToken = infoBoardToken)
   }
 
   private fun getCampaignManifest(hardwareId: String, provisioningToken: String, campaignId: Int): CampaignManifest {

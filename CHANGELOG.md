@@ -1,6 +1,55 @@
 # Changelog
 
+## 0.2.6 - 2026-01-04
+
+### Android TV Player
+- **Campaign Image Display Fix**: Fixed critical bug where campaign images showed a broken image icon instead of the actual image.
+  - Root cause: Kotlin raw string literals (`"""`) were rendering literal `\"` escape sequences into HTML attributes, causing the WebView to request malformed URLs like `/%22https://...%22`.
+  - Fixed all HTML templates in `loadCoverImageHtml()`, `loadCampaignMessageHtml()`, and `probeThenLoadMedia()`.
+- **InfoBoard Support**: Added full support for InfoBoard display type.
+  - Mobile app now handles `infoboard` assignment type in heartbeat response.
+  - Loads InfoBoard SSR pages via WebView.
+- **Version Display**: Simplified version display to show only version name (e.g., `v0.2.6`) without build number in parentheses.
+
+### Server
+- **Heartbeat InfoBoard Support**: Heartbeat endpoint now returns `InfoBoardPublicToken` when a display has an InfoBoard assigned.
+- **Auto-Cleanup Pairing Codes**: When a device requests a new pairing code, any old unclaimed tokens for the same HardwareId are automatically deleted. This prevents stale "pending" pairing codes from accumulating in the dashboard when devices are reinstalled.
+
+### Website
+- **InfoBoard SSR Page**: Created `/display/infoboard-ssr/[token]/page.tsx` for server-side rendered InfoBoard display.
+- **Next.js 16 Params Fix**: Fixed both `menu-ssr` and `infoboard-ssr` pages to properly await the `params` Promise (required in Next.js 16+).
+- **Display Padding**: Added bottom padding (`pb-6`) to menu and infoboard display pages to prevent content from being cut off at screen edges.
+- **Download Link Fix**: Corrected APK download links to point to `/downloads/displaydeck-player.apk`.
+
 ## Unreleased
+
+- **Menu Builder (Phase 2 — New Templates)**:
+  - Added 4 new professional menu templates:
+    - `elegant`: Upscale restaurant / fine dining with serif fonts and dotted price leaders
+    - `retro`: Vintage diner / 50s style with neon glow effects
+    - `modern`: Clean, contemporary design with generous white space
+    - `chalkboard`: Handwritten / artisan cafe style with decorative elements
+  - Templates now totaling 9 options for diverse restaurant styles.
+
+- **Information Boards Feature (NEW)**:
+  - New display type for non-menu content: mall directories, office building floors, HSEQ posters.
+  - Database tables: `InfoBoards`, `InfoBoardSections`, `InfoBoardItems`, `DisplayInfoBoards`.
+  - Support for different board types: directory, hseq, notice, custom.
+  - Section layouts: list, grid, cards, tiles.
+  - Item types: entry, notice, poster, map, QR code, contact info.
+  - New dashboard page at `/dashboard/infoboards` with full CRUD.
+  - Added "Info Boards" link to sidebar navigation.
+
+- **Display Section Preview Fix**:
+  - Display cards now show an iframe preview when the device is displaying a menu.
+  - Previously only media files (images/videos) had visual previews.
+
+- **Android App - Configurable URLs**:
+  - Replaced hardcoded production URLs with dynamic configuration via SharedPreferences.
+  - Added developer SettingsActivity for configuring API and Public URLs.
+  - Launch via ADB: `adb shell am start -n co.displaydeck.player/.SettingsActivity`
+  - Or pass URLs directly: `--es api_url "http://192.168.x.x:2001/api" --es public_url "http://192.168.x.x:3000"`
+  - Functions: `getApiBaseUrl()`, `getPublicBaseUrl()`, `setApiBaseUrl()`, `setPublicBaseUrl()`, `resetToProductionUrls()`.
 
 - **Menu Builder (Phase 2 — QSR Templates)**:
   - Added two new professional templates: `qsr` (Quick Service Restaurant) and `drivethru` for fast-food style displays.

@@ -489,6 +489,18 @@ export default function DisplaysPage() {
                         <div className="flex flex-col gap-1">
                           {(nowPlaying.ItemType || "media") === "menu" ? (
                             <>
+                              {/* Menu preview iframe */}
+                              {nowPlaying.MenuPublicToken && (
+                                <div className="w-full aspect-video rounded-md border overflow-hidden bg-black">
+                                  <iframe
+                                    src={`${window.location.origin}/display/menu/${nowPlaying.MenuPublicToken}?preview=1`}
+                                    className="w-full h-full border-0"
+                                    title={nowPlaying.MenuName || "Menu preview"}
+                                    loading="lazy"
+                                    style={{ pointerEvents: "none" }}
+                                  />
+                                </div>
+                              )}
                               <div className="text-sm">
                                 <span className="text-muted-foreground">Menu:</span>{" "}
                                 {nowPlaying.MenuId ? (

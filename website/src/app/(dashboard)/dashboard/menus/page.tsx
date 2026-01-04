@@ -351,9 +351,13 @@ export default function MenusPage() {
                       <SelectItem value="neon">Neon</SelectItem>
                       <SelectItem value="qsr">QSR Board (Fast Food)</SelectItem>
                       <SelectItem value="drivethru">Drive-Thru</SelectItem>
+                      <SelectItem value="elegant">Elegant (Fine Dining)</SelectItem>
+                      <SelectItem value="retro">Retro (Vintage Diner)</SelectItem>
+                      <SelectItem value="modern">Modern (Contemporary)</SelectItem>
+                      <SelectItem value="chalkboard">Chalkboard (Artisan Cafe)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Templates: classic, minimal, neon, qsr, drivethru</p>
+                  <p className="text-xs text-muted-foreground">9 templates available</p>
                 </div>
 
                 <div className="grid gap-2">

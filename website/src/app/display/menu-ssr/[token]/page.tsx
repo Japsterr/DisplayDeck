@@ -448,8 +448,8 @@ function renderNeon(args: {
   );
 }
 
-export default async function DisplayMenuSsrPage({ params }: { params: { token: string } }) {
-  const token = params.token;
+export default async function DisplayMenuSsrPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
 
   let menu: PublicMenu | null = null;
   try {
@@ -513,7 +513,7 @@ export default async function DisplayMenuSsrPage({ params }: { params: { token: 
       }}
     >
       {bgImage ? <div className="fixed inset-0" style={{ backgroundColor: overlayColor, opacity: Math.max(0, Math.min(1, overlayOpacity)), pointerEvents: "none" }} /> : null}
-      <div className="relative h-full w-full overflow-hidden">
+      <div className="relative h-full w-full overflow-auto pb-6">
         {templateKey === "minimal"
           ? renderMinimal({
               menuName: menu.Name,

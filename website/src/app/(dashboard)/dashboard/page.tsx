@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Monitor, Megaphone, AlertCircle, Activity } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Monitor, Megaphone, AlertCircle, Activity, CheckCircle2, Clock, TrendingUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow, isValid, parseISO } from "date-fns";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 
@@ -174,100 +176,148 @@ export default function DashboardPage() {
   }, [router]);
 
   if (loading) {
-    return <div className="p-8 text-center">Loading dashboard...</div>;
+    return <div className="p-8 text-center text-muted-foreground">Loading dashboard...</div>;
   }
 
+  const onlineDisplays = stats.totalDisplays - stats.offlineDisplays;
+  const onlineRate = stats.totalDisplays > 0 ? Math.round((onlineDisplays / stats.totalDisplays) * 100) : 0;
+
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
+    <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
+      {/* Welcome Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">Welcome back! Here's an overview of your digital signage network.</p>
+        </div>
+        <Badge variant="outline" className="text-xs">
+          UI build: {APP_VERSION}
+        </Badge>
+      </div>
+
+      {/* Stats Grid with Enhanced Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Displays</CardTitle>
-            <Monitor className="h-4 w-4 text-muted-foreground" />
+            <Monitor className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalDisplays}</div>
-            <p className="text-xs text-muted-foreground">
-              Registered devices
-            </p>
+            <div className="text-3xl font-bold">{stats.totalDisplays}</div>
+            <div className="flex items-center gap-2 mt-2">
+              <Progress value={onlineRate} className="h-2 flex-1" />
+              <span className="text-xs text-muted-foreground">{onlineRate}% online</span>
+            </div>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Campaigns</CardTitle>
-            <Megaphone className="h-4 w-4 text-muted-foreground" />
+            <Megaphone className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.activeCampaigns}</div>
-            <p className="text-xs text-muted-foreground">
-              Total campaigns
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Offline Displays</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.offlineDisplays}</div>
-            <p className="text-xs text-muted-foreground">
-              Needs attention
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">System Status</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.systemStatus}</div>
-            <p className="text-xs text-muted-foreground">
-              API Connection • UI build: {APP_VERSION}
+            <div className="text-3xl font-bold">{stats.activeCampaigns}</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              <TrendingUp className="inline h-3 w-3 mr-1" />
+              Running content loops
             </p>
           </CardContent>
         </Card>
 
-        <Card
-          className="cursor-pointer transition-colors hover:bg-muted/50"
-          onClick={() => router.push(`/dashboard/audit-log?action=display.delete&days=${displayLifecycle?.days ?? 30}`)}
-        >
+        <Card className={`bg-gradient-to-br ${stats.offlineDisplays > 0 ? 'from-amber-500/10 to-amber-600/5 border-amber-500/20' : 'from-green-500/10 to-green-600/5 border-green-500/20'}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Displays removed ({displayLifecycle?.days ?? 30}d)</CardTitle>
-            <Monitor className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">
+              {stats.offlineDisplays > 0 ? 'Offline Displays' : 'All Online'}
+            </CardTitle>
+            {stats.offlineDisplays > 0 ? (
+              <AlertCircle className="h-4 w-4 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            )}
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{displayLifecycle ? displayLifecycle.removed : "—"}</div>
-            <p className="text-xs text-muted-foreground">
-              {displayLifecycle
-                ? `Paired: ${displayLifecycle.paired} • Removed: ${displayLifecycle.removed}`
-                : "Click to view audit log"}
+            <div className={`text-3xl font-bold ${stats.offlineDisplays > 0 ? 'text-amber-500' : 'text-green-500'}`}>
+              {stats.offlineDisplays > 0 ? stats.offlineDisplays : '✓'}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {stats.offlineDisplays > 0 ? 'Needs attention' : 'All displays healthy'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className={`bg-gradient-to-br ${stats.systemStatus === 'Healthy' ? 'from-green-500/10 to-green-600/5 border-green-500/20' : 'from-red-500/10 to-red-600/5 border-red-500/20'}`}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">System Status</CardTitle>
+            <Activity className={`h-4 w-4 ${stats.systemStatus === 'Healthy' ? 'text-green-500' : 'text-red-500'}`} />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-3xl font-bold ${stats.systemStatus === 'Healthy' ? 'text-green-500' : 'text-red-500'}`}>
+              {stats.systemStatus}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              API connection active
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Lifecycle Stats */}
+      {displayLifecycle && (
+        <Card 
+          className="cursor-pointer transition-colors hover:bg-muted/50"
+          onClick={() => router.push(`/dashboard/audit-log?action=display.delete&days=${displayLifecycle.days}`)}
+        >
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium">Display Lifecycle (Last {displayLifecycle.days} days)</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-8">
+              <div>
+                <div className="text-2xl font-bold text-green-500">+{displayLifecycle.paired}</div>
+                <p className="text-xs text-muted-foreground">Paired</p>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-red-500">-{displayLifecycle.removed}</div>
+                <p className="text-xs text-muted-foreground">Removed</p>
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{displayLifecycle.paired - displayLifecycle.removed}</div>
+                <p className="text-xs text-muted-foreground">Net change</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Recent Activity
+            </CardTitle>
+            <CardDescription>Latest actions in your organization</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-8">
+            <div className="space-y-4">
               {recentActivity.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">No recent activity</div>
               ) : (
                 recentActivity.map((log) => (
-                  <div key={log.AuditLogId} className="flex items-center">
-                    <div className="ml-4 space-y-1">
+                  <div key={log.AuditLogId} className="flex items-start gap-4 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium leading-none">{log.Action}</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground mt-1 truncate">
                         {log.Details}
                       </p>
                     </div>
-                    <div className="ml-auto font-medium text-xs text-muted-foreground">
+                    <Badge variant="outline" className="text-xs shrink-0">
                       {safeDistanceToNow(log.CreatedAt)}
-                    </div>
+                    </Badge>
                   </div>
                 ))
               )}
@@ -276,24 +326,29 @@ export default function DashboardPage() {
         </Card>
         <Card className="col-span-3">
           <CardHeader>
-            <CardTitle>Display Status</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Monitor className="h-4 w-4" />
+              Display Status
+            </CardTitle>
+            <CardDescription>Your registered displays</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-8">
+            <div className="space-y-3">
               {displays.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">No displays found</div>
               ) : (
                 displays.map((display) => (
-                  <div key={display.Id} className="flex items-center">
-                    <div className="ml-4 space-y-1">
-                      <p className="text-sm font-medium leading-none">{display.Name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {display.CurrentStatus} • Last seen {safeDistanceToNow(display.LastSeen)}
+                  <div key={display.Id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className={`w-2 h-2 rounded-full ${display.CurrentStatus === 'Online' ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium leading-none truncate">{display.Name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Last seen {safeDistanceToNow(display.LastSeen)}
                       </p>
                     </div>
-                    <div className={`ml-auto font-medium ${display.CurrentStatus === 'Online' ? 'text-green-500' : 'text-red-500'}`}>
+                    <Badge variant={display.CurrentStatus === 'Online' ? 'default' : 'secondary'} className="shrink-0">
                       {display.CurrentStatus}
-                    </div>
+                    </Badge>
                   </div>
                 ))
               )}

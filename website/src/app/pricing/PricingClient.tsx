@@ -140,7 +140,7 @@ export function PricingClient() {
           <div
             key={tier.title}
             className={
-              "rounded-xl border p-8 flex flex-col relative overflow-hidden " +
+              "rounded-xl border p-8 flex flex-col items-center text-center relative overflow-hidden " +
               (tier.highlighted
                 ? "border-primary/50 bg-neutral-900/80"
                 : "border-neutral-800 bg-neutral-900/50")
@@ -168,14 +168,14 @@ export function PricingClient() {
 
             <ul className="space-y-3 mb-8">
               {tier.bullets.map((b) => (
-                <li key={b} className="flex items-center text-sm">
-                  <Check className="h-4 w-4 text-green-500 mr-2" />
+                <li key={b} className="flex items-center justify-center text-sm">
+                  <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
                   {b}
                 </li>
               ))}
             </ul>
 
-            <Link href={tier.ctaHref}>
+            <Link href={tier.ctaHref} className="w-full">
               <Button
                 className="w-full"
                 variant={tier.highlighted ? "default" : "outline"}

@@ -333,9 +333,9 @@ function MenuItemCard(props: {
   );
 }
 
-function getTemplateKey(raw: string | undefined): "classic" | "minimal" | "neon" | "qsr" | "drivethru" {
+function getTemplateKey(raw: string | undefined): "classic" | "minimal" | "neon" | "qsr" | "drivethru" | "elegant" | "retro" | "modern" | "chalkboard" {
   const key = (raw || "classic").toLowerCase();
-  if (key === "minimal" || key === "neon" || key === "classic" || key === "qsr" || key === "drivethru") return key;
+  if (key === "minimal" || key === "neon" || key === "classic" || key === "qsr" || key === "drivethru" || key === "elegant" || key === "retro" || key === "modern" || key === "chalkboard") return key;
   return "classic";
 }
 
@@ -987,6 +987,498 @@ function DrivethruItemRow({ it, number, muted, accent }: {
   );
 }
 
+// ============================================================================
+// ELEGANT TEMPLATE - Upscale restaurant / fine dining
+// ============================================================================
+function renderElegant(args: {
+  menuName: string;
+  muted: string;
+  accent: string;
+  itemCardStyle: ItemCardStyle;
+  sectionCols: string;
+  sections: PublicMenuSection[];
+  dense?: boolean;
+  logoUrl?: string;
+  sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
+}) {
+  const { menuName, muted, accent, sections, logoUrl, sectionImages, headerMode, headerImageUrl } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
+
+  return (
+    <div className="min-h-screen px-6 sm:px-12 py-8 sm:py-12" style={{ fontFamily: "'Cormorant Garamond', Georgia, serif" }}>
+      {/* Elegant header with optional ornament */}
+      {headerSrc && (
+        <div className="flex justify-center mb-6">
+          <img src={headerSrc} alt="" className="h-16 sm:h-24 w-auto object-contain" />
+        </div>
+      )}
+      
+      {headerMode === "text" && (
+        <div className="text-center mb-8 sm:mb-12">
+          <div className="text-xs sm:text-sm uppercase tracking-[0.4em] mb-3" style={{ color: muted }}>
+            — MENU —
+          </div>
+          <h1 className="text-4xl sm:text-6xl font-light tracking-wide">{menuName}</h1>
+          <div className="mt-4 mx-auto w-32 sm:w-48 h-px" style={{ backgroundColor: accent }} />
+        </div>
+      )}
+
+      {/* Sections in elegant columns */}
+      <div className="max-w-5xl mx-auto space-y-10 sm:space-y-16">
+        {sections.map((s, sectionIdx) => {
+          const items = (s.Items || [])
+            .filter((i) => i.IsAvailable !== false)
+            .slice()
+            .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+
+          return (
+            <div 
+              key={s.Id} 
+              className="menu-section"
+              style={{ animationDelay: `${sectionIdx * 0.15}s` }}
+            >
+              <div className="flex items-center gap-4 mb-6">
+                {sectionImages?.[String(s.Id)] && (
+                  <img
+                    src={sectionImages[String(s.Id)]}
+                    alt=""
+                    className="h-12 w-12 rounded-full object-cover border-2 menu-image"
+                    style={{ borderColor: accent }}
+                    loading="lazy"
+                  />
+                )}
+                <div className="flex-1 flex items-center gap-4">
+                  <div className="h-px flex-1 bg-white/20" />
+                  <h2 className="text-2xl sm:text-3xl font-light tracking-wider uppercase" style={{ color: accent }}>
+                    {s.Name}
+                  </h2>
+                  <div className="h-px flex-1 bg-white/20" />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {items.map((it, itemIdx) => (
+                  <div 
+                    key={it.Id}
+                    className="menu-item flex items-start justify-between gap-6 py-3"
+                    style={{ animationDelay: `${(sectionIdx * 0.15) + (itemIdx * 0.05)}s` }}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xl sm:text-2xl font-normal">{it.Name}</span>
+                        <span className="flex-1 border-b border-dotted border-white/30 mb-1" />
+                        {it.PriceCents != null && (
+                          <span className="text-xl sm:text-2xl font-light menu-price" style={{ color: accent }}>
+                            {formatCurrencyZarFromCents(it.PriceCents)}
+                          </span>
+                        )}
+                      </div>
+                      {it.Description && (
+                        <p className="text-sm sm:text-base mt-1 italic" style={{ color: muted }}>
+                          {it.Description}
+                        </p>
+                      )}
+                    </div>
+                    {it.ImageUrl && (
+                      <img
+                        src={it.ImageUrl}
+                        alt={it.Name}
+                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg object-cover menu-image"
+                        loading="lazy"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// RETRO TEMPLATE - Vintage diner / 50s style
+// ============================================================================
+function renderRetro(args: {
+  menuName: string;
+  muted: string;
+  accent: string;
+  itemCardStyle: ItemCardStyle;
+  sectionCols: string;
+  sections: PublicMenuSection[];
+  dense?: boolean;
+  logoUrl?: string;
+  sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
+}) {
+  const { menuName, muted, accent, sections, logoUrl, sectionImages, headerMode, headerImageUrl } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
+
+  return (
+    <div 
+      className="min-h-screen p-4 sm:p-8"
+      style={{ 
+        fontFamily: "'Bebas Neue', 'Impact', sans-serif",
+        backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.02) 10px, rgba(255,255,255,0.02) 20px)"
+      }}
+    >
+      {/* Retro header with neon-like glow */}
+      {headerSrc && (
+        <div className="flex justify-center mb-6">
+          <img 
+            src={headerSrc} 
+            alt="" 
+            className="h-16 sm:h-24 w-auto object-contain"
+            style={{ filter: `drop-shadow(0 0 20px ${accent})` }}
+          />
+        </div>
+      )}
+
+      {headerMode === "text" && (
+        <div className="text-center mb-8">
+          <h1 
+            className="text-5xl sm:text-7xl font-bold tracking-wider uppercase"
+            style={{ 
+              color: accent,
+              textShadow: `0 0 30px ${accent}, 0 0 60px ${accent}40`
+            }}
+          >
+            {menuName}
+          </h1>
+          <div className="mt-2 text-lg sm:text-xl tracking-[0.3em]" style={{ color: muted }}>
+            ★ MENU ★
+          </div>
+        </div>
+      )}
+
+      <div className={`grid ${args.sectionCols} gap-4 sm:gap-6 max-w-6xl mx-auto`}>
+        {sections.map((s, sectionIdx) => {
+          const items = (s.Items || [])
+            .filter((i) => i.IsAvailable !== false)
+            .slice()
+            .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+
+          return (
+            <div 
+              key={s.Id}
+              className="menu-section rounded-xl p-4 sm:p-6"
+              style={{ 
+                backgroundColor: "rgba(0,0,0,0.6)",
+                border: `3px solid ${accent}`,
+                boxShadow: `0 0 20px ${accent}30, inset 0 0 30px rgba(0,0,0,0.5)`,
+                animationDelay: `${sectionIdx * 0.1}s`
+              }}
+            >
+              <div className="flex items-center justify-center gap-3 mb-4">
+                {sectionImages?.[String(s.Id)] && (
+                  <img
+                    src={sectionImages[String(s.Id)]}
+                    alt=""
+                    className="h-10 w-10 rounded-full object-cover border-2 menu-image"
+                    style={{ borderColor: accent }}
+                    loading="lazy"
+                  />
+                )}
+                <h2 
+                  className="text-2xl sm:text-3xl font-bold uppercase tracking-wide text-center"
+                  style={{ color: accent }}
+                >
+                  {s.Name}
+                </h2>
+              </div>
+
+              <div className="space-y-3">
+                {items.map((it, itemIdx) => (
+                  <div 
+                    key={it.Id}
+                    className="menu-item flex items-center gap-3 bg-white/5 rounded-lg p-2 sm:p-3"
+                    style={{ animationDelay: `${(sectionIdx * 0.1) + (itemIdx * 0.05)}s` }}
+                  >
+                    {it.ImageUrl && (
+                      <img
+                        src={it.ImageUrl}
+                        alt={it.Name}
+                        className="w-14 h-14 sm:w-18 sm:h-18 rounded object-cover menu-image"
+                        style={{ border: `2px solid ${accent}` }}
+                        loading="lazy"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-lg sm:text-xl font-bold uppercase truncate">{it.Name}</div>
+                      {it.Description && (
+                        <p className="text-xs sm:text-sm truncate" style={{ color: muted, fontFamily: "sans-serif" }}>
+                          {it.Description}
+                        </p>
+                      )}
+                    </div>
+                    {it.PriceCents != null && (
+                      <div 
+                        className="shrink-0 text-xl sm:text-2xl font-bold menu-price"
+                        style={{ color: accent }}
+                      >
+                        {formatCurrencyZarFromCents(it.PriceCents)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MODERN TEMPLATE - Clean, contemporary with lots of white space
+// ============================================================================
+function renderModern(args: {
+  menuName: string;
+  muted: string;
+  accent: string;
+  itemCardStyle: ItemCardStyle;
+  sectionCols: string;
+  sections: PublicMenuSection[];
+  dense?: boolean;
+  logoUrl?: string;
+  sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
+}) {
+  const { menuName, muted, accent, sections, logoUrl, sectionImages, headerMode, headerImageUrl } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
+
+  return (
+    <div className="min-h-screen p-6 sm:p-10" style={{ fontFamily: "'Inter', 'Helvetica Neue', sans-serif" }}>
+      {/* Minimal modern header */}
+      {headerSrc && (
+        <div className="flex justify-start mb-8">
+          <img src={headerSrc} alt="" className="h-10 sm:h-14 w-auto object-contain" />
+        </div>
+      )}
+
+      {headerMode === "text" && (
+        <div className="mb-10 sm:mb-14">
+          <h1 className="text-3xl sm:text-5xl font-bold tracking-tight">{menuName}</h1>
+          <div className="mt-3 h-1 w-16 sm:w-24 rounded-full" style={{ backgroundColor: accent }} />
+        </div>
+      )}
+
+      <div className={`grid ${args.sectionCols} gap-8 sm:gap-12`}>
+        {sections.map((s, sectionIdx) => {
+          const items = (s.Items || [])
+            .filter((i) => i.IsAvailable !== false)
+            .slice()
+            .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+
+          return (
+            <div 
+              key={s.Id}
+              className="menu-section"
+              style={{ animationDelay: `${sectionIdx * 0.1}s` }}
+            >
+              <div className="flex items-center gap-4 mb-6">
+                {sectionImages?.[String(s.Id)] && (
+                  <img
+                    src={sectionImages[String(s.Id)]}
+                    alt=""
+                    className="h-14 w-14 rounded-2xl object-cover menu-image"
+                    loading="lazy"
+                  />
+                )}
+                <h2 className="text-xl sm:text-2xl font-semibold">{s.Name}</h2>
+              </div>
+
+              <div className="grid gap-4">
+                {items.map((it, itemIdx) => (
+                  <div 
+                    key={it.Id}
+                    className="menu-item group rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5 transition-all hover:bg-white/[0.05]"
+                    style={{ animationDelay: `${(sectionIdx * 0.1) + (itemIdx * 0.05)}s` }}
+                  >
+                    <div className="flex items-start gap-4">
+                      {it.ImageUrl && (
+                        <img
+                          src={it.ImageUrl}
+                          alt={it.Name}
+                          className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover menu-image"
+                          loading="lazy"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-lg sm:text-xl font-medium">{it.Name}</h3>
+                          {it.PriceCents != null && (
+                            <span 
+                              className="shrink-0 text-lg sm:text-xl font-semibold menu-price"
+                              style={{ color: accent }}
+                            >
+                              {formatCurrencyZarFromCents(it.PriceCents)}
+                            </span>
+                          )}
+                        </div>
+                        {it.Description && (
+                          <p className="text-sm mt-2 leading-relaxed" style={{ color: muted }}>
+                            {it.Description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// CHALKBOARD TEMPLATE - Handwritten / artisanal cafe style
+// ============================================================================
+function renderChalkboard(args: {
+  menuName: string;
+  muted: string;
+  accent: string;
+  itemCardStyle: ItemCardStyle;
+  sectionCols: string;
+  sections: PublicMenuSection[];
+  dense?: boolean;
+  logoUrl?: string;
+  sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
+}) {
+  const { menuName, muted, accent, sections, logoUrl, sectionImages, headerMode, headerImageUrl } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
+
+  return (
+    <div 
+      className="min-h-screen p-4 sm:p-8"
+      style={{ 
+        fontFamily: "'Caveat', 'Indie Flower', cursive",
+        backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")"
+      }}
+    >
+      {/* Chalkboard-style header */}
+      {headerSrc && (
+        <div className="flex justify-center mb-6">
+          <img src={headerSrc} alt="" className="h-16 sm:h-20 w-auto object-contain" />
+        </div>
+      )}
+
+      {headerMode === "text" && (
+        <div className="text-center mb-8 sm:mb-10">
+          <div className="text-lg sm:text-xl mb-2" style={{ color: muted }}>✿ Today's Menu ✿</div>
+          <h1 
+            className="text-5xl sm:text-7xl font-normal"
+            style={{ color: accent }}
+          >
+            {menuName}
+          </h1>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <span className="text-xl" style={{ color: muted }}>❧</span>
+            <div className="h-px w-24 sm:w-40" style={{ backgroundColor: accent }} />
+            <span className="text-xl" style={{ color: muted }}>❧</span>
+          </div>
+        </div>
+      )}
+
+      <div className={`grid ${args.sectionCols} gap-6 sm:gap-8 max-w-5xl mx-auto`}>
+        {sections.map((s, sectionIdx) => {
+          const items = (s.Items || [])
+            .filter((i) => i.IsAvailable !== false)
+            .slice()
+            .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
+
+          return (
+            <div 
+              key={s.Id}
+              className="menu-section rounded-lg p-4 sm:p-6"
+              style={{ 
+                border: `2px dashed ${accent}60`,
+                backgroundColor: "rgba(0,0,0,0.2)",
+                animationDelay: `${sectionIdx * 0.12}s`
+              }}
+            >
+              <div className="flex items-center justify-center gap-3 mb-5">
+                {sectionImages?.[String(s.Id)] && (
+                  <img
+                    src={sectionImages[String(s.Id)]}
+                    alt=""
+                    className="h-12 w-12 rounded-full object-cover border-2 menu-image"
+                    style={{ borderColor: accent }}
+                    loading="lazy"
+                  />
+                )}
+                <h2 
+                  className="text-3xl sm:text-4xl font-normal text-center"
+                  style={{ color: accent }}
+                >
+                  ~ {s.Name} ~
+                </h2>
+              </div>
+
+              <div className="space-y-4">
+                {items.map((it, itemIdx) => (
+                  <div 
+                    key={it.Id}
+                    className="menu-item"
+                    style={{ animationDelay: `${(sectionIdx * 0.12) + (itemIdx * 0.04)}s` }}
+                  >
+                    <div className="flex items-start gap-3">
+                      {it.ImageUrl && (
+                        <img
+                          src={it.ImageUrl}
+                          alt={it.Name}
+                          className="w-16 h-16 rounded-lg object-cover menu-image border-2"
+                          style={{ borderColor: `${accent}40` }}
+                          loading="lazy"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-2xl sm:text-3xl">{it.Name}</span>
+                          {it.PriceCents != null && (
+                            <span 
+                              className="shrink-0 text-xl sm:text-2xl menu-price"
+                              style={{ color: accent }}
+                            >
+                              {formatCurrencyZarFromCents(it.PriceCents)}
+                            </span>
+                          )}
+                        </div>
+                        {it.Description && (
+                          <p className="text-base sm:text-lg mt-1" style={{ color: muted, fontFamily: "sans-serif", fontSize: "0.85em" }}>
+                            {it.Description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Decorative footer */}
+      <div className="mt-8 text-center text-lg" style={{ color: muted }}>
+        ❦ Thank you for visiting ❦
+      </div>
+    </div>
+  );
+}
+
 export default function DisplayMenuPage() {
   const params = useParams();
   const token = params.token as string;
@@ -1320,19 +1812,75 @@ export default function DisplayMenuPage() {
                         headerMode,
                         headerImageUrl: headerImageUrl || undefined,
                       })
-                    : renderClassic({
-                        menuName: menu.Name,
-                        muted,
-                        accent,
-                        itemCardStyle,
-                        sectionCols,
-                        sections,
-                        dense,
-                        logoUrl: logoUrl || undefined,
-                        sectionImages,
-                        headerMode,
-                        headerImageUrl: headerImageUrl || undefined,
-                      })}
+                    : templateKey === "elegant"
+                      ? renderElegant({
+                          menuName: menu.Name,
+                          muted,
+                          accent,
+                          itemCardStyle,
+                          sectionCols,
+                          sections,
+                          dense,
+                          logoUrl: logoUrl || undefined,
+                          sectionImages,
+                          headerMode,
+                          headerImageUrl: headerImageUrl || undefined,
+                        })
+                      : templateKey === "retro"
+                        ? renderRetro({
+                            menuName: menu.Name,
+                            muted,
+                            accent,
+                            itemCardStyle,
+                            sectionCols,
+                            sections,
+                            dense,
+                            logoUrl: logoUrl || undefined,
+                            sectionImages,
+                            headerMode,
+                            headerImageUrl: headerImageUrl || undefined,
+                          })
+                        : templateKey === "modern"
+                          ? renderModern({
+                              menuName: menu.Name,
+                              muted,
+                              accent,
+                              itemCardStyle,
+                              sectionCols,
+                              sections,
+                              dense,
+                              logoUrl: logoUrl || undefined,
+                              sectionImages,
+                              headerMode,
+                              headerImageUrl: headerImageUrl || undefined,
+                            })
+                          : templateKey === "chalkboard"
+                            ? renderChalkboard({
+                                menuName: menu.Name,
+                                muted,
+                                accent,
+                                itemCardStyle,
+                                sectionCols,
+                                sections,
+                                dense,
+                                logoUrl: logoUrl || undefined,
+                                sectionImages,
+                                headerMode,
+                                headerImageUrl: headerImageUrl || undefined,
+                              })
+                            : renderClassic({
+                                menuName: menu.Name,
+                                muted,
+                                accent,
+                                itemCardStyle,
+                                sectionCols,
+                                sections,
+                                dense,
+                                logoUrl: logoUrl || undefined,
+                                sectionImages,
+                                headerMode,
+                                headerImageUrl: headerImageUrl || undefined,
+                              })}
           </div>
         </div>
       </div>
