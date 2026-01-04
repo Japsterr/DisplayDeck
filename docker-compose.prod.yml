@@ -164,6 +164,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      - ./website/public/downloads:/app/public/downloads:ro
     environment:
       NEXT_PUBLIC_API_URL: /api
       NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-dev}

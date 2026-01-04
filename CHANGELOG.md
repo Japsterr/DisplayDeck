@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Provisioning audit / observability**:
+  - Added `ProvisioningTokenEvents` table to record token lifecycle and device history.
+  - New org endpoints:
+    - Token history: `GET /organizations/{orgId}/provisioning-token-events?token=...`
+    - Device list + stats: `GET /organizations/{orgId}/provisioning-devices`
+    - Device history: `GET /organizations/{orgId}/provisioning-device-events?hardwareId=...`
+  - Added explicit unpair action: `POST /organizations/{orgId}/displays/{displayId}/unpair` (records an `unpaired` event tied to HardwareId).
+
+- **Website / Dashboard**:
+  - Added Analytics and "Now Playing" dashboard views.
+  - Improved public menu rendering for landscape screens.
+  - Simplified Android TV APK download page.
+
+- **Android TV player**:
+  - Added always-visible version overlay.
+  - Improved URL normalization and error surfacing for media.
+
 ## 0.2.0 - 2026-01-01
 
 - **Website / Dashboard**:

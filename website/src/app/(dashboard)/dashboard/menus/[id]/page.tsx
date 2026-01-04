@@ -14,6 +14,7 @@ import {
   Settings2,
   Upload,
   Image as ImageIcon,
+  Palette,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,112 @@ import { Switch } from "@/components/ui/switch";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 
+type ThemePalette = {
+  id: string;
+  name: string;
+  description: string;
+  backgroundColor: string;
+  textColor: string;
+  mutedTextColor: string;
+  accentColor: string;
+};
+
+const THEME_PALETTES: ThemePalette[] = [
+  {
+    id: "midnight-mint",
+    name: "Midnight Mint",
+    description: "Dark, clean, and high-contrast. Great default for TVs.",
+    backgroundColor: "#0b0f19",
+    textColor: "#ffffff",
+    mutedTextColor: "#cbd5e1",
+    accentColor: "#22c55e",
+  },
+  {
+    id: "neon-lemon",
+    name: "Neon Lemon",
+    description: "Ultra high-contrast with a bright yellow accent.",
+    backgroundColor: "#060a12",
+    textColor: "#f8fafc",
+    mutedTextColor: "#cbd5e1",
+    accentColor: "#facc15",
+  },
+  {
+    id: "slate-blue",
+    name: "Slate Blue",
+    description: "Modern SaaS look with a calm blue accent.",
+    backgroundColor: "#0b1220",
+    textColor: "#f8fafc",
+    mutedTextColor: "#94a3b8",
+    accentColor: "#3b82f6",
+  },
+  {
+    id: "tropical-teal",
+    name: "Tropical Teal",
+    description: "Deep teal background with a bright aqua highlight.",
+    backgroundColor: "#042f2e",
+    textColor: "#f0fdfa",
+    mutedTextColor: "#99f6e4",
+    accentColor: "#2dd4bf",
+  },
+  {
+    id: "charcoal-amber",
+    name: "Charcoal Amber",
+    description: "Warm, premium vibe with an amber highlight.",
+    backgroundColor: "#111827",
+    textColor: "#f9fafb",
+    mutedTextColor: "#9ca3af",
+    accentColor: "#f59e0b",
+  },
+  {
+    id: "deep-purple",
+    name: "Deep Purple",
+    description: "Bold, neon-friendly palette for nightlife/entertainment.",
+    backgroundColor: "#140b2d",
+    textColor: "#f5f3ff",
+    mutedTextColor: "#cbd5e1",
+    accentColor: "#a855f7",
+  },
+  {
+    id: "cherry-cream",
+    name: "Cherry Cream",
+    description: "Light pink background with a punchy magenta accent.",
+    backgroundColor: "#fff1f2",
+    textColor: "#111827",
+    mutedTextColor: "#6b7280",
+    accentColor: "#db2777",
+  },
+  {
+    id: "cafe-cream",
+    name: "Cafe Cream",
+    description: "Warm and welcoming, perfect for cafes and bakeries.",
+    backgroundColor: "#fffbeb",
+    textColor: "#451a03",
+    mutedTextColor: "#92400e",
+    accentColor: "#b45309",
+  },
+  {
+    id: "sky-daylight",
+    name: "Sky Daylight",
+    description: "Clean sky-blue tones for bright venues.",
+    backgroundColor: "#f0f9ff",
+    textColor: "#0f172a",
+    mutedTextColor: "#334155",
+    accentColor: "#0284c7",
+  },
+  {
+    id: "clean-light",
+    name: "Clean Light",
+    description: "Bright menu boards and daylight venues.",
+    backgroundColor: "#ffffff",
+    textColor: "#0f172a",
+    mutedTextColor: "#475569",
+    accentColor: "#2563eb",
+  },
+];
+
 type ThemeConfig = Record<string, unknown>;
+
+type ItemCardStyle = "standard" | "compact" | "image-left" | "image-right" | "hero";
 
 interface Menu {
   Id: number;
@@ -104,7 +210,13 @@ function parseMediaRef(raw: string | null | undefined): number | null {
 }
 
 function getApiUrl() {
-  return process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env) return env;
+
+  // Default to same-origin nginx proxy in production.
+  // This avoids CORS/preflight issues (notably for media picker preview + upload).
+  if (typeof window !== "undefined") return `${window.location.origin}/api`;
+  return "/api";
 }
 
 function getAuth() {
@@ -141,6 +253,65 @@ function readThemeColumns(theme: ThemeConfig): "auto" | "1" | "2" | "3" {
   if (raw === 2 || raw === "2") return "2";
   if (raw === 3 || raw === "3") return "3";
   return "auto";
+}
+
+function readThemeItemCardStyle(theme: ThemeConfig): ItemCardStyle {
+  const raw = theme?.itemCardStyle;
+  const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (v === "compact" || v === "image-left" || v === "image-right" || v === "hero" || v === "standard") return v;
+  return "standard";
+}
+
+function ItemCardStyleThumb({ style }: { style: ItemCardStyle }) {
+  // Tiny schematic previews (not literal renders) – just enough to show layout differences.
+  if (style === "compact") {
+    return (
+      <div className="h-6 w-10 rounded border bg-muted/20 overflow-hidden">
+        <div className="h-full flex items-center gap-1 px-1">
+          <div className="h-4 w-4 rounded-sm bg-muted" />
+          <div className="h-2 w-4 rounded bg-muted" />
+          <div className="ml-auto h-2 w-3 rounded bg-primary/70" />
+        </div>
+      </div>
+    );
+  }
+
+  if (style === "image-left" || style === "image-right") {
+    return (
+      <div className="h-6 w-10 rounded border bg-muted/20 overflow-hidden">
+        <div className={`h-full flex items-center gap-1 px-1 ${style === "image-right" ? "flex-row-reverse" : ""}`}>
+          <div className="h-4 w-5 rounded-sm bg-muted" />
+          <div className="flex-1">
+            <div className="h-2 w-5 rounded bg-muted" />
+            <div className="mt-1 h-2 w-4 rounded bg-primary/70" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (style === "hero") {
+    return (
+      <div className="h-6 w-10 rounded border bg-muted/20 overflow-hidden relative">
+        <div className="absolute inset-0 bg-muted" />
+        <div className="absolute top-1 right-1 h-2 w-3 rounded bg-primary/80" />
+        <div className="absolute bottom-1 left-1 h-2 w-6 rounded bg-black/40" />
+      </div>
+    );
+  }
+
+  // standard
+  return (
+    <div className="h-6 w-10 rounded border bg-muted/20 overflow-hidden">
+      <div className="px-1 pt-1">
+        <div className="flex items-center justify-between">
+          <div className="h-2 w-5 rounded bg-muted" />
+          <div className="h-2 w-3 rounded bg-primary/70" />
+        </div>
+        <div className="mt-1 h-3 w-full rounded bg-muted" />
+      </div>
+    </div>
+  );
 }
 
 function parseCsvTable(text: string): string[][] {
@@ -419,6 +590,17 @@ export default function MenuEditorPage() {
   const [savingMenu, setSavingMenu] = useState(false);
   const [themeJsonText, setThemeJsonText] = useState<string>("{}");
 
+  const applyThemePalette = (palette: ThemePalette) => {
+    updateThemeJson((t) => ({
+      ...(t || {}),
+      backgroundColor: palette.backgroundColor,
+      textColor: palette.textColor,
+      mutedTextColor: palette.mutedTextColor,
+      accentColor: palette.accentColor,
+    }));
+    toast.success(`Applied palette: ${palette.name}`);
+  };
+
   const resetThemeConfig = () => {
     setThemeJsonText("{}\n");
     toast.success("ThemeConfig reset");
@@ -452,11 +634,14 @@ export default function MenuEditorPage() {
     | { kind: "existing"; sectionId: number; itemId: number }
     | { kind: "menuBackground" }
     | { kind: "menuLogo" }
+    | { kind: "menuHeaderImage" }
     | { kind: "sectionImage"; sectionId: number }
     | null
   >(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const uploadFileRef = useRef<HTMLInputElement>(null);
+  const logoUploadRef = useRef<HTMLInputElement>(null);
+  const headerImageUploadRef = useRef<HTMLInputElement>(null);
 
   const ensureMediaPreviewUrl = async (mediaFileId: number) => {
     if (mediaPreviewUrls[mediaFileId]) return;
@@ -600,6 +785,7 @@ export default function MenuEditorPage() {
       | { kind: "existing"; sectionId: number; itemId: number }
       | { kind: "menuBackground" }
       | { kind: "menuLogo" }
+      | { kind: "menuHeaderImage" }
       | { kind: "sectionImage"; sectionId: number }
   ) => {
     setMediaPickerTarget(target);
@@ -621,8 +807,18 @@ export default function MenuEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMediaPickerOpen, mediaQuery, mediaLibrary]);
 
-  const applyImageUrlToTarget = async (imageUrl: string | null) => {
-    const t = mediaPickerTarget;
+  const applyImageUrlToTarget = async (
+    imageUrl: string | null,
+    explicitTarget?:
+      | { kind: "new" }
+      | { kind: "existing"; sectionId: number; itemId: number }
+      | { kind: "menuBackground" }
+      | { kind: "menuLogo" }
+      | { kind: "menuHeaderImage" }
+      | { kind: "sectionImage"; sectionId: number }
+      | null
+  ) => {
+    const t = explicitTarget ?? mediaPickerTarget;
     if (!t) return;
 
     if (t.kind === "new") {
@@ -645,6 +841,16 @@ export default function MenuEditorPage() {
         const next = { ...(theme || {}) } as any;
         if (imageUrl) next.logoUrl = imageUrl;
         else delete next.logoUrl;
+        return next as ThemeConfig;
+      });
+      return;
+    }
+
+    if (t.kind === "menuHeaderImage") {
+      updateThemeJson((theme) => {
+        const next = { ...(theme || {}) } as any;
+        if (imageUrl) next.headerImageUrl = imageUrl;
+        else delete next.headerImageUrl;
         return next as ThemeConfig;
       });
       return;
@@ -730,10 +936,66 @@ export default function MenuEditorPage() {
       setIsMediaPickerOpen(false);
     } catch (e) {
       console.error(e);
-      toast.error("Upload failed");
+      toast.error("Upload failed (check file type/size and try again)");
     } finally {
       setUploadingImage(false);
       if (uploadFileRef.current) uploadFileRef.current.value = "";
+    }
+  };
+
+  const uploadFileAndApplyToTarget = async (
+    file: File,
+    target:
+      | { kind: "menuLogo" }
+      | { kind: "menuBackground" }
+      | { kind: "menuHeaderImage" }
+      | { kind: "sectionImage"; sectionId: number }
+      | { kind: "new" }
+  ) => {
+    const auth = getAuth();
+    if (!auth) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      const apiUrl = getApiUrl();
+      const orientation = menu?.Orientation || "Landscape";
+
+      const uploadUrlRes = await fetch(`${apiUrl}/media-files/upload-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Auth-Token": auth.token,
+        },
+        body: JSON.stringify({
+          OrganizationId: auth.orgId,
+          FileName: file.name,
+          FileType: file.type || "application/octet-stream",
+          ContentLength: file.size,
+          Orientation: orientation,
+        }),
+      });
+
+      if (!uploadUrlRes.ok) throw new Error(await uploadUrlRes.text());
+      const uploadData = (await uploadUrlRes.json()) as { UploadUrl: string; MediaFileId: number };
+
+      const putRes = await fetch(uploadData.UploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+      });
+      if (!putRes.ok) throw new Error(await putRes.text());
+
+      await applyImageUrlToTarget(makeMediaRef(uploadData.MediaFileId), target);
+      void ensureMediaPreviewUrl(uploadData.MediaFileId);
+      toast.success("Uploaded");
+    } catch (e) {
+      console.error(e);
+      toast.error("Upload failed");
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -1356,9 +1618,81 @@ export default function MenuEditorPage() {
             <Separator />
 
             <div className="grid gap-4">
-              <div>
-                <div className="text-sm font-medium">Theme</div>
-                <div className="text-xs text-muted-foreground">Quick controls (saved in ThemeConfig).</div>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-sm font-medium">Theme</div>
+                  <div className="text-xs text-muted-foreground">Quick controls (saved in ThemeConfig).</div>
+                </div>
+
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button type="button" size="sm" variant="outline" disabled={!parsedTheme}>
+                      <Palette className="mr-2 h-4 w-4" /> Suggested palettes
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl">
+                    <DialogHeader>
+                      <DialogTitle>Suggested color combos</DialogTitle>
+                      <DialogDescription>
+                        Pick a preset to quickly set <span className="font-mono">backgroundColor</span>, <span className="font-mono">textColor</span>, <span className="font-mono">mutedTextColor</span>, and <span className="font-mono">accentColor</span>.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {THEME_PALETTES.map((p) => (
+                        <div key={p.id} className="rounded-lg border p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{p.name}</div>
+                              <div className="text-xs text-muted-foreground">{p.description}</div>
+                            </div>
+                            <Button type="button" size="sm" onClick={() => applyThemePalette(p)} disabled={!parsedTheme}>
+                              Apply
+                            </Button>
+                          </div>
+
+                          <div
+                            className="mt-3 rounded-md border p-3"
+                            style={{ backgroundColor: p.backgroundColor, color: p.textColor }}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-semibold">Sample item</div>
+                              <div className="font-semibold" style={{ color: p.accentColor }}>R 99.00</div>
+                            </div>
+                            <div className="text-sm mt-1" style={{ color: p.mutedTextColor }}>
+                              Short description text for readability.
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block h-3 w-3 rounded" style={{ backgroundColor: p.backgroundColor }} />
+                              <span>Bg</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block h-3 w-3 rounded" style={{ backgroundColor: p.textColor }} />
+                              <span>Text</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block h-3 w-3 rounded" style={{ backgroundColor: p.mutedTextColor }} />
+                              <span>Muted</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block h-3 w-3 rounded" style={{ backgroundColor: p.accentColor }} />
+                              <span>Accent</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <DialogFooter>
+                      <div className="text-xs text-muted-foreground">
+                        Tip: Keep text contrast high for TV viewing.
+                      </div>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
 
               {parsedTheme == null ? (
@@ -1484,6 +1818,61 @@ export default function MenuEditorPage() {
                 </div>
               </div>
 
+              <div className="grid gap-2">
+                <Label>Item card style</Label>
+                <Select
+                  value={parsedTheme ? readThemeItemCardStyle(parsedTheme) : "standard"}
+                  onValueChange={(v) =>
+                    updateThemeJson((t) => {
+                      const next = { ...(t || {}) } as any;
+                      if (v === "standard") delete next.itemCardStyle;
+                      else next.itemCardStyle = v;
+                      return next as ThemeConfig;
+                    })
+                  }
+                  disabled={!parsedTheme}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Standard" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">
+                      <div className="flex items-center gap-2">
+                        <ItemCardStyleThumb style="standard" />
+                        <span>Standard</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="compact">
+                      <div className="flex items-center gap-2">
+                        <ItemCardStyleThumb style="compact" />
+                        <span>Compact</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="image-left">
+                      <div className="flex items-center gap-2">
+                        <ItemCardStyleThumb style="image-left" />
+                        <span>Image left</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="image-right">
+                      <div className="flex items-center gap-2">
+                        <ItemCardStyleThumb style="image-right" />
+                        <span>Image right</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="hero">
+                      <div className="flex items-center gap-2">
+                        <ItemCardStyleThumb style="hero" />
+                        <span>Hero image</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="text-xs text-muted-foreground">
+                  Controls how each item is presented on the public menu display.
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <Label>Background image</Label>
@@ -1566,39 +1955,167 @@ export default function MenuEditorPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label>Logo</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={parsedTheme ? readThemeString(parsedTheme, "logoUrl", "") : ""}
-                      disabled={!parsedTheme}
-                      onChange={(e) =>
-                        updateThemeJson((t) => {
-                          const next = { ...(t || {}) } as any;
-                          const url = e.target.value.trim();
-                          if (url) next.logoUrl = url;
-                          else delete next.logoUrl;
-                          return next as ThemeConfig;
-                        })
-                      }
-                      placeholder="Optional"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => openMediaPicker({ kind: "menuLogo" })}
-                      aria-label="Pick logo from media library"
-                      disabled={!parsedTheme}
-                    >
-                      <ImageIcon className="h-4 w-4" />
-                    </Button>
+                    <Label>Logo</Label>
+                    <div className="grid gap-2">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={parsedTheme ? readThemeString(parsedTheme, "logoUrl", "") : ""}
+                          disabled={!parsedTheme}
+                          onChange={(e) =>
+                            updateThemeJson((t) => {
+                              const next = { ...(t || {}) } as any;
+                              const url = e.target.value.trim();
+                              if (url) next.logoUrl = url;
+                              else delete next.logoUrl;
+                              return next as ThemeConfig;
+                            })
+                          }
+                          placeholder="Optional"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => openMediaPicker({ kind: "menuLogo" })}
+                          aria-label="Pick logo from media library"
+                          disabled={!parsedTheme}
+                        >
+                          <ImageIcon className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={logoUploadRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            await uploadFileAndApplyToTarget(file, { kind: "menuLogo" });
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => logoUploadRef.current?.click()}
+                          disabled={!parsedTheme || uploadingImage}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          Upload logo
+                        </Button>
+                      </div>
+                    </div>
+
+                    {parsedTheme && readThemeString(parsedTheme, "logoUrl", "") ? (
+                      <div className="mt-2">
+                        <img
+                          src={resolvePreviewSrc(readThemeString(parsedTheme, "logoUrl", ""))}
+                          alt=""
+                          className="h-12 w-20 rounded object-contain border bg-white/5"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
-                  {parsedTheme && readThemeString(parsedTheme, "logoUrl", "") ? (
+              </div>
+
+                <div className="grid gap-2">
+                  <Label>Header</Label>
+                  <Select
+                    value={parsedTheme ? String((parsedTheme as any).headerMode || "auto") : "auto"}
+                    onValueChange={(v) =>
+                      updateThemeJson((t) => {
+                        const next = { ...(t || {}) } as any;
+                        if (v === "auto") delete next.headerMode;
+                        else next.headerMode = v;
+                        return next as ThemeConfig;
+                      })
+                    }
+                    disabled={!parsedTheme}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Auto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto (logo if set, else none)</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="logo">Logo</SelectItem>
+                      <SelectItem value="image">Image</SelectItem>
+                      <SelectItem value="text">Menu name (text)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-muted-foreground">
+                    Controls the header area on the public menu (removes Welcome/Menu name when set to Logo/Image/None).
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Header image</Label>
+                  <div className="grid gap-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={parsedTheme ? readThemeString(parsedTheme, "headerImageUrl", "") : ""}
+                        disabled={!parsedTheme}
+                        onChange={(e) =>
+                          updateThemeJson((t) => {
+                            const next = { ...(t || {}) } as any;
+                            const url = e.target.value.trim();
+                            if (url) next.headerImageUrl = url;
+                            else delete next.headerImageUrl;
+                            return next as ThemeConfig;
+                          })
+                        }
+                        placeholder="Optional"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => openMediaPicker({ kind: "menuHeaderImage" })}
+                        aria-label="Pick header image from media library"
+                        disabled={!parsedTheme}
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={headerImageUploadRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          await uploadFileAndApplyToTarget(file, { kind: "menuHeaderImage" });
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => headerImageUploadRef.current?.click()}
+                        disabled={!parsedTheme || uploadingImage}
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload header image
+                      </Button>
+                    </div>
+                  </div>
+
+                  {parsedTheme && readThemeString(parsedTheme, "headerImageUrl", "") ? (
                     <div className="mt-2">
                       <img
-                        src={resolvePreviewSrc(readThemeString(parsedTheme, "logoUrl", ""))}
+                        src={resolvePreviewSrc(readThemeString(parsedTheme, "headerImageUrl", ""))}
                         alt=""
-                        className="h-12 w-20 rounded object-contain border bg-white/5"
+                        className="h-16 w-28 rounded object-cover border"
                         loading="lazy"
                         onError={(e) => {
                           (e.currentTarget as HTMLImageElement).style.display = "none";
@@ -1606,8 +2123,11 @@ export default function MenuEditorPage() {
                       />
                     </div>
                   ) : null}
+
+                  <div className="text-xs text-muted-foreground">
+                    Use with Header mode = Image.
+                  </div>
                 </div>
-              </div>
 
               <div className="grid gap-2">
                 <Label>Background overlay opacity</Label>

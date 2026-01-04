@@ -96,6 +96,34 @@ begin
       Q.Free;
     end;
 
+    // Ensure provisioning token event table exists for token lifecycle auditing
+    Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := Conn;
+      Q.SQL.Text :=
+        'CREATE TABLE IF NOT EXISTS ProvisioningTokenEvents ('+
+        '  EventID BIGSERIAL PRIMARY KEY,'+
+        '  Token VARCHAR(128) NOT NULL,'+
+        '  EventType VARCHAR(64) NOT NULL,'+
+        '  HardwareId VARCHAR(255),'+
+        '  DisplayID INT NULL REFERENCES Displays(DisplayID) ON DELETE SET NULL,'+
+        '  OrganizationID INT NULL REFERENCES Organizations(OrganizationID) ON DELETE SET NULL,'+
+        '  UserID INT NULL REFERENCES Users(UserID) ON DELETE SET NULL,'+
+        '  Details JSONB,'+
+        '  RequestId VARCHAR(64),'+
+        '  IpAddress VARCHAR(64),'+
+        '  UserAgent VARCHAR(255),'+
+        '  CreatedAt TIMESTAMPTZ NOT NULL DEFAULT NOW()'+
+        ');'+
+        'CREATE INDEX IF NOT EXISTS IX_ProvisioningTokenEvents_Token_CreatedAt ON ProvisioningTokenEvents(Token, CreatedAt DESC);'+
+        'CREATE INDEX IF NOT EXISTS IX_ProvisioningTokenEvents_HardwareId_CreatedAt ON ProvisioningTokenEvents(HardwareId, CreatedAt DESC);'+
+        'CREATE INDEX IF NOT EXISTS IX_ProvisioningTokenEvents_DisplayId_CreatedAt ON ProvisioningTokenEvents(DisplayID, CreatedAt DESC);'+
+        'CREATE INDEX IF NOT EXISTS IX_ProvisioningTokenEvents_OrgId_CreatedAt ON ProvisioningTokenEvents(OrganizationID, CreatedAt DESC);';
+      Q.ExecSQL;
+    finally
+      Q.Free;
+    end;
+
     // Publish globally so repositories can clone params
     ServerContainer := TServerContainer.Create;
     ServerContainer.FDConnection := Conn;

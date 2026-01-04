@@ -14,6 +14,44 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+function getApiUrl() {
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env) return env;
+  if (typeof window !== "undefined") return `${window.location.origin}/api`;
+  return "/api";
+}
+
+function normalizeMinioPresignedUrl(raw: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    const isInternalMinio = u.hostname === "minio" || (u.hostname === "localhost" && u.port === "9000");
+    if (typeof window !== "undefined" && isInternalMinio) {
+      return `${window.location.origin}/minio${u.pathname}${u.search}`;
+    }
+  } catch {
+    // ignore
+  }
+  return s;
+}
+
+function extractApiErrorMessage(raw: string, fallback: string) {
+  const s = (raw || "").trim();
+  if (!s) return fallback;
+  try {
+    const j = JSON.parse(s);
+    if (typeof j === "string") return j || fallback;
+    if (j && typeof j === "object") {
+      const msg = (j as any).message ?? (j as any).Message ?? (j as any).error ?? (j as any).Error;
+      if (typeof msg === "string" && msg.trim()) return msg.trim();
+    }
+  } catch {
+    // ignore
+  }
+  return s;
+}
+
 interface Campaign {
   Id: number;
   Name: string;
@@ -68,13 +106,13 @@ export default function EditCampaignPage() {
       try {
         const token = localStorage.getItem("token");
         if (!token) return;
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+        const apiUrl = getApiUrl();
         const res = await fetch(`${apiUrl}/media-files/${mediaFileId}/download-url`, {
           headers: { "X-Auth-Token": token },
         });
         if (!res.ok) return;
         const data = await res.json();
-        const url = (data?.DownloadUrl || "") as string;
+        const url = normalizeMinioPresignedUrl(((data?.DownloadUrl || "") as string) || "");
         if (!url) return;
         setPreviewUrls((prev) => ({ ...prev, [mediaFileId]: url }));
       } catch {
@@ -96,7 +134,7 @@ export default function EditCampaignPage() {
 
         const user = JSON.parse(userStr);
         const orgId = user.OrganizationId;
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+        const apiUrl = getApiUrl();
         const headers = { "X-Auth-Token": token || "" };
 
         // 1. Fetch Campaign Details
@@ -186,7 +224,11 @@ export default function EditCampaignPage() {
   const handleAddItem = async (media: MediaFile) => {
     try {
       const token = localStorage.getItem("token");
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+      const apiUrl = getApiUrl();
       
       const newItemOrder = items.length + 1;
       const defaultDuration = media.FileType.startsWith("video") ? 0 : 10; // 0 for video means play full length usually, or we default to 10s
@@ -205,7 +247,10 @@ export default function EditCampaignPage() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to add item");
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(extractApiErrorMessage(text, "Failed to add item"));
+      }
 
       const createdItem = await response.json();
       const enrichedItem: CampaignItem = {
@@ -220,14 +265,18 @@ export default function EditCampaignPage() {
       toast.success("Added to playlist");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to add item");
+      toast.error(error instanceof Error ? error.message : "Failed to add item");
     }
   };
 
   const handleAddMenuItem = async (menu: Menu) => {
     try {
       const token = localStorage.getItem("token");
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+      const apiUrl = getApiUrl();
 
       const newItemOrder = items.length + 1;
       const defaultDuration = 10;
@@ -246,7 +295,10 @@ export default function EditCampaignPage() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to add menu item");
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(extractApiErrorMessage(text, "Failed to add menu item"));
+      }
 
       const createdItem = await response.json();
       const enrichedItem: CampaignItem = {
@@ -261,7 +313,7 @@ export default function EditCampaignPage() {
       toast.success("Menu added to playlist");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to add menu");
+      toast.error(error instanceof Error ? error.message : "Failed to add menu");
     }
   };
 
@@ -280,7 +332,7 @@ export default function EditCampaignPage() {
   const handleRemoveItem = async (itemId: number) => {
     try {
       const token = localStorage.getItem("token");
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      const apiUrl = getApiUrl();
 
       const response = await fetch(`${apiUrl}/campaign-items/${itemId}`, {
         method: "DELETE",
@@ -304,7 +356,7 @@ export default function EditCampaignPage() {
 
     try {
       const token = localStorage.getItem("token");
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      const apiUrl = getApiUrl();
       
       const item = items.find(i => i.Id === itemId);
       if (!item) return;
@@ -341,7 +393,7 @@ export default function EditCampaignPage() {
     // Persist new order
     try {
       const token = localStorage.getItem("token");
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      const apiUrl = getApiUrl();
 
       // We need to update each item that changed order. 
       // For simplicity in this MVP, we'll update all items in the list.

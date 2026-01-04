@@ -16,7 +16,7 @@ type
 
 implementation
 
-uses System.SysUtils, FireDAC.Comp.Client, FireDAC.Stan.Param, uServerContainer;
+uses System.SysUtils, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Param, uServerContainer;
 
 function NewConnection: TFDConnection;
 begin
@@ -97,6 +97,12 @@ begin
                   + 'values (:C,:T,:M,:Menu,:O,:D) returning *';
       Q.ParamByName('C').AsInteger := CampaignId;
       Q.ParamByName('T').AsString := ItemType;
+
+      // Important for PostgreSQL: if we clear a parameter without a known type,
+      // server-side Prepare can fail with "Parameter <x> data type is unknown".
+      Q.ParamByName('M').DataType := ftInteger;
+      Q.ParamByName('Menu').DataType := ftInteger;
+
       if MediaFileId>0 then
         Q.ParamByName('M').AsInteger := MediaFileId
       else
@@ -142,6 +148,11 @@ begin
                   + 'where CampaignItemID=:Id returning *';
       Q.ParamByName('Id').AsInteger := Id;
       Q.ParamByName('T').AsString := ItemType;
+
+      // Ensure stable parameter types even when setting NULL.
+      Q.ParamByName('M').DataType := ftInteger;
+      Q.ParamByName('Menu').DataType := ftInteger;
+
       if MediaFileId>0 then
         Q.ParamByName('M').AsInteger := MediaFileId
       else

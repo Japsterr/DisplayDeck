@@ -1,9 +1,10 @@
 # DisplayDeck Project Plan
 
-> Status update — 2025-12-28
+> Status update — 2026-01-04
 >
 > The server is Delphi WebBroker + Indy (Linux) with FireDAC + PostgreSQL and MinIO for media.
-> The web dashboard (Next.js) is live and provides campaign management, media uploads, and display assignments.
+> The web dashboard (Next.js) is live and provides campaign management, media uploads, display assignments, public menu rendering, and analytics views.
+> Token/device lifecycle auditing is available via provisioning event endpoints.
 >
 > Key implemented endpoints include:
 > - Auth: /auth/login, /auth/register

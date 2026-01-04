@@ -52,6 +52,7 @@ uses
   EmailSender,
   AWSSigV4,
   ProvisioningTokenRepository,
+  ProvisioningTokenEventRepository,
   uServerContainer,
   System.Hash,
   System.Threading,
@@ -1577,6 +1578,319 @@ begin
           end;
           Exit;
         end;
+
+        // Provisioning token lifecycle events (org-scoped by token)
+        // GET /organizations/{orgId}/provisioning-token-events?token=ABC123&limit=100&beforeId=0
+        if (PathOrgId > 0) and SameText(Tail, 'provisioning-token-events') and SameText(Request.Method, 'GET') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['audit:read'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var Tok := Trim(Request.QueryFields.Values['token']);
+          if Tok = '' then begin JSONError(400,'Missing token'); Exit; end;
+          Tok := UpperCase(Tok);
+
+          var Limit := StrToIntDef(Request.QueryFields.Values['limit'], 100);
+          if Limit <= 0 then Limit := 100;
+          if Limit > 200 then Limit := 200;
+          var BeforeId := StrToInt64Def(Request.QueryFields.Values['beforeId'], 0);
+
+          var C := NewConnection;
+          try
+            // Ensure token belongs (or belonged) to this org (prevents leaking device-side events).
+            // Note: tokens can be unpaired, clearing OrganizationID from ProvisioningTokens.
+            var QCheck := TFDQuery.Create(nil);
+            try
+              QCheck.Connection := C;
+              QCheck.SQL.Text :=
+                'select 1 where exists (select 1 from ProvisioningTokens where Token=:T and OrganizationID=:Org) '
+                + 'or exists (select 1 from ProvisioningTokenEvents where Token=:T and OrganizationID=:Org)';
+              QCheck.ParamByName('T').AsString := Tok;
+              QCheck.ParamByName('Org').AsInteger := PathOrgId;
+              QCheck.Open;
+              if QCheck.Eof then begin JSONError(404,'Not found'); Exit; end;
+            finally
+              QCheck.Free;
+            end;
+
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text := 'select EventID, CreatedAt, EventType, HardwareId, DisplayID, OrganizationID, UserID, Details, RequestId, IpAddress, UserAgent '
+                          + 'from ProvisioningTokenEvents where Token=:T '
+                          + 'and (:BeforeId=0 or EventID < :BeforeId) '
+                          + 'order by EventID desc limit ' + IntToStr(Limit + 1);
+              Q.ParamByName('T').AsString := Tok;
+              Q.ParamByName('BeforeId').AsLargeInt := BeforeId;
+              Q.Open;
+
+              var Arr := TJSONArray.Create;
+              var NextBeforeId: Int64 := 0;
+              try
+                var Count := 0;
+                while (not Q.Eof) and (Count < Limit) do
+                begin
+                  var Obj := TJSONObject.Create;
+                  Obj.AddPair('EventId', TJSONNumber.Create(Q.FieldByName('EventID').AsLargeInt));
+                  Obj.AddPair('CreatedAt', DateToISO8601(Q.FieldByName('CreatedAt').AsDateTime, True));
+                  Obj.AddPair('EventType', Q.FieldByName('EventType').AsString);
+                  if not Q.FieldByName('HardwareId').IsNull then Obj.AddPair('HardwareId', Q.FieldByName('HardwareId').AsString) else Obj.AddPair('HardwareId', TJSONNull.Create);
+                  if not Q.FieldByName('DisplayID').IsNull then Obj.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger)) else Obj.AddPair('DisplayId', TJSONNull.Create);
+                  if not Q.FieldByName('OrganizationID').IsNull then Obj.AddPair('OrganizationId', TJSONNumber.Create(Q.FieldByName('OrganizationID').AsInteger)) else Obj.AddPair('OrganizationId', TJSONNull.Create);
+                  if not Q.FieldByName('UserID').IsNull then Obj.AddPair('UserId', TJSONNumber.Create(Q.FieldByName('UserID').AsInteger)) else Obj.AddPair('UserId', TJSONNull.Create);
+                  Obj.AddPair('Details', Q.FieldByName('Details').AsString);
+                  Obj.AddPair('RequestId', Q.FieldByName('RequestId').AsString);
+                  Obj.AddPair('IpAddress', Q.FieldByName('IpAddress').AsString);
+                  Obj.AddPair('UserAgent', Q.FieldByName('UserAgent').AsString);
+                  Arr.AddElement(Obj);
+                  Inc(Count);
+                  Q.Next;
+                end;
+
+                if not Q.Eof then
+                  NextBeforeId := Q.FieldByName('EventID').AsLargeInt;
+
+                var OutObj := TJSONObject.Create;
+                try
+                  OutObj.AddPair('Items', Arr);
+                  if NextBeforeId > 0 then
+                    OutObj.AddPair('NextBeforeId', TJSONNumber.Create(NextBeforeId))
+                  else
+                    OutObj.AddPair('NextBeforeId', TJSONNull.Create);
+                  Response.StatusCode := 200;
+                  Response.ContentType := 'application/json';
+                  Response.Content := OutObj.ToJSON;
+                  Response.SendResponse;
+                finally
+                  OutObj.Free;
+                end;
+              except
+                Arr.Free;
+                raise;
+              end;
+            finally
+              Q.Free;
+            end;
+          finally
+            C.Free;
+          end;
+          Exit;
+        end;
+
+        // Provisioning device lifecycle events (org-scoped by hardware id)
+        // GET /organizations/{orgId}/provisioning-device-events?hardwareId=HW123&limit=100&beforeId=0
+        if (PathOrgId > 0) and SameText(Tail, 'provisioning-device-events') and SameText(Request.Method, 'GET') then
+        begin
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if not RequireAuth(['audit:read'], TokOrg, TokUser, TokRole) then Exit;
+          if TokOrg <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var Hw := Trim(Request.QueryFields.Values['hardwareId']);
+          if Hw = '' then begin JSONError(400,'Missing hardwareId'); Exit; end;
+
+          var Limit := StrToIntDef(Request.QueryFields.Values['limit'], 100);
+          if (Limit <= 0) then Limit := 100;
+          if (Limit > 500) then Limit := 500;
+          var BeforeId := StrToIntDef(Request.QueryFields.Values['beforeId'], 0);
+
+          var C := NewConnection;
+          try
+            // Ensure device has events in this org
+            var QCheck := TFDQuery.Create(nil);
+            try
+              QCheck.Connection := C;
+              QCheck.SQL.Text := 'select 1 from ProvisioningTokenEvents where OrganizationID=:Org and HardwareId=:H limit 1';
+              QCheck.ParamByName('Org').AsInteger := PathOrgId;
+              QCheck.ParamByName('H').AsString := Hw;
+              QCheck.Open;
+              if QCheck.Eof then begin JSONError(404,'Not found'); Exit; end;
+            finally
+              QCheck.Free;
+            end;
+
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text :=
+                'select Id, CreatedAt, Token, EventType, HardwareId, DisplayID, OrganizationID, UserID, Details '
+                + 'from ProvisioningTokenEvents '
+                + 'where OrganizationID=:Org and HardwareId=:H '
+                + 'and (:BeforeId=0 or Id<:BeforeId) '
+                + 'order by Id desc limit :L';
+              Q.ParamByName('Org').AsInteger := PathOrgId;
+              Q.ParamByName('H').AsString := Hw;
+              Q.ParamByName('BeforeId').AsInteger := BeforeId;
+              Q.ParamByName('L').AsInteger := Limit;
+              Q.Open;
+
+              var Arr := TJSONArray.Create;
+              try
+                while not Q.Eof do
+                begin
+                  var It := TJSONObject.Create;
+                  It.AddPair('Id', TJSONNumber.Create(Q.FieldByName('Id').AsInteger));
+                  It.AddPair('CreatedAt', DateToISO8601(Q.FieldByName('CreatedAt').AsDateTime, True));
+                  It.AddPair('Token', Q.FieldByName('Token').AsString);
+                  It.AddPair('EventType', Q.FieldByName('EventType').AsString);
+                  if Trim(Q.FieldByName('HardwareId').AsString) <> '' then It.AddPair('HardwareId', Trim(Q.FieldByName('HardwareId').AsString)) else It.AddPair('HardwareId', TJSONNull.Create);
+                  if not Q.FieldByName('DisplayID').IsNull then It.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger)) else It.AddPair('DisplayId', TJSONNull.Create);
+                  if not Q.FieldByName('OrganizationID').IsNull then It.AddPair('OrganizationId', TJSONNumber.Create(Q.FieldByName('OrganizationID').AsInteger)) else It.AddPair('OrganizationId', TJSONNull.Create);
+                  if not Q.FieldByName('UserID').IsNull then It.AddPair('UserId', TJSONNumber.Create(Q.FieldByName('UserID').AsInteger)) else It.AddPair('UserId', TJSONNull.Create);
+                  var Dv := Q.FieldByName('Details').AsString;
+                  if Trim(Dv) <> '' then
+                  begin
+                    var Parsed := TJSONObject.ParseJSONValue(Dv);
+                    if Assigned(Parsed) then It.AddPair('Details', Parsed) else It.AddPair('Details', TJSONNull.Create);
+                  end
+                  else
+                    It.AddPair('Details', TJSONNull.Create);
+                  Arr.AddElement(It);
+                  Q.Next;
+                end;
+                var OutBody := Arr.ToJSON;
+                Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+              finally
+                Arr.Free;
+              end;
+            finally
+              Q.Free;
+            end;
+          finally
+            C.Free;
+          end;
+          Exit;
+        end;
+
+        // Provisioning devices list (org-scoped by hardware id)
+        // GET /organizations/{orgId}/provisioning-devices?afterHardwareId=...&limit=200
+        if (PathOrgId > 0) and SameText(Tail, 'provisioning-devices') and SameText(Request.Method, 'GET') then
+        begin
+          var TokOrg, TokUser: Integer; var TokRole: string;
+          if not RequireAuth(['audit:read'], TokOrg, TokUser, TokRole) then Exit;
+          if TokOrg <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var AfterHw := Trim(Request.QueryFields.Values['afterHardwareId']);
+          var Limit := StrToIntDef(Request.QueryFields.Values['limit'], 200);
+          if (Limit <= 0) then Limit := 200;
+          if (Limit > 1000) then Limit := 1000;
+
+          var C := NewConnection;
+          try
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text :=
+                'select HardwareId, '
+                + 'max(CreatedAt) as LastSeenAt, '
+                + 'max(Id) as LastEventId, '
+                + 'count(1) as EventsCount, '
+                + 'count(distinct Token) as TokensCount, '
+                + 'count(distinct DisplayID) as DisplaysCount '
+                + 'from ProvisioningTokenEvents '
+                + 'where OrganizationID=:Org '
+                + 'and HardwareId is not null and HardwareId<>'''' '
+                + 'and (:AfterHw='''' or HardwareId>:AfterHw) '
+                + 'group by HardwareId '
+                + 'order by HardwareId asc '
+                + 'limit :L';
+              Q.ParamByName('Org').AsInteger := PathOrgId;
+              Q.ParamByName('AfterHw').AsString := AfterHw;
+              Q.ParamByName('L').AsInteger := Limit;
+              Q.Open;
+
+              var Arr := TJSONArray.Create;
+              try
+                while not Q.Eof do
+                begin
+                  var It := TJSONObject.Create;
+                  It.AddPair('HardwareId', Q.FieldByName('HardwareId').AsString);
+                  It.AddPair('LastSeenAt', DateToISO8601(Q.FieldByName('LastSeenAt').AsDateTime, True));
+                  It.AddPair('LastEventId', TJSONNumber.Create(Q.FieldByName('LastEventId').AsInteger));
+                  It.AddPair('EventsCount', TJSONNumber.Create(Q.FieldByName('EventsCount').AsInteger));
+                  It.AddPair('TokensCount', TJSONNumber.Create(Q.FieldByName('TokensCount').AsInteger));
+                  It.AddPair('DisplaysCount', TJSONNumber.Create(Q.FieldByName('DisplaysCount').AsInteger));
+                  Arr.AddElement(It);
+                  Q.Next;
+                end;
+                Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Arr.ToJSON; Response.SendResponse;
+              finally
+                Arr.Free;
+              end;
+            finally
+              Q.Free;
+            end;
+          finally
+            C.Free;
+          end;
+          Exit;
+        end;
+
+        // Audit stats (lightweight rollups)
+        if (PathOrgId > 0) and SameText(Tail, 'stats/display-lifecycle') and SameText(Request.Method, 'GET') then
+        begin
+          var AuthOrgId, AuthUserId: Integer; var AuthRole: string;
+          if not RequireAuth(['audit:read'], AuthOrgId, AuthUserId, AuthRole) then Exit;
+          if AuthOrgId <> PathOrgId then begin JSONError(403,'Forbidden'); Exit; end;
+
+          var Days := StrToIntDef(Request.QueryFields.Values['days'], 30);
+          if Days <= 0 then Days := 30;
+          if Days > 365 then Days := 365;
+
+          var FromAt := Now - Days;
+          var ToAt := Now;
+
+          var PairedCount := 0;
+          var RemovedCount := 0;
+
+          var C := NewConnection;
+          try
+            var Q := TFDQuery.Create(nil);
+            try
+              Q.Connection := C;
+              Q.SQL.Text :=
+                'select Action, count(*) as Cnt ' +
+                'from AuditLogs ' +
+                'where OrganizationID=:Org ' +
+                'and CreatedAt >= :FromAt ' +
+                'and Action in (''display.pair'',''display.delete'') ' +
+                'group by Action';
+              Q.ParamByName('Org').AsInteger := PathOrgId;
+              Q.ParamByName('FromAt').AsDateTime := FromAt;
+              Q.Open;
+              while not Q.Eof do
+              begin
+                var Act := Q.FieldByName('Action').AsString;
+                var Cnt := Q.FieldByName('Cnt').AsInteger;
+                if SameText(Act, 'display.pair') then PairedCount := Cnt;
+                if SameText(Act, 'display.delete') then RemovedCount := Cnt;
+                Q.Next;
+              end;
+            finally
+              Q.Free;
+            end;
+          finally
+            C.Free;
+          end;
+
+          var OutObj := TJSONObject.Create;
+          try
+            OutObj.AddPair('Days', TJSONNumber.Create(Days));
+            OutObj.AddPair('From', DateToISO8601(FromAt, True));
+            OutObj.AddPair('To', DateToISO8601(ToAt, True));
+            var Counts := TJSONObject.Create;
+            Counts.AddPair('Paired', TJSONNumber.Create(PairedCount));
+            Counts.AddPair('Removed', TJSONNumber.Create(RemovedCount));
+            OutObj.AddPair('Counts', Counts);
+            Response.StatusCode := 200;
+            Response.ContentType := 'application/json';
+            Response.Content := OutObj.ToJSON;
+            Response.SendResponse;
+          finally
+            OutObj.Free;
+          end;
+          Exit;
+        end;
       end;
     end;
 
@@ -1716,6 +2030,164 @@ begin
       end;
     end;
 
+    // Organization display actions: /organizations/{orgId}/displays/{displayId}/unpair
+    if (Copy(NormalizedPath, 1, 15) = '/organizations/') and (Pos('/displays/', NormalizedPath) > 0) and (Pos('/unpair', NormalizedPath) > 0) and SameText(Request.Method, 'POST') then
+    begin
+      var OrgIdStr := Copy(NormalizedPath, 16, MaxInt);
+      var Slash := Pos('/', OrgIdStr);
+      if Slash > 0 then OrgIdStr := Copy(OrgIdStr, 1, Slash-1);
+      var OrgId := StrToIntDef(OrgIdStr, 0);
+      if OrgId = 0 then begin JSONError(400, 'Invalid organization id'); Exit; end;
+
+      // Extract display id between /displays/ and /unpair
+      var Tail := Copy(NormalizedPath, Pos('/displays/', NormalizedPath) + Length('/displays/'), MaxInt);
+      var UnpairPos := Pos('/unpair', Tail);
+      if UnpairPos <= 1 then begin JSONError(400, 'Invalid display id'); Exit; end;
+      var DisplayIdStr := Copy(Tail, 1, UnpairPos-1);
+      var DisplayId := StrToIntDef(DisplayIdStr, 0);
+      if DisplayId <= 0 then begin JSONError(400, 'Invalid display id'); Exit; end;
+
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
+      if TokOrg <> OrgId then begin JSONError(403, 'Forbidden'); Exit; end;
+      if TryReplayIdempotency(OrgId) then Exit;
+
+      var C := NewConnection;
+      try
+        C.StartTransaction;
+        try
+          // Load existing token + hardware id (and confirm org ownership)
+          var ExistingToken := '';
+          var ExistingHw := '';
+          var QGet := TFDQuery.Create(nil);
+          try
+            QGet.Connection := C;
+            QGet.SQL.Text :=
+              'select d.ProvisioningToken, pt.HardwareId '
+              + 'from Displays d '
+              + 'left join ProvisioningTokens pt on pt.Token = d.ProvisioningToken '
+              + 'where d.DisplayID=:D and d.OrganizationID=:Org for update';
+            QGet.ParamByName('D').AsInteger := DisplayId;
+            QGet.ParamByName('Org').AsInteger := OrgId;
+            QGet.Open;
+            if QGet.Eof then begin C.Rollback; JSONError(404, 'Not found'); Exit; end;
+            ExistingToken := Trim(QGet.FieldByName('ProvisioningToken').AsString);
+            ExistingHw := Trim(QGet.FieldByName('HardwareId').AsString);
+          finally
+            QGet.Free;
+          end;
+
+          // If token is known but HardwareId isn't available from ProvisioningTokens, resolve from historical events
+          if (ExistingToken <> '') and (ExistingHw = '') then
+          begin
+            var QHw := TFDQuery.Create(nil);
+            try
+              QHw.Connection := C;
+              QHw.SQL.Text := 'select HardwareId from ProvisioningTokenEvents where Token=:T and HardwareId<>'''' order by Id desc limit 1';
+              QHw.ParamByName('T').AsString := ExistingToken;
+              QHw.Open;
+              if (not QHw.Eof) then ExistingHw := Trim(QHw.FieldByName('HardwareId').AsString);
+            finally
+              QHw.Free;
+            end;
+          end;
+
+          // Always clear display token (idempotent)
+          var QClr := TFDQuery.Create(nil);
+          try
+            QClr.Connection := C;
+            QClr.SQL.Text := 'update Displays set ProvisioningToken=null, UpdatedAt=now() where DisplayID=:D and OrganizationID=:Org';
+            QClr.ParamByName('D').AsInteger := DisplayId;
+            QClr.ParamByName('Org').AsInteger := OrgId;
+            QClr.ExecSQL;
+          finally
+            QClr.Free;
+          end;
+
+          // If there was a token, detach it so device heartbeats fail (Not linked)
+          if ExistingToken <> '' then
+          begin
+            var QTok := TFDQuery.Create(nil);
+            try
+              QTok.Connection := C;
+              QTok.SQL.Text := 'update ProvisioningTokens set DisplayID=null, OrganizationID=null where Token=:T';
+              QTok.ParamByName('T').AsString := ExistingToken;
+              QTok.ExecSQL;
+            finally
+              QTok.Free;
+            end;
+          end;
+
+          C.Commit;
+
+          // Log token lifecycle event (account-side)
+          if ExistingToken <> '' then
+          begin
+            var Ev := TJSONObject.Create;
+            try
+              Ev.AddPair('Reason', 'manual_unpair');
+
+              // Snapshot assignment counts + related content counts
+              var C2 := NewConnection;
+              try
+                var QCnt := TFDQuery.Create(nil);
+                try
+                  QCnt.Connection := C2;
+                  QCnt.SQL.Text :=
+                    'select '
+                    + '  (select count(1) from DisplayCampaigns where DisplayID=:D) as CampaignAssignments, '
+                    + '  (select count(1) from DisplayMenus where DisplayID=:D) as MenuAssignments, '
+                    + '  (select count(distinct ci.MediaFileID) '
+                    + '     from DisplayCampaigns dc '
+                    + '     join CampaignItems ci on ci.CampaignID=dc.CampaignID '
+                    + '     where dc.DisplayID=:D and ci.ItemType=''media'' and ci.MediaFileID is not null) as MediaFilesDistinct, '
+                    + '  (select count(distinct ci.MenuID) '
+                    + '     from DisplayCampaigns dc '
+                    + '     join CampaignItems ci on ci.CampaignID=dc.CampaignID '
+                    + '     where dc.DisplayID=:D and ci.ItemType=''menu'' and ci.MenuID is not null) as MenusInCampaignsDistinct';
+                  QCnt.ParamByName('D').AsInteger := DisplayId;
+                  QCnt.Open;
+                  Ev.AddPair('CampaignAssignments', TJSONNumber.Create(QCnt.FieldByName('CampaignAssignments').AsInteger));
+                  Ev.AddPair('MenuAssignments', TJSONNumber.Create(QCnt.FieldByName('MenuAssignments').AsInteger));
+                  Ev.AddPair('MediaFilesDistinct', TJSONNumber.Create(QCnt.FieldByName('MediaFilesDistinct').AsInteger));
+                  Ev.AddPair('MenusInCampaignsDistinct', TJSONNumber.Create(QCnt.FieldByName('MenusInCampaignsDistinct').AsInteger));
+                finally
+                  QCnt.Free;
+                end;
+              finally
+                C2.Free;
+              end;
+
+              TProvisioningTokenEventRepository.WriteEvent(ExistingToken, 'unpaired', ExistingHw, DisplayId, OrgId, TokUser, Ev, RequestId, ClientIp, UserAgent);
+            finally
+              Ev.Free;
+            end;
+          end;
+
+          var Obj := TJSONObject.Create;
+          try
+            Obj.AddPair('Success', TJSONBool.Create(True));
+            Obj.AddPair('DisplayId', TJSONNumber.Create(DisplayId));
+            if ExistingToken <> '' then Obj.AddPair('ProvisioningToken', ExistingToken) else Obj.AddPair('ProvisioningToken', TJSONNull.Create);
+            var OutBody := Obj.ToJSON;
+            StoreIdempotency(OrgId, 200, OutBody);
+            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := OutBody; Response.SendResponse;
+          finally
+            Obj.Free;
+          end;
+        except
+          on E: Exception do
+          begin
+            try C.Rollback; except end;
+            JSONError(500, 'Unpair failed: ' + E.Message, 'unpair_failed');
+          end;
+        end;
+      finally
+        C.Free;
+      end;
+      Exit;
+    end;
+
     // Device pairing: device asks for a short pairing code (shown on screen)
     if (SameText(Request.PathInfo, '/device/provisioning/token') or SameText(Request.PathInfo, '/api/device/provisioning/token')) and SameText(Request.Method,'POST') then
     begin
@@ -1731,6 +2203,17 @@ begin
             Q.ParamByName('H').AsString := HardwareId; Q.ParamByName('T').AsString := Info.Token; Q.ExecSQL;
           finally Q.Free; end;
         finally C.Free; end;
+
+        // Token lifecycle event (device-side)
+        var Ev := TJSONObject.Create;
+        try
+          Ev.AddPair('TtlSeconds', TJSONNumber.Create(3600));
+          Ev.AddPair('CodeLength', TJSONNumber.Create(6));
+          TProvisioningTokenEventRepository.WriteEvent(Info.Token, 'issued', HardwareId, 0, 0, 0, Ev, RequestId, ClientIp, UserAgent);
+        finally
+          Ev.Free;
+        end;
+
         var Obj := TJSONObject.Create; 
         Obj.AddPair('ProvisioningToken', Info.Token);
         Obj.AddPair('PairingCode', Info.Token);
@@ -1817,19 +2300,77 @@ begin
             QTok.ParamByName('T').AsString := ProvisioningToken;
             QTok.ParamByName('H').AsString := HardwareId;
             QTok.Open;
-            if QTok.Eof then begin JSONError(404,'Not found'); Exit; end;
+            if QTok.Eof then
+            begin
+              var Ev := TJSONObject.Create;
+              try
+                Ev.AddPair('Reason', 'not_found');
+                TProvisioningTokenEventRepository.WriteEvent(ProvisioningToken, 'heartbeat_rejected', HardwareId, 0, 0, 0, Ev, RequestId, ClientIp, UserAgent);
+              finally
+                Ev.Free;
+              end;
+              JSONError(404,'Not found');
+              Exit;
+            end;
             var ClaimedTok := QTok.FieldByName('Claimed').AsBoolean;
             // Provisioning tokens are short-lived during pairing, but once claimed we treat them
             // as a long-lived device credential to keep the device zero-input.
             if (not ClaimedTok) and (QTok.FieldByName('ExpiresAt').AsDateTime <= Now) then
             begin
+              var Ev := TJSONObject.Create;
+              try
+                Ev.AddPair('Reason', 'expired');
+                TProvisioningTokenEventRepository.WriteEvent(ProvisioningToken, 'heartbeat_rejected', HardwareId, 0, 0, 0, Ev, RequestId, ClientIp, UserAgent);
+              finally
+                Ev.Free;
+              end;
               JSONError(410,'Expired');
               Exit;
             end;
-            if not ClaimedTok then begin JSONError(409,'Not claimed'); Exit; end;
-            if QTok.FieldByName('DisplayID').IsNull then begin JSONError(409,'Not linked'); Exit; end;
+            if not ClaimedTok then
+            begin
+              var Ev := TJSONObject.Create;
+              try
+                Ev.AddPair('Reason', 'not_claimed');
+                TProvisioningTokenEventRepository.WriteEvent(ProvisioningToken, 'heartbeat_rejected', HardwareId, 0, 0, 0, Ev, RequestId, ClientIp, UserAgent);
+              finally
+                Ev.Free;
+              end;
+              JSONError(409,'Not claimed');
+              Exit;
+            end;
+            if QTok.FieldByName('DisplayID').IsNull then
+            begin
+              var Ev := TJSONObject.Create;
+              try
+                Ev.AddPair('Reason', 'not_linked');
+                TProvisioningTokenEventRepository.WriteEvent(ProvisioningToken, 'heartbeat_rejected', HardwareId, 0, 0, 0, Ev, RequestId, ClientIp, UserAgent);
+              finally
+                Ev.Free;
+              end;
+              JSONError(409,'Not linked');
+              Exit;
+            end;
 
             var DisplayId := QTok.FieldByName('DisplayID').AsInteger;
+
+            // Detect first successful heartbeat
+            var OrgIdForEvent := 0;
+            var IsFirstHeartbeat := False;
+            var QState := TFDQuery.Create(nil);
+            try
+              QState.Connection := C;
+              QState.SQL.Text := 'select OrganizationID, LastHeartbeatAt from Displays where DisplayID=:D';
+              QState.ParamByName('D').AsInteger := DisplayId;
+              QState.Open;
+              if not QState.Eof then
+              begin
+                OrgIdForEvent := QState.FieldByName('OrganizationID').AsInteger;
+                IsFirstHeartbeat := QState.FieldByName('LastHeartbeatAt').IsNull;
+              end;
+            finally
+              QState.Free;
+            end;
 
             // Update heartbeat/status fields
             var Qu := TFDQuery.Create(nil);
@@ -1883,6 +2424,46 @@ begin
                 end;
               finally
                 Qm.Free;
+              end;
+            end;
+
+            if IsFirstHeartbeat then
+            begin
+              // Snapshot assignment counts + related content counts
+              var Ev := TJSONObject.Create;
+              try
+                Ev.AddPair('AssignmentType', AssignType);
+                if CampaignId > 0 then Ev.AddPair('PrimaryCampaignId', TJSONNumber.Create(CampaignId)) else Ev.AddPair('PrimaryCampaignId', TJSONNull.Create);
+                if MenuToken <> '' then Ev.AddPair('PrimaryMenuPublicToken', MenuToken) else Ev.AddPair('PrimaryMenuPublicToken', TJSONNull.Create);
+
+                var QCnt := TFDQuery.Create(nil);
+                try
+                  QCnt.Connection := C;
+                  QCnt.SQL.Text :=
+                    'select '
+                    + '  (select count(1) from DisplayCampaigns where DisplayID=:D) as CampaignAssignments, '
+                    + '  (select count(1) from DisplayMenus where DisplayID=:D) as MenuAssignments, '
+                    + '  (select count(distinct ci.MediaFileID) '
+                    + '     from DisplayCampaigns dc '
+                    + '     join CampaignItems ci on ci.CampaignID=dc.CampaignID '
+                    + '     where dc.DisplayID=:D and ci.ItemType=''media'' and ci.MediaFileID is not null) as MediaFilesDistinct, '
+                    + '  (select count(distinct ci.MenuID) '
+                    + '     from DisplayCampaigns dc '
+                    + '     join CampaignItems ci on ci.CampaignID=dc.CampaignID '
+                    + '     where dc.DisplayID=:D and ci.ItemType=''menu'' and ci.MenuID is not null) as MenusInCampaignsDistinct';
+                  QCnt.ParamByName('D').AsInteger := DisplayId;
+                  QCnt.Open;
+                  Ev.AddPair('CampaignAssignments', TJSONNumber.Create(QCnt.FieldByName('CampaignAssignments').AsInteger));
+                  Ev.AddPair('MenuAssignments', TJSONNumber.Create(QCnt.FieldByName('MenuAssignments').AsInteger));
+                  Ev.AddPair('MediaFilesDistinct', TJSONNumber.Create(QCnt.FieldByName('MediaFilesDistinct').AsInteger));
+                  Ev.AddPair('MenusInCampaignsDistinct', TJSONNumber.Create(QCnt.FieldByName('MenusInCampaignsDistinct').AsInteger));
+                finally
+                  QCnt.Free;
+                end;
+
+                TProvisioningTokenEventRepository.WriteEvent(ProvisioningToken, 'first_heartbeat_ok', HardwareId, DisplayId, OrgIdForEvent, 0, Ev, RequestId, ClientIp, UserAgent);
+              finally
+                Ev.Free;
               end;
             end;
 
@@ -2096,6 +2677,7 @@ begin
         try
           C.StartTransaction;
           try
+            var ClaimHardwareId := '';
             // Lock the token row so claim + create display is consistent.
             var QTok := TFDQuery.Create(nil);
             try
@@ -2128,6 +2710,7 @@ begin
                 JSONError(400,'Token not issued to a device','token_not_issued');
                 Exit;
               end;
+              ClaimHardwareId := Hw;
             finally
               QTok.Free;
             end;
@@ -2196,6 +2779,28 @@ begin
             end;
 
             C.Commit;
+
+            // Audit: pairing/claiming a display token
+            var Details := TJSONObject.Create;
+            try
+              Details.AddPair('ProvisioningToken', ProvisioningToken);
+              if ClaimHardwareId <> '' then Details.AddPair('HardwareId', ClaimHardwareId) else Details.AddPair('HardwareId', TJSONNull.Create);
+              Details.AddPair('Name', Name);
+              Details.AddPair('Orientation', Orientation);
+              TAuditLogRepository.WriteEvent(OrgId, TokUser, 'display.pair', 'display', IntToStr(DisplayId), Details, RequestId, ClientIp, UserAgent);
+            finally
+              Details.Free;
+            end;
+
+            // Token lifecycle event (account-side)
+            var Ev := TJSONObject.Create;
+            try
+              Ev.AddPair('Name', Name);
+              Ev.AddPair('Orientation', Orientation);
+              TProvisioningTokenEventRepository.WriteEvent(ProvisioningToken, 'claimed', ClaimHardwareId, DisplayId, OrgId, TokUser, Ev, RequestId, ClientIp, UserAgent);
+            finally
+              Ev.Free;
+            end;
 
             var Obj := TJSONObject.Create;
             Obj.AddPair('Id', TJSONNumber.Create(DisplayId));
@@ -3110,11 +3715,115 @@ begin
         begin
           var D := TDisplayRepository.GetById(Id);
           if D=nil then begin JSONError(404,'Not found'); Exit; end;
+          var TokOrg, TokUser: Integer; var TokRole: string;
           try
-            var TokOrg, TokUser: Integer; var TokRole: string;
             if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
             if TokOrg<>D.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
-          finally D.Free; end;
+            // Capture details before delete (for audit trail)
+            var C := NewConnection;
+            try
+              var Details := TJSONObject.Create;
+              try
+                if D.ProvisioningToken <> '' then Details.AddPair('ProvisioningToken', D.ProvisioningToken) else Details.AddPair('ProvisioningToken', TJSONNull.Create);
+                if D.AppVersion <> '' then Details.AddPair('AppVersion', D.AppVersion) else Details.AddPair('AppVersion', TJSONNull.Create);
+                if D.LastHeartbeatAt > 0 then Details.AddPair('LastHeartbeatAt', DateToISO8601(D.LastHeartbeatAt, True)) else Details.AddPair('LastHeartbeatAt', TJSONNull.Create);
+                if D.DeviceInfoJson <> '' then
+                begin
+                  var Parsed := TJSONObject.ParseJSONValue(D.DeviceInfoJson);
+                  if Assigned(Parsed) then
+                    Details.AddPair('DeviceInfo', Parsed)
+                  else
+                    Details.AddPair('DeviceInfo', TJSONNull.Create);
+                end
+                else
+                  Details.AddPair('DeviceInfo', TJSONNull.Create);
+
+                // Try resolve HardwareId from ProvisioningTokens
+                var HwForEvent := '';
+                if D.ProvisioningToken <> '' then
+                begin
+                  var QHw := TFDQuery.Create(nil);
+                  try
+                    QHw.Connection := C;
+                    QHw.SQL.Text := 'select HardwareId from ProvisioningTokens where Token=:T';
+                    QHw.ParamByName('T').AsString := D.ProvisioningToken;
+                    QHw.Open;
+                    if (not QHw.Eof) and (Trim(QHw.FieldByName('HardwareId').AsString) <> '') then
+                    begin
+                      HwForEvent := Trim(QHw.FieldByName('HardwareId').AsString);
+                      Details.AddPair('HardwareId', HwForEvent);
+                    end
+                    else
+                      Details.AddPair('HardwareId', TJSONNull.Create);
+                  finally
+                    QHw.Free;
+                  end;
+
+                  // Fallback to historical events if not currently in ProvisioningTokens
+                  if (HwForEvent = '') then
+                  begin
+                    var QHw2 := TFDQuery.Create(nil);
+                    try
+                      QHw2.Connection := C;
+                      QHw2.SQL.Text := 'select HardwareId from ProvisioningTokenEvents where Token=:T and HardwareId<>'''' order by Id desc limit 1';
+                      QHw2.ParamByName('T').AsString := D.ProvisioningToken;
+                      QHw2.Open;
+                      if (not QHw2.Eof) and (Trim(QHw2.FieldByName('HardwareId').AsString) <> '') then
+                      begin
+                        HwForEvent := Trim(QHw2.FieldByName('HardwareId').AsString);
+                        Details.RemovePair('HardwareId');
+                        Details.AddPair('HardwareId', HwForEvent);
+                      end;
+                    finally
+                      QHw2.Free;
+                    end;
+                  end;
+                end
+                else
+                  Details.AddPair('HardwareId', TJSONNull.Create);
+
+                // Snapshot assignment counts (helps explain impact)
+                var QCnt := TFDQuery.Create(nil);
+                try
+                  QCnt.Connection := C;
+                  QCnt.SQL.Text :=
+                    'select '
+                    + '  (select count(1) from DisplayCampaigns where DisplayID=:D) as CampaignAssignments, '
+                    + '  (select count(1) from DisplayMenus where DisplayID=:D) as MenuAssignments';
+                  QCnt.ParamByName('D').AsInteger := D.Id;
+                  QCnt.Open;
+                  Details.AddPair('CampaignAssignments', TJSONNumber.Create(QCnt.FieldByName('CampaignAssignments').AsInteger));
+                  Details.AddPair('MenuAssignments', TJSONNumber.Create(QCnt.FieldByName('MenuAssignments').AsInteger));
+                finally
+                  QCnt.Free;
+                end;
+
+                TAuditLogRepository.WriteEvent(D.OrganizationId, TokUser, 'display.delete', 'display', IntToStr(D.Id), Details, RequestId, ClientIp, UserAgent);
+
+                // Token lifecycle event (account-side)
+                if D.ProvisioningToken <> '' then
+                  TProvisioningTokenEventRepository.WriteEvent(D.ProvisioningToken, 'display_deleted', HwForEvent, D.Id, D.OrganizationId, TokUser, Details, RequestId, ClientIp, UserAgent);
+
+                // Also emit a generic unpair event (so dashboards can filter only unpairs)
+                if D.ProvisioningToken <> '' then
+                begin
+                  var Ev2 := TJSONObject.Create;
+                  try
+                    Ev2.AddPair('Reason', 'display_deleted');
+                    TProvisioningTokenEventRepository.WriteEvent(D.ProvisioningToken, 'unpaired', HwForEvent, D.Id, D.OrganizationId, TokUser, Ev2, RequestId, ClientIp, UserAgent);
+                  finally
+                    Ev2.Free;
+                  end;
+                end;
+              finally
+                Details.Free;
+              end;
+            finally
+              C.Free;
+            end;
+          finally
+            D.Free;
+          end;
           TDisplayRepository.DeleteDisplay(Id);
           Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse; Exit;
         end;
@@ -4369,21 +5078,108 @@ begin
                         'left join Campaigns c on c.CampaignID=pl.CampaignID ' +
                         'where pl.DisplayID=:D order by pl.PlaybackTimestamp desc limit 1';
           Q.ParamByName('D').AsInteger := DisplayId; Q.Open;
-          if Q.Eof then begin JSONError(404,'No playback yet'); Exit; end;
-          var O := TJSONObject.Create; try
-            O.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
-            O.AddPair('MediaFileId', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger));
-            O.AddPair('CampaignId', TJSONNumber.Create(Q.FieldByName('CampaignID').AsInteger));
-            // Provide both PlaybackTimestamp (original) and StartedAt (client expectation)
-            var TS := Q.FieldByName('PlaybackTimestamp').AsString;
-            O.AddPair('PlaybackTimestamp', TS);
-            O.AddPair('StartedAt', TS);
-            O.AddPair('MediaFileName', Q.FieldByName('FileName').AsString);
-            O.AddPair('MediaFileType', Q.FieldByName('FileType').AsString);
-            O.AddPair('CampaignName', Q.FieldByName('CampaignName').AsString);
-            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
-          finally O.Free; end;
+
+          // If we have playback logs, return the actual last played item.
+          if not Q.Eof then
+          begin
+            var O := TJSONObject.Create; try
+              O.AddPair('ItemType', 'media');
+              O.AddPair('DisplayId', TJSONNumber.Create(Q.FieldByName('DisplayID').AsInteger));
+              O.AddPair('MediaFileId', TJSONNumber.Create(Q.FieldByName('MediaFileID').AsInteger));
+              O.AddPair('CampaignId', TJSONNumber.Create(Q.FieldByName('CampaignID').AsInteger));
+              // Provide both PlaybackTimestamp (original) and StartedAt (client expectation)
+              var TS := Q.FieldByName('PlaybackTimestamp').AsString;
+              O.AddPair('PlaybackTimestamp', TS);
+              O.AddPair('StartedAt', TS);
+              O.AddPair('MediaFileName', Q.FieldByName('FileName').AsString);
+              O.AddPair('MediaFileType', Q.FieldByName('FileType').AsString);
+              O.AddPair('CampaignName', Q.FieldByName('CampaignName').AsString);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+            finally O.Free; end;
+            Exit;
+          end;
         finally Q.Free; end;
+
+        // Fallback: no proof-of-play yet. Return assigned menu/campaign so the dashboard can still show intent.
+        // Try menu first (menus and campaigns are mutually exclusive by enforcement).
+        var Qm := TFDQuery.Create(nil);
+        try
+          Qm.Connection := C;
+          Qm.SQL.Text := 'select m.MenuID, m.Name, m.PublicToken from DisplayMenus dm join Menus m on m.MenuID=dm.MenuID ' +
+                        'where dm.DisplayID=:D and dm.IsPrimary=true order by dm.DisplayMenuID desc limit 1';
+          Qm.ParamByName('D').AsInteger := DisplayId;
+          Qm.Open;
+          if not Qm.Eof then
+          begin
+            var O := TJSONObject.Create;
+            try
+              O.AddPair('ItemType', 'menu');
+              O.AddPair('DisplayId', TJSONNumber.Create(DisplayId));
+              O.AddPair('MenuId', TJSONNumber.Create(Qm.FieldByName('MenuID').AsInteger));
+              O.AddPair('MenuName', Qm.FieldByName('Name').AsString);
+              O.AddPair('MenuPublicToken', Qm.FieldByName('PublicToken').AsString);
+              O.AddPair('CampaignId', TJSONNull.Create);
+              O.AddPair('CampaignName', TJSONNull.Create);
+              O.AddPair('MediaFileId', TJSONNull.Create);
+              O.AddPair('MediaFileName', TJSONNull.Create);
+              O.AddPair('MediaFileType', TJSONNull.Create);
+              O.AddPair('PlaybackTimestamp', TJSONNull.Create);
+              O.AddPair('StartedAt', TJSONNull.Create);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+            finally
+              O.Free;
+            end;
+            Exit;
+          end;
+        finally
+          Qm.Free;
+        end;
+
+        // Try primary campaign + first media item
+        var Qc := TFDQuery.Create(nil);
+        try
+          Qc.Connection := C;
+          Qc.SQL.Text := 'select dc.CampaignID, c.Name as CampaignName ' +
+                        'from DisplayCampaigns dc join Campaigns c on c.CampaignID=dc.CampaignID ' +
+                        'where dc.DisplayID=:D and dc.IsPrimary=true order by dc.DisplayCampaignID desc limit 1';
+          Qc.ParamByName('D').AsInteger := DisplayId;
+          Qc.Open;
+          if Qc.Eof then begin JSONError(404,'No playback yet'); Exit; end;
+          var CampId := Qc.FieldByName('CampaignID').AsInteger;
+          var CampName := Qc.FieldByName('CampaignName').AsString;
+
+          var Qi := TFDQuery.Create(nil);
+          try
+            Qi.Connection := C;
+            Qi.SQL.Text := 'select ci.MediaFileID, mf.FileName, mf.FileType ' +
+                          'from CampaignItems ci left join MediaFiles mf on mf.MediaFileID=ci.MediaFileID ' +
+                          'where ci.CampaignID=:C and (ci.ItemType=''media'' or ci.ItemType='''' ) and ci.MediaFileID is not null ' +
+                          'order by ci.DisplayOrder asc limit 1';
+            Qi.ParamByName('C').AsInteger := CampId;
+            Qi.Open;
+            if Qi.Eof then begin JSONError(404,'No playback yet'); Exit; end;
+            var O := TJSONObject.Create;
+            try
+              O.AddPair('ItemType', 'media');
+              O.AddPair('DisplayId', TJSONNumber.Create(DisplayId));
+              O.AddPair('CampaignId', TJSONNumber.Create(CampId));
+              O.AddPair('CampaignName', CampName);
+              O.AddPair('MediaFileId', TJSONNumber.Create(Qi.FieldByName('MediaFileID').AsInteger));
+              O.AddPair('MediaFileName', Qi.FieldByName('FileName').AsString);
+              O.AddPair('MediaFileType', Qi.FieldByName('FileType').AsString);
+              O.AddPair('PlaybackTimestamp', TJSONNull.Create);
+              O.AddPair('StartedAt', TJSONNull.Create);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+            finally
+              O.Free;
+            end;
+            Exit;
+          finally
+            Qi.Free;
+          end;
+        finally
+          Qc.Free;
+        end;
       finally C.Free; end;
       Exit;
     end;

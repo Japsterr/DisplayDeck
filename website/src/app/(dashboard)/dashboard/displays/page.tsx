@@ -44,6 +44,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+interface NowPlaying {
+  ItemType?: "media" | "menu";
+  DisplayId: number;
+  CampaignId?: number | null;
+  MediaFileId?: number | null;
+  PlaybackTimestamp?: string | null;
+  StartedAt?: string | null;
+  MediaFileName?: string | null;
+  MediaFileType?: string | null;
+  CampaignName?: string | null;
+  MenuId?: number | null;
+  MenuName?: string | null;
+  MenuPublicToken?: string | null;
+}
+
 interface Display {
   Id: number;
   Name: string;
@@ -57,28 +72,149 @@ export default function DisplaysPage() {
   const router = useRouter();
   const [displays, setDisplays] = useState<Display[]>([]);
   const [loading, setLoading] = useState(true);
+  const [nowPlayingByDisplayId, setNowPlayingByDisplayId] = useState<Record<number, NowPlaying | null>>({});
+  const [nowPlayingLoading, setNowPlayingLoading] = useState(false);
+  const [nowPlayingLastUpdatedAt, setNowPlayingLastUpdatedAt] = useState<Date | null>(null);
+  const [mediaPreviewByMediaFileId, setMediaPreviewByMediaFileId] = useState<
+    Record<number, { url: string; fetchedAtMs: number }>
+  >({});
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newDisplay, setNewDisplay] = useState({ name: "", pairingCode: "", orientation: "Landscape" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const getAuthContext = () => {
+    const token = localStorage.getItem("token");
+    const userStr = localStorage.getItem("user");
+    if (!token || !userStr) return null;
+    const user = JSON.parse(userStr);
+    const orgId = user.OrganizationId;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+    return { token, orgId, apiUrl };
+  };
+
+  const mapWithConcurrency = async <T, R>(
+    items: T[],
+    concurrency: number,
+    mapper: (item: T) => Promise<R>
+  ): Promise<R[]> => {
+    const results: R[] = new Array(items.length);
+    let index = 0;
+
+    const workers = new Array(Math.min(concurrency, items.length)).fill(0).map(async () => {
+      while (index < items.length) {
+        const currentIndex = index;
+        index += 1;
+        results[currentIndex] = await mapper(items[currentIndex]);
+      }
+    });
+
+    await Promise.all(workers);
+    return results;
+  };
+
+  const fetchNowPlaying = async (displaysList: Display[]) => {
+    const auth = getAuthContext();
+    if (!auth) return;
+
+    const activeDisplays = displaysList.filter((d) => d.CurrentStatus === "Online");
+    if (activeDisplays.length === 0) {
+      setNowPlayingByDisplayId({});
+      setNowPlayingLastUpdatedAt(new Date());
+      return;
+    }
+
+    try {
+      setNowPlayingLoading(true);
+
+      const entries = await mapWithConcurrency(activeDisplays, 6, async (display) => {
+        try {
+          const res = await fetch(`${auth.apiUrl}/displays/${display.Id}/current-playing`, {
+            headers: {
+              "X-Auth-Token": auth.token,
+            },
+          });
+
+          if (res.status === 404) {
+            return [display.Id, null] as const;
+          }
+          if (!res.ok) {
+            throw new Error(`Failed to fetch current playing for display ${display.Id}`);
+          }
+
+          const payload = (await res.json()) as NowPlaying;
+          return [display.Id, payload] as const;
+        } catch (err) {
+          console.error(err);
+          return [display.Id, null] as const;
+        }
+      });
+
+      setNowPlayingByDisplayId(Object.fromEntries(entries));
+      setNowPlayingLastUpdatedAt(new Date());
+
+      // Prefetch preview URLs for media content so the dashboard can show a visual.
+      const nowPlayingRows = entries
+        .map(([, value]) => value)
+        .filter((v): v is NowPlaying => Boolean(v));
+
+      const mediaFileIds = Array.from(
+        new Set(
+          nowPlayingRows
+            .map((r) => r.MediaFileId)
+            .filter((id): id is number => typeof id === "number")
+        )
+      );
+      const nowMs = Date.now();
+      const maxAgeMs = 5 * 60 * 1000; // refresh presigned URLs occasionally
+
+      const idsToFetch = mediaFileIds.filter((id) => {
+        const cached = mediaPreviewByMediaFileId[id];
+        return !cached || nowMs - cached.fetchedAtMs > maxAgeMs;
+      });
+
+      if (idsToFetch.length > 0) {
+        const fetched = await mapWithConcurrency(idsToFetch, 6, async (mediaFileId) => {
+          try {
+            const res = await fetch(`${auth.apiUrl}/media-files/${mediaFileId}/download-url`, {
+              headers: { "X-Auth-Token": auth.token },
+            });
+
+            if (!res.ok) throw new Error("Failed to fetch media download URL");
+            const payload = await res.json().catch(() => null);
+            const url = payload?.DownloadUrl ?? payload?.downloadUrl;
+            if (!url) return [mediaFileId, null] as const;
+            return [mediaFileId, { url, fetchedAtMs: Date.now() }] as const;
+          } catch (err) {
+            console.error(err);
+            return [mediaFileId, null] as const;
+          }
+        });
+
+        setMediaPreviewByMediaFileId((prev) => {
+          const next = { ...prev };
+          for (const [id, value] of fetched) {
+            if (value) next[id] = value;
+          }
+          return next;
+        });
+      }
+    } finally {
+      setNowPlayingLoading(false);
+    }
+  };
+
   const fetchDisplays = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      const userStr = localStorage.getItem("user");
-
-      if (!token || !userStr) {
+      const auth = getAuthContext();
+      if (!auth) {
         router.push("/login");
         return;
       }
 
-      const user = JSON.parse(userStr);
-      const orgId = user.OrganizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
-
-      const response = await fetch(`${apiUrl}/organizations/${orgId}/displays`, {
+      const response = await fetch(`${auth.apiUrl}/organizations/${auth.orgId}/displays`, {
         headers: {
-          "X-Auth-Token": token || "",
+          "X-Auth-Token": auth.token,
         },
       });
 
@@ -90,7 +226,9 @@ export default function DisplaysPage() {
       if (!response.ok) throw new Error("Failed to fetch displays");
 
       const data = await response.json();
-      setDisplays(data.value || []);
+      const list = data.value || [];
+      setDisplays(list);
+      await fetchNowPlaying(list);
     } catch (error) {
       console.error(error);
       toast.error("Failed to load displays");
@@ -102,6 +240,16 @@ export default function DisplaysPage() {
   useEffect(() => {
     fetchDisplays();
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const handle = window.setInterval(() => {
+      void fetchNowPlaying(displays);
+    }, 15000);
+
+    return () => window.clearInterval(handle);
+  }, [loading, displays]);
 
   const handlePairDisplay = async () => {
     if (!newDisplay.name) {
@@ -190,7 +338,13 @@ export default function DisplaysPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={fetchDisplays}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => {
+              void fetchDisplays();
+            }}
+          >
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -259,6 +413,148 @@ export default function DisplaysPage() {
           </Dialog>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Active Displays</CardTitle>
+          <CardDescription>
+            What each online display is showing right now.
+            {nowPlayingLastUpdatedAt
+              ? ` Updated ${formatDistanceToNow(nowPlayingLastUpdatedAt, { addSuffix: true })}.`
+              : ""}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+          ) : displays.filter((d) => d.CurrentStatus === "Online").length === 0 ? (
+            <div className="text-center py-10 border-2 border-dashed rounded-lg">
+              <Monitor className="h-10 w-10 mx-auto text-muted-foreground opacity-50" />
+              <h3 className="mt-3 text-lg font-semibold">No active displays</h3>
+              <p className="text-muted-foreground">Once a screen comes online, it will show up here.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {displays
+                .filter((d) => d.CurrentStatus === "Online")
+                .map((display) => {
+                  const nowPlaying = nowPlayingByDisplayId[display.Id] ?? null;
+                  const mediaId = nowPlaying?.MediaFileId ?? null;
+                  const mediaPreview = mediaId
+                    ? mediaPreviewByMediaFileId[mediaId]?.url
+                    : undefined;
+                  const mediaType = (nowPlaying?.MediaFileType || "").toLowerCase();
+                  const isImage = mediaType.includes("image") || mediaType === "jpg" || mediaType === "jpeg" || mediaType === "png" || mediaType === "webp";
+                  const isVideo = mediaType.includes("video") || mediaType === "mp4" || mediaType === "webm" || mediaType === "mov";
+
+                  return (
+                    <div
+                      key={display.Id}
+                      className="rounded-lg border p-4 flex flex-col gap-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-semibold truncate">{display.Name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Last seen{" "}
+                            {display.LastSeen
+                              ? formatDistanceToNow(new Date(display.LastSeen), { addSuffix: true })
+                              : "Never"}
+                          </div>
+                        </div>
+                        <Badge className="bg-green-500 hover:bg-green-600">Online</Badge>
+                      </div>
+
+                      {nowPlaying && mediaPreview && isImage ? (
+                        <img
+                          src={mediaPreview}
+                          alt={nowPlaying.MediaFileName || "Now playing"}
+                          className="w-full aspect-video object-cover rounded-md border"
+                          loading="lazy"
+                        />
+                      ) : nowPlaying && mediaPreview && isVideo ? (
+                        <video
+                          src={mediaPreview}
+                          className="w-full aspect-video object-cover rounded-md border"
+                          muted
+                          playsInline
+                          preload="metadata"
+                          controls
+                        />
+                      ) : null}
+
+                      {nowPlayingLoading && !nowPlaying ? (
+                        <div className="text-sm text-muted-foreground">Loading now playing…</div>
+                      ) : nowPlaying ? (
+                        <div className="flex flex-col gap-1">
+                          {(nowPlaying.ItemType || "media") === "menu" ? (
+                            <>
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">Menu:</span>{" "}
+                                {nowPlaying.MenuId ? (
+                                  <button
+                                    type="button"
+                                    className="underline underline-offset-4"
+                                    onClick={() => router.push(`/dashboard/menus/${nowPlaying.MenuId}`)}
+                                  >
+                                    {nowPlaying.MenuName || `#${nowPlaying.MenuId}`}
+                                  </button>
+                                ) : (
+                                  <span>{nowPlaying.MenuName || "Assigned menu"}</span>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Showing assigned menu (no playback logs yet).
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">Campaign:</span>{" "}
+                                {nowPlaying.CampaignId ? (
+                                  <button
+                                    type="button"
+                                    className="underline underline-offset-4"
+                                    onClick={() => router.push(`/dashboard/campaigns/${nowPlaying.CampaignId}`)}
+                                  >
+                                    {nowPlaying.CampaignName || `#${nowPlaying.CampaignId}`}
+                                  </button>
+                                ) : (
+                                  <span>{nowPlaying.CampaignName || "Assigned campaign"}</span>
+                                )}
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">Media:</span>{" "}
+                                <span className="font-mono text-xs">
+                                  {nowPlaying.MediaFileName || (nowPlaying.MediaFileId ? `#${nowPlaying.MediaFileId}` : "(unknown)")}
+                                </span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {nowPlaying.MediaFileType ? `${nowPlaying.MediaFileType} • ` : ""}
+                                {nowPlaying.StartedAt
+                                  ? `Started ${formatDistanceToNow(new Date(nowPlaying.StartedAt), { addSuffix: true })}`
+                                  : "Showing assigned campaign (no playback logs yet)."}
+                              </div>
+                              {!mediaPreview && nowPlaying.MediaFileId ? (
+                                <div className="text-xs text-muted-foreground">
+                                  Preview unavailable for this item.
+                                </div>
+                              ) : null}
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          No playback yet.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

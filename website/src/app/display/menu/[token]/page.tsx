@@ -5,6 +5,10 @@ import { useParams } from "next/navigation";
 
 type ThemeConfig = Record<string, unknown>;
 
+type HeaderMode = "auto" | "none" | "logo" | "image" | "text";
+
+type ItemCardStyle = "standard" | "compact" | "image-left" | "image-right" | "hero";
+
 const MEDIA_REF_PREFIX = "mediafile:";
 
 function parseMediaRef(raw: string | null | undefined): number | null {
@@ -42,7 +46,13 @@ interface PublicMenu {
 }
 
 function getApiUrl() {
-  return process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env) return env;
+
+  // Default to same-origin nginx proxy in production.
+  // This avoids CORS/preflight issues and works well inside WebViews.
+  if (typeof window !== "undefined") return `${window.location.origin}/api`;
+  return "/api";
 }
 
 function formatCurrencyZarFromCents(priceCents: number) {
@@ -56,6 +66,19 @@ function formatCurrencyZarFromCents(priceCents: number) {
 function getThemeString(theme: ThemeConfig | undefined, key: string, fallback: string) {
   const val = theme?.[key];
   return typeof val === "string" && val.trim() ? val : fallback;
+}
+
+function getHeaderMode(theme: ThemeConfig | undefined): HeaderMode {
+  const raw = getThemeString(theme, "headerMode", "auto").trim().toLowerCase();
+  if (raw === "none" || raw === "logo" || raw === "image" || raw === "text" || raw === "auto") return raw;
+  return "auto";
+}
+
+function resolveHeaderMode(mode: HeaderMode, logoUrl: string, headerImageUrl: string): Exclude<HeaderMode, "auto"> {
+  if (mode !== "auto") return mode;
+  if (headerImageUrl) return "image";
+  if (logoUrl) return "logo";
+  return "none";
 }
 
 function getThemeStringArray(theme: ThemeConfig | undefined, key: string): string[] {
@@ -87,6 +110,166 @@ function getThemeNumber(theme: ThemeConfig | undefined, key: string): number | n
   return null;
 }
 
+function getItemCardStyle(theme: ThemeConfig | undefined): ItemCardStyle {
+  const raw = getThemeString(theme, "itemCardStyle", "standard").trim().toLowerCase();
+  if (raw === "compact" || raw === "image-left" || raw === "image-right" || raw === "hero" || raw === "standard") return raw;
+  return "standard";
+}
+
+function MenuItemCard(props: {
+  it: PublicMenuItem;
+  muted: string;
+  accent: string;
+  style: ItemCardStyle;
+  priceStyle?: React.CSSProperties;
+  imageStyle?: React.CSSProperties;
+}) {
+  const { it, muted, accent, style, priceStyle, imageStyle } = props;
+  const price = it.PriceCents != null ? formatCurrencyZarFromCents(it.PriceCents) : "";
+  const hasPrice = Boolean(price);
+  const hasImage = Boolean(it.ImageUrl);
+
+  if (style === "compact") {
+    return (
+      <div className="flex items-start justify-between gap-4 sm:gap-6">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          {hasImage ? (
+            <img
+              src={it.ImageUrl || ""}
+              alt={it.Name}
+              className="h-12 w-12 rounded-md object-cover border border-white/10"
+              style={imageStyle}
+              loading="lazy"
+            />
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="text-lg sm:text-xl font-medium leading-snug truncate">{it.Name}</div>
+              {hasPrice ? (
+                <div className="shrink-0 text-lg sm:text-xl font-semibold" style={{ color: accent, ...(priceStyle || {}) }}>
+                  {price}
+                </div>
+              ) : null}
+            </div>
+            {it.Description ? (
+              <div className="mt-1 text-sm leading-snug line-clamp-1" style={{ color: muted }}>
+                {it.Description}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (style === "image-left" || style === "image-right") {
+    const image = hasImage ? (
+      <img
+        src={it.ImageUrl || ""}
+        alt={it.Name}
+        className="h-20 w-28 sm:h-24 sm:w-32 rounded-lg object-cover border border-white/10"
+        style={imageStyle}
+        loading="lazy"
+      />
+    ) : null;
+
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 sm:p-4">
+        <div className={`flex items-start gap-4 ${style === "image-right" ? "flex-row-reverse" : ""}`}>
+          {image}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-lg sm:text-xl font-semibold leading-snug min-w-0 truncate">{it.Name}</div>
+              {hasPrice ? (
+                <div className="shrink-0 text-lg sm:text-xl font-semibold" style={{ color: accent, ...(priceStyle || {}) }}>
+                  {price}
+                </div>
+              ) : null}
+            </div>
+            {it.Description ? (
+              <div className="mt-1 text-sm leading-snug" style={{ color: muted }}>
+                {it.Description}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (style === "hero") {
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+        {hasImage ? (
+          <div className="relative">
+            <img
+              src={it.ImageUrl || ""}
+              alt={it.Name}
+              className="w-full h-36 sm:h-44 object-cover"
+              style={imageStyle}
+              loading="lazy"
+            />
+            {hasPrice ? (
+              <div
+                className="absolute top-2 right-2 rounded-full px-3 py-1 text-sm font-semibold backdrop-blur border border-white/15"
+                style={{ backgroundColor: "rgba(0,0,0,0.45)", color: accent, ...(priceStyle || {}) }}
+              >
+                {price}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="p-3 sm:p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-lg sm:text-xl font-semibold leading-snug min-w-0">{it.Name}</div>
+            {!hasImage && hasPrice ? (
+              <div className="shrink-0 text-lg sm:text-xl font-semibold" style={{ color: accent, ...(priceStyle || {}) }}>
+                {price}
+              </div>
+            ) : null}
+          </div>
+          {it.Description ? (
+            <div className="mt-1 text-sm leading-snug" style={{ color: muted }}>
+              {it.Description}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // standard
+  return (
+    <div className="flex items-start justify-between gap-4 sm:gap-6">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="text-lg sm:text-xl font-medium leading-snug min-w-0">{it.Name}</div>
+          {hasPrice ? (
+            <div className="shrink-0 text-lg sm:text-xl font-semibold" style={{ color: accent, ...(priceStyle || {}) }}>
+              {price}
+            </div>
+          ) : null}
+        </div>
+        {it.Description ? (
+          <div className="mt-1 text-sm leading-snug" style={{ color: muted }}>
+            {it.Description}
+          </div>
+        ) : null}
+        {hasImage ? (
+          <img
+            src={it.ImageUrl || ""}
+            alt={it.Name}
+            className="mt-2 h-24 sm:h-28 w-full rounded-lg object-cover border border-white/10"
+            style={imageStyle}
+            loading="lazy"
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function getTemplateKey(raw: string | undefined): "classic" | "minimal" | "neon" {
   const key = (raw || "classic").toLowerCase();
   if (key === "minimal" || key === "neon" || key === "classic") return key;
@@ -97,30 +280,37 @@ function renderClassic(args: {
   menuName: string;
   muted: string;
   accent: string;
+  itemCardStyle: ItemCardStyle;
   sectionCols: string;
   sections: PublicMenuSection[];
+  dense?: boolean;
   logoUrl?: string;
   sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
 }) {
-  const { menuName, muted, accent, sectionCols, sections, logoUrl, sectionImages } = args;
+  const { menuName, muted, accent, itemCardStyle, sectionCols, sections, dense, logoUrl, sectionImages, headerMode, headerImageUrl } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
+  const rootClass = dense ? "px-3 sm:px-4 md:px-6 py-4 sm:py-5" : "px-4 sm:px-6 md:px-10 py-6 sm:py-8";
+  const titleClass = dense ? "text-2xl sm:text-4xl" : "text-3xl sm:text-5xl";
+  const gridTopClass = headerMode === "none" ? "mt-2" : dense ? "mt-5 sm:mt-6" : "mt-8 sm:mt-10";
+  const gridGapClass = dense ? "gap-4 sm:gap-6" : "gap-5 sm:gap-8";
+  const sectionCardClass = dense ? "rounded-2xl border border-white/20 bg-white/[0.03] p-3 sm:p-4" : "rounded-2xl border border-white/20 bg-white/[0.03] p-3 sm:p-6";
   return (
-    <div className="px-10 py-8">
-      <div className="flex items-end justify-between gap-6">
-        <div>
-          <h1 className="text-5xl font-bold tracking-tight">{menuName}</h1>
-          <div className="mt-2 text-base" style={{ color: muted }}>
-            Updated automatically
+    <div className={rootClass}>
+      {headerMode === "text" ? (
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <h1 className={`${titleClass} font-bold tracking-tight`}>{menuName}</h1>
           </div>
         </div>
-        <div className="flex items-end gap-4">
-          {logoUrl ? <img src={logoUrl} alt="" className="h-10 w-auto object-contain" /> : null}
-          <div className="text-sm" style={{ color: muted }}>
-            DisplayDeck
-          </div>
+      ) : headerSrc ? (
+        <div className="flex justify-center">
+          <img src={headerSrc} alt="" className="h-12 sm:h-16 w-auto object-contain" />
         </div>
-      </div>
+      ) : null}
 
-      <div className={`mt-10 grid ${sectionCols} gap-8`}>
+      <div className={`${gridTopClass} grid ${sectionCols} ${gridGapClass}`}>
         {sections.map((s) => {
           const items = (s.Items || [])
             .filter((i) => i.IsAvailable !== false)
@@ -128,7 +318,7 @@ function renderClassic(args: {
             .sort((a, b) => a.DisplayOrder - b.DisplayOrder);
 
           return (
-            <div key={s.Id} className="rounded-2xl border border-white/10 p-6">
+            <div key={s.Id} className={sectionCardClass}>
               <div className="flex items-baseline justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   {sectionImages?.[String(s.Id)] ? (
@@ -139,7 +329,7 @@ function renderClassic(args: {
                       loading="lazy"
                     />
                   ) : null}
-                  <h2 className="text-3xl font-semibold truncate">{s.Name}</h2>
+                  <h2 className="text-2xl sm:text-3xl font-semibold truncate">{s.Name}</h2>
                 </div>
                 <div className="h-[2px] flex-1 bg-white/10" />
               </div>
@@ -150,29 +340,11 @@ function renderClassic(args: {
                     No items
                   </div>
                 ) : (
-                  items.map((it) => (
-                    <div key={it.Id} className="flex items-start justify-between gap-6">
-                      <div className="min-w-0">
-                        <div className="text-xl font-medium leading-snug">{it.Name}</div>
-                        {it.ImageUrl ? (
-                          <img
-                            src={it.ImageUrl}
-                            alt={it.Name}
-                            className="mt-2 h-20 w-28 rounded-md object-cover border border-white/10"
-                            loading="lazy"
-                          />
-                        ) : null}
-                        {it.Description ? (
-                          <div className="mt-1 text-sm leading-snug" style={{ color: muted }}>
-                            {it.Description}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="shrink-0 text-xl font-semibold" style={{ color: accent }}>
-                        {it.PriceCents != null ? formatCurrencyZarFromCents(it.PriceCents) : ""}
-                      </div>
-                    </div>
-                  ))
+                  items.map((it) => {
+                    return (
+                      <MenuItemCard key={it.Id} it={it} muted={muted} accent={accent} style={itemCardStyle} />
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -187,28 +359,36 @@ function renderMinimal(args: {
   menuName: string;
   muted: string;
   accent: string;
+  itemCardStyle: ItemCardStyle;
   sectionCols: string;
   sections: PublicMenuSection[];
+  dense?: boolean;
   logoUrl?: string;
   sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
 }) {
-  const { menuName, muted, accent, sectionCols, sections, logoUrl, sectionImages } = args;
+  const { menuName, muted, accent, itemCardStyle, sectionCols, sections, dense, logoUrl, sectionImages, headerMode, headerImageUrl } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
+  const rootClass = dense ? "px-3 sm:px-4 md:px-8 py-4 sm:py-6" : "px-4 sm:px-6 md:px-12 py-6 sm:py-10";
+  const titleClass = dense ? "text-3xl sm:text-5xl" : "text-4xl sm:text-6xl";
+  const gridTopClass = headerMode === "none" ? "mt-2" : dense ? "mt-5 sm:mt-6" : "mt-8 sm:mt-10";
+  const gridGapClass = dense ? "gap-5 sm:gap-8" : "gap-6 sm:gap-10";
   return (
-    <div className="px-12 py-10">
-      <div className="flex items-center justify-between gap-6">
-        <div>
-          <div className="text-sm tracking-widest uppercase" style={{ color: muted }}>
-            Menu
+    <div className={rootClass}>
+      {headerMode === "text" ? (
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <h1 className={`${titleClass} font-semibold tracking-tight`}>{menuName}</h1>
           </div>
-          <h1 className="mt-2 text-6xl font-semibold tracking-tight">{menuName}</h1>
         </div>
-        <div className="flex items-center gap-4">
-          {logoUrl ? <img src={logoUrl} alt="" className="h-10 w-auto object-contain" /> : null}
-          <div className="h-10 w-10 rounded-full" style={{ backgroundColor: accent, opacity: 0.85 }} />
+      ) : headerSrc ? (
+        <div className="flex justify-center">
+          <img src={headerSrc} alt="" className="h-12 sm:h-16 w-auto object-contain" />
         </div>
-      </div>
+      ) : null}
 
-      <div className={`mt-10 grid ${sectionCols} gap-10`}>
+      <div className={`${gridTopClass} grid ${sectionCols} ${gridGapClass}`}>
         {sections.map((s) => {
           const items = (s.Items || [])
             .filter((i) => i.IsAvailable !== false)
@@ -238,28 +418,14 @@ function renderMinimal(args: {
                   </div>
                 ) : (
                   items.map((it) => (
-                    <div key={it.Id} className="flex items-start justify-between gap-6">
-                      <div className="min-w-0">
-                        <div className="text-2xl font-medium leading-snug">{it.Name}</div>
-                        {it.ImageUrl ? (
-                          <img
-                            src={it.ImageUrl}
-                            alt={it.Name}
-                            className="mt-2 h-24 w-32 rounded-md object-cover"
-                            style={{ border: `1px solid ${accent}2A` }}
-                            loading="lazy"
-                          />
-                        ) : null}
-                        {it.Description ? (
-                          <div className="mt-1 text-base leading-snug" style={{ color: muted }}>
-                            {it.Description}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="shrink-0 text-2xl font-semibold" style={{ color: accent }}>
-                        {it.PriceCents != null ? formatCurrencyZarFromCents(it.PriceCents) : ""}
-                      </div>
-                    </div>
+                    <MenuItemCard
+                      key={it.Id}
+                      it={it}
+                      muted={muted}
+                      accent={accent}
+                      style={itemCardStyle}
+                      imageStyle={it.ImageUrl ? { border: `1px solid ${accent}2A` } : undefined}
+                    />
                   ))
                 )}
               </div>
@@ -275,36 +441,43 @@ function renderNeon(args: {
   menuName: string;
   muted: string;
   accent: string;
+  itemCardStyle: ItemCardStyle;
   sectionCols: string;
   sections: PublicMenuSection[];
+  dense?: boolean;
   logoUrl?: string;
   sectionImages?: Record<string, string>;
+  headerMode: Exclude<HeaderMode, "auto">;
+  headerImageUrl?: string;
 }) {
-  const { menuName, muted, accent, sectionCols, sections, logoUrl, sectionImages } = args;
+  const { menuName, muted, accent, itemCardStyle, sectionCols, sections, dense, logoUrl, sectionImages, headerMode, headerImageUrl } = args;
+  const headerSrc = headerMode === "image" ? headerImageUrl : headerMode === "logo" ? logoUrl : "";
 
   const glow = `0 0 18px ${accent}55, 0 0 42px ${accent}33`;
   const border = `1px solid ${accent}40`;
+  const rootClass = dense ? "px-3 sm:px-4 md:px-6 py-4 sm:py-5" : "px-4 sm:px-6 md:px-10 py-6 sm:py-8";
+  const titleClass = dense ? "text-3xl sm:text-5xl" : "text-4xl sm:text-6xl";
+  const gridTopClass = headerMode === "none" ? "mt-2" : dense ? "mt-5 sm:mt-6" : "mt-8 sm:mt-10";
+  const gridGapClass = dense ? "gap-4 sm:gap-6" : "gap-5 sm:gap-8";
+  const sectionPadClass = dense ? "rounded-2xl p-4" : "rounded-2xl p-6";
 
   return (
-    <div className="px-10 py-8">
-      <div className="flex items-end justify-between gap-6">
-        <div>
-          <div className="text-sm tracking-widest uppercase" style={{ color: muted }}>
-            Welcome
-          </div>
-          <h1 className="mt-2 text-6xl font-bold tracking-tight" style={{ textShadow: glow }}>
-            {menuName}
-          </h1>
-        </div>
-        <div className="flex items-end gap-4">
-          {logoUrl ? <img src={logoUrl} alt="" className="h-10 w-auto object-contain" /> : null}
-          <div className="text-sm" style={{ color: muted }}>
-            DisplayDeck
+    <div className={rootClass}>
+      {headerMode === "text" ? (
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <h1 className={`${titleClass} font-bold tracking-tight`} style={{ textShadow: glow }}>
+              {menuName}
+            </h1>
           </div>
         </div>
-      </div>
+      ) : headerSrc ? (
+        <div className="flex justify-center">
+          <img src={headerSrc} alt="" className="h-12 sm:h-16 w-auto object-contain" style={{ filter: "drop-shadow(0 0 16px rgba(0,0,0,0.45))" }} />
+        </div>
+      ) : null}
 
-      <div className={`mt-10 grid ${sectionCols} gap-8`}>
+      <div className={`${gridTopClass} grid ${sectionCols} ${gridGapClass}`}>
         {sections.map((s) => {
           const items = (s.Items || [])
             .filter((i) => i.IsAvailable !== false)
@@ -314,7 +487,7 @@ function renderNeon(args: {
           return (
             <div
               key={s.Id}
-              className="rounded-2xl p-6"
+              className={sectionPadClass}
               style={{ border, boxShadow: glow, background: "rgba(0,0,0,0.35)" }}
             >
               <div className="flex items-baseline justify-between gap-4">
@@ -342,28 +515,15 @@ function renderNeon(args: {
                   </div>
                 ) : (
                   items.map((it) => (
-                    <div key={it.Id} className="flex items-start justify-between gap-6">
-                      <div className="min-w-0">
-                        <div className="text-2xl font-medium leading-snug">{it.Name}</div>
-                        {it.ImageUrl ? (
-                          <img
-                            src={it.ImageUrl}
-                            alt={it.Name}
-                            className="mt-2 h-24 w-32 rounded-md object-cover"
-                            style={{ border, boxShadow: glow }}
-                            loading="lazy"
-                          />
-                        ) : null}
-                        {it.Description ? (
-                          <div className="mt-1 text-base leading-snug" style={{ color: muted }}>
-                            {it.Description}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="shrink-0 text-2xl font-semibold" style={{ color: accent, textShadow: glow }}>
-                        {it.PriceCents != null ? formatCurrencyZarFromCents(it.PriceCents) : ""}
-                      </div>
-                    </div>
+                    <MenuItemCard
+                      key={it.Id}
+                      it={it}
+                      muted={muted}
+                      accent={accent}
+                      style={itemCardStyle}
+                      priceStyle={{ textShadow: glow }}
+                      imageStyle={it.ImageUrl ? { border, boxShadow: glow } : undefined}
+                    />
                   ))
                 )}
               </div>
@@ -381,6 +541,9 @@ export default function DisplayMenuPage() {
 
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState(1);
+  const [isCompact, setIsCompact] = useState(false);
+  const [isWide, setIsWide] = useState(false);
+  const [isLandscapeViewport, setIsLandscapeViewport] = useState(false);
 
   const [menu, setMenu] = useState<PublicMenu | null>(null);
   const [error, setError] = useState<string>("");
@@ -402,6 +565,7 @@ export default function DisplayMenuPage() {
 
     const nextTheme: ThemeConfig = { ...(theme || {}) };
     nextTheme.logoUrl = replace(nextTheme.logoUrl) as any;
+    nextTheme.headerImageUrl = replace((nextTheme as any).headerImageUrl) as any;
     nextTheme.backgroundImageUrl = replace(nextTheme.backgroundImageUrl) as any;
     if (Array.isArray(nextTheme.backgroundImageUrls)) {
       nextTheme.backgroundImageUrls = (nextTheme.backgroundImageUrls as unknown[]).map(replace) as any;
@@ -470,6 +634,8 @@ export default function DisplayMenuPage() {
         muted: "#cbd5e1",
         accent: "#22c55e",
         logoUrl: "",
+        headerImageUrl: "",
+        headerMode: "none" as const,
         bgImage: "",
         overlayColor: "#000000",
         overlayOpacity: 0.35,
@@ -477,6 +643,7 @@ export default function DisplayMenuPage() {
         sectionCols: "grid-cols-2",
         sections: [] as PublicMenuSection[],
         templateKey: "classic" as const,
+        itemCardStyle: "standard" as const,
       };
     }
 
@@ -485,7 +652,10 @@ export default function DisplayMenuPage() {
     const text = getThemeString(theme, "textColor", "#ffffff");
     const muted = getThemeString(theme, "mutedTextColor", "#cbd5e1");
     const accent = getThemeString(theme, "accentColor", "#22c55e");
+    const itemCardStyle = getItemCardStyle(theme);
     const logoUrl = getThemeString(theme, "logoUrl", "");
+    const headerImageUrl = getThemeString(theme, "headerImageUrl", "");
+    const headerMode = resolveHeaderMode(getHeaderMode(theme), logoUrl, headerImageUrl);
 
     const bgImages = getThemeStringArray(theme, "backgroundImageUrls");
     const singleBgImage = getThemeString(theme, "backgroundImageUrl", "");
@@ -497,7 +667,14 @@ export default function DisplayMenuPage() {
 
     const orientation = (menu.Orientation || "Landscape").toLowerCase();
     const themeCols = getThemeNumber(theme, "layoutColumns");
-    const resolvedCols = themeCols && [1, 2, 3].includes(themeCols) ? themeCols : orientation === "portrait" ? 1 : 2;
+    const resolvedCols =
+      themeCols && [1, 2, 3].includes(themeCols)
+        ? themeCols
+        : orientation === "portrait"
+          ? 1
+          : isWide
+            ? 3
+            : 2;
     const sectionCols = resolvedCols === 3 ? "grid-cols-3" : resolvedCols === 2 ? "grid-cols-2" : "grid-cols-1";
 
     const sections = (menu.Sections || []).slice().sort((a, b) => a.DisplayOrder - b.DisplayOrder);
@@ -509,6 +686,8 @@ export default function DisplayMenuPage() {
       muted,
       accent,
       logoUrl,
+      headerImageUrl,
+      headerMode,
       bgImage,
       overlayColor,
       overlayOpacity,
@@ -516,8 +695,9 @@ export default function DisplayMenuPage() {
       sectionCols,
       sections,
       templateKey,
+      itemCardStyle,
     };
-  }, [menu]);
+  }, [menu, isWide]);
 
   useEffect(() => {
     const el = contentRef.current;
@@ -529,13 +709,24 @@ export default function DisplayMenuPage() {
       const vh = window.innerHeight || 0;
       if (vw <= 0 || vh <= 0) return;
 
+      const landscape = vw > vh;
+      setIsLandscapeViewport((prev) => (prev === landscape ? prev : landscape));
+
+      const compact = vw < 768;
+      setIsCompact((prev) => (prev === compact ? prev : compact));
+
+      const wide = vw >= 1400;
+      setIsWide((prev) => (prev === wide ? prev : wide));
+
       const w = el.scrollWidth || 0;
       const h = el.scrollHeight || 0;
       if (w <= 0 || h <= 0) return;
 
       // Scale both directions: shrink if too big, and enlarge if sparse.
       const raw = Math.min(vw / w, vh / h);
-      const next = Math.max(0.25, Math.min(1.75, raw));
+      const next = compact
+        ? Math.max(0.3, Math.min(1.2, raw))
+        : Math.max(0.25, Math.min(1.75, raw));
       setScale((prev) => (Math.abs(prev - next) >= 0.01 ? next : prev));
     };
 
@@ -574,6 +765,8 @@ export default function DisplayMenuPage() {
     muted,
     accent,
     logoUrl,
+    headerImageUrl,
+    headerMode,
     bgImage,
     overlayColor,
     overlayOpacity,
@@ -581,7 +774,12 @@ export default function DisplayMenuPage() {
     sectionCols,
     sections,
     templateKey,
+    itemCardStyle,
   } = computed;
+
+  // Landscape tends to be height-constrained; use a denser layout so scaling
+  // doesn't shrink the content and create big empty side margins.
+  const dense = isLandscapeViewport && !isCompact;
 
   return (
     <div
@@ -608,7 +806,7 @@ export default function DisplayMenuPage() {
             style={{
               transform: `scale(${scale})`,
               transformOrigin: "top center",
-              width: "fit-content",
+              width: "100vw",
               maxWidth: "100vw",
             }}
           >
@@ -617,29 +815,41 @@ export default function DisplayMenuPage() {
                   menuName: menu.Name,
                   muted,
                   accent,
+                  itemCardStyle,
                   sectionCols,
                   sections,
+                  dense,
                   logoUrl: logoUrl || undefined,
                   sectionImages,
+                  headerMode,
+                  headerImageUrl: headerImageUrl || undefined,
                 })
               : templateKey === "neon"
                 ? renderNeon({
                     menuName: menu.Name,
                     muted,
                     accent,
+                    itemCardStyle,
                     sectionCols,
                     sections,
+                    dense,
                     logoUrl: logoUrl || undefined,
                     sectionImages,
+                    headerMode,
+                    headerImageUrl: headerImageUrl || undefined,
                   })
                 : renderClassic({
                     menuName: menu.Name,
                     muted,
                     accent,
+                    itemCardStyle,
                     sectionCols,
                     sections,
+                    dense,
                     logoUrl: logoUrl || undefined,
                     sectionImages,
+                    headerMode,
+                    headerImageUrl: headerImageUrl || undefined,
                   })}
           </div>
         </div>

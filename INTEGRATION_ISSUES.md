@@ -15,6 +15,7 @@ This note summarizes the current “server ↔ OpenAPI ↔ tests ↔ clients” 
 - **Production Deployment Prep**: Docker Compose configurations for production with Nginx reverse proxy are being finalized.
 - **Website Integration**: Added Next.js frontend (`website/`) to the stack, served via Nginx on `displaydeck.co.za`.
 - **CORS + uploads**: Nginx includes CORS headers on `/minio/` so browsers can PUT directly to presigned MinIO URLs.
+- **Device/token observability**: Provisioning token lifecycle events are recorded server-side and can be queried by token or by device HardwareId (survives unpairing).
 
 ## Recent Fixes (Dec 28, 2025)
 

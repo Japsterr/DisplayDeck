@@ -140,14 +140,15 @@ services:
       MINIO_SECRET_KEY: minioadmin
       MINIO_REGION: us-east-1
       # Public endpoint for generating client-accessible pre-signed URLs
-      MINIO_PUBLIC_ENDPOINT: https://displaydeck.co.za/minio
+      # Local default routes via nginx on port 8088 (see nginx service).
+      MINIO_PUBLIC_ENDPOINT: ${PUBLIC_WEB_URL:-http://localhost:8088}/minio
       # Strong JWT secret for production
       JWT_SECRET: ${JWT_SECRET:-change-this-in-prod-9b1d5c4e7f2a47b9a3c1d8e0f5b6c2a1}
       # Toggle server debug logs and endpoints
       SERVER_DEBUG: ${SERVER_DEBUG:-true}
 
       # Auth / email flows
-      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3000}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:8088}
       AUTH_REQUIRE_EMAIL_VERIFICATION: ${AUTH_REQUIRE_EMAIL_VERIFICATION:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -189,6 +190,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      - ./website/public/downloads:/app/public/downloads:ro
     environment:
       NEXT_PUBLIC_API_URL: /api
       NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-dev}

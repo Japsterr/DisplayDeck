@@ -136,10 +136,17 @@ Key routes (full spec in `docs/openapi.yaml`):
 - Assignments: GET/POST `/displays/{DisplayId}/campaign-assignments`, PUT/DELETE `/campaign-assignments/{Id}`
 - Media: POST `/media-files/upload-url`, GET `/media-files/{MediaFileId}/download-url`, GET `/media-files/{Id}`, PUT `/media-files/{Id}`
 - Device: POST `/device/provisioning/token`, POST `/device/config`, POST `/device/logs`
+- Provisioning audit: GET `/organizations/{OrganizationId}/provisioning-token-events`, GET `/organizations/{OrganizationId}/provisioning-devices`, GET `/organizations/{OrganizationId}/provisioning-device-events`, POST `/organizations/{OrganizationId}/displays/{DisplayId}/unpair`
 - Plans & Roles: GET `/plans`, GET `/roles`
 - Playback Logs: POST `/playback-logs`
 
 Timestamps: use `yyyy-MM-ddTHH:mm:ss` (ISO-8601 local) for inputs.
+
+## Website overview (sales)
+
+If you want a product/feature overview you can share with customers:
+
+- `docs/website-functions.md`
 
 ## Swagger UI
 

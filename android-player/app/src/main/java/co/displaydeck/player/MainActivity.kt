@@ -17,12 +17,15 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceResponse
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.JavascriptInterface
+import android.webkit.SslErrorHandler
+import android.net.http.SslError
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import org.json.JSONObject
@@ -39,6 +42,7 @@ class MainActivity : AppCompatActivity() {
   private lateinit var playerView: PlayerView
   private var player: ExoPlayer? = null
   private lateinit var debugOverlay: TextView
+  private lateinit var versionOverlay: TextView
   private val overlayLines = ArrayDeque<String>()
 
   private val debugOverlayEnabled = false
@@ -64,6 +68,9 @@ class MainActivity : AppCompatActivity() {
     playerView = findViewById(R.id.playerView)
     webView = findViewById(R.id.webView)
     debugOverlay = findViewById(R.id.debugOverlay)
+    versionOverlay = findViewById(R.id.versionOverlay)
+
+    versionOverlay.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
     webView.settings.javaScriptEnabled = true
     webView.settings.domStorageEnabled = true
@@ -129,11 +136,40 @@ class MainActivity : AppCompatActivity() {
           loadCampaignMessageHtml("WebView HTTP error", "HTTP $code $reason")
         }
       }
+
+      override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+        // Older Android TV boxes often have outdated trust stores; default behavior can look like a blank/black page.
+        handler?.cancel()
+        val primary = error?.primaryError ?: -1
+        val url = error?.url ?: ""
+        loadCampaignMessageHtml("WebView SSL error", "SSL error $primary\n$url")
+      }
     }
     webView.webChromeClient = WebChromeClient()
     webView.setBackgroundColor(Color.BLACK)
 
     enterImmersive()
+  }
+
+  private fun normalizeMediaUrl(rawUrl: String): String {
+    return try {
+      val u = URL(rawUrl)
+      val host = u.host ?: return rawUrl
+      val port = u.port
+      val isInternalMinio =
+        host == "minio" ||
+          host == "displaydeck-minio" ||
+          (host == "localhost" && port == 9000) ||
+          (host == "127.0.0.1" && port == 9000)
+
+      if (!isInternalMinio) return rawUrl
+
+      val path = u.path ?: ""
+      val query = u.query?.takeIf { it.isNotBlank() }?.let { "?$it" } ?: ""
+      "${SettingsStore.PUBLIC_BASE_URL}/minio$path$query"
+    } catch (_: Exception) {
+      rawUrl
+    }
   }
 
   private fun showOverlay(msg: String) {
@@ -286,7 +322,7 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun showMenu(publicToken: String) {
-    val url = "${SettingsStore.PUBLIC_BASE_URL}/display/menu/$publicToken"
+    val url = "${SettingsStore.PUBLIC_BASE_URL}/display/menu-ssr/$publicToken"
     val key = "menu:$publicToken"
     if (currentContentKey == key && webView.visibility == View.VISIBLE) return
 
@@ -363,7 +399,7 @@ class MainActivity : AppCompatActivity() {
           "menu" -> {
             val tok = it.menuPublicToken
             if (!tok.isNullOrBlank()) {
-              val url = "${SettingsStore.PUBLIC_BASE_URL}/display/menu/$tok"
+              val url = "${SettingsStore.PUBLIC_BASE_URL}/display/menu-ssr/$tok"
               hideOverlay()
               stopVideo()
               playerView.visibility = View.GONE
@@ -427,13 +463,32 @@ class MainActivity : AppCompatActivity() {
   )
 
   private fun probeThenLoadMedia(url: String, declaredType: String) {
+    val normalizedUrl = normalizeMediaUrl(url)
+
     // Images: render via HTML wrapper with CSS cover (no JS).
     if (declaredType.startsWith("image/")) {
-      stopVideo()
-      playerView.visibility = View.GONE
-      webView.visibility = View.VISIBLE
       hideOverlay()
-      loadCoverImageHtml(url)
+      Thread {
+        val probe = probeUrl(normalizedUrl)
+        runOnUiThread {
+          if (stopped) return@runOnUiThread
+
+          if (!probe.ok) {
+            val extra = probe.errorSnippet?.takeIf { it.isNotBlank() }?.let { "\n\n$it" } ?: ""
+            loadCampaignMessageHtml(
+              "Media fetch failed",
+              "HTTP ${probe.httpCode}\n${probe.contentType.ifBlank { "(no content-type)" }}\n$normalizedUrl$extra"
+            )
+            return@runOnUiThread
+          }
+
+          stopVideo()
+          playerView.visibility = View.GONE
+          webView.visibility = View.VISIBLE
+          hideOverlay()
+          loadCoverImageHtml(normalizedUrl)
+        }
+      }.start()
       return
     }
 
@@ -442,7 +497,7 @@ class MainActivity : AppCompatActivity() {
       webView.visibility = View.GONE
       playerView.visibility = View.VISIBLE
       hideOverlay()
-      playVideo(url)
+      playVideo(normalizedUrl)
       return
     }
 
@@ -450,7 +505,7 @@ class MainActivity : AppCompatActivity() {
     hideOverlay()
 
     Thread {
-      val probe = probeUrl(url)
+      val probe = probeUrl(normalizedUrl)
       runOnUiThread {
         if (stopped) return@runOnUiThread
 
@@ -458,7 +513,7 @@ class MainActivity : AppCompatActivity() {
           val extra = probe.errorSnippet?.takeIf { it.isNotBlank() }?.let { "\n\n$it" } ?: ""
           loadCampaignMessageHtml(
             "Media fetch failed",
-            "HTTP ${probe.httpCode}\n${probe.contentType.ifBlank { "(no content-type)" }}\n$url$extra"
+            "HTTP ${probe.httpCode}\n${probe.contentType.ifBlank { "(no content-type)" }}\n$normalizedUrl$extra"
           )
           return@runOnUiThread
         }
@@ -473,13 +528,13 @@ class MainActivity : AppCompatActivity() {
         if (effectiveType.startsWith("video/")) {
           webView.visibility = View.GONE
           playerView.visibility = View.VISIBLE
-          playVideo(url)
+          playVideo(normalizedUrl)
           return@runOnUiThread
         }
 
         // Images are handled above; this path is for non-image/non-video.
 
-        val urlB64 = Base64.encodeToString(url.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        val urlB64 = Base64.encodeToString(normalizedUrl.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         val html = if (effectiveType.startsWith("video/")) {
           """
             <!doctype html>
@@ -587,10 +642,27 @@ class MainActivity : AppCompatActivity() {
           <style>
             html,body{margin:0;height:100%;background:#000;overflow:hidden}
             img{width:100%;height:100%;object-fit:cover}
+            #err{position:fixed;left:8px;top:8px;right:8px;color:#fff;font:12px/1.2 monospace;opacity:.9;display:none;white-space:pre-wrap}
           </style>
         </head>
         <body>
-          <img src=\"$safeUrl\" />
+          <div id=\"err\"></div>
+          <img id=\"m\" src=\"$safeUrl\" />
+          <script>
+            (function(){
+              const img = document.getElementById('m');
+              const err = document.getElementById('err');
+              function show(msg){ err.style.display='block'; err.textContent = msg; }
+              function hide(){ err.style.display='none'; }
+              hide();
+              const t = setTimeout(function(){
+                show('Image load timed out');
+                try { if (window.DD && DD.onMediaError) DD.onMediaError('image timeout'); } catch (e) {}
+              }, 8000);
+              img.onload = function(){ clearTimeout(t); hide(); try { if (window.DD && DD.onMediaLoaded) DD.onMediaLoaded(); } catch (e) {} };
+              img.onerror = function(){ clearTimeout(t); show('Image failed to load'); try { if (window.DD && DD.onMediaError) DD.onMediaError('image failed'); } catch (e) {} };
+            })();
+          </script>
         </body>
       </html>
     """.trimIndent()
@@ -604,6 +676,14 @@ class MainActivity : AppCompatActivity() {
 
     val created = ExoPlayer.Builder(this).build()
     created.repeatMode = Player.REPEAT_MODE_ONE
+    created.addListener(object : Player.Listener {
+      override fun onPlayerError(error: PlaybackException) {
+        runOnUiThread {
+          if (stopped) return@runOnUiThread
+          showOverlay("Media error: ${error.errorCodeName}")
+        }
+      }
+    })
     playerView.player = created
     player = created
     return created
@@ -611,7 +691,8 @@ class MainActivity : AppCompatActivity() {
 
   private fun playVideo(url: String) {
     val p = ensurePlayer()
-    p.setMediaItem(MediaItem.fromUri(url))
+    val normalizedUrl = normalizeMediaUrl(url)
+    p.setMediaItem(MediaItem.fromUri(normalizedUrl))
     p.prepare()
     p.playWhenReady = true
   }

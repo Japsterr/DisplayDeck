@@ -44,6 +44,31 @@ interface MediaFile {
   CreatedAt: string;
 }
 
+function getApiUrl() {
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env) return env;
+
+  // Default to same-origin nginx proxy in production.
+  // This avoids CORS/preflight issues and also keeps MinIO URLs consistent.
+  if (typeof window !== "undefined") return `${window.location.origin}/api`;
+  return "/api";
+}
+
+function normalizeMinioPresignedUrl(raw: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s);
+    const isInternalMinio = u.hostname === "minio" || (u.hostname === "localhost" && u.port === "9000");
+    if (typeof window !== "undefined" && isInternalMinio) {
+      return `${window.location.origin}/minio${u.pathname}${u.search}`;
+    }
+  } catch {
+    // ignore
+  }
+  return s;
+}
+
 export default function MediaPage() {
   const router = useRouter();
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
@@ -58,14 +83,14 @@ export default function MediaPage() {
     if (previewUrls[id]) return previewUrls[id];
     const token = localStorage.getItem("token");
     if (!token) return "";
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+    const apiUrl = getApiUrl();
     try {
       const res = await fetch(`${apiUrl}/media-files/${id}/download-url`, {
         headers: { "X-Auth-Token": token || "" },
       });
       if (!res.ok) return "";
       const data = (await res.json()) as { DownloadUrl?: string };
-      const url = (data?.DownloadUrl || "").trim();
+      const url = normalizeMinioPresignedUrl((data?.DownloadUrl || "").trim());
       if (!url) return "";
       setPreviewUrls((prev) => (prev[id] ? prev : { ...prev, [id]: url }));
       return url;
@@ -87,7 +112,7 @@ export default function MediaPage() {
 
       const user = JSON.parse(userStr);
       const orgId = user.OrganizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      const apiUrl = getApiUrl();
 
       const response = await fetch(`${apiUrl}/organizations/${orgId}/media-files`, {
         headers: {
@@ -138,7 +163,7 @@ export default function MediaPage() {
 
       const user = JSON.parse(userStr);
       const orgId = user.OrganizationId;
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      const apiUrl = getApiUrl();
 
       // 1. Get Presigned URL
       const uploadUrlRes = await fetch(`${apiUrl}/media-files/upload-url`, {
@@ -163,8 +188,11 @@ export default function MediaPage() {
       }
       const { UploadUrl } = await uploadUrlRes.json();
 
+      const normalizedUploadUrl = normalizeMinioPresignedUrl(String(UploadUrl || ""));
+      if (!normalizedUploadUrl) throw new Error("Failed to get upload URL");
+
       // 2. Upload File to MinIO/S3
-      const uploadRes = await fetch(UploadUrl, {
+      const uploadRes = await fetch(normalizedUploadUrl, {
         method: "PUT",
         body: file,
         headers: {
@@ -195,7 +223,7 @@ export default function MediaPage() {
 
     try {
       const token = localStorage.getItem("token");
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.displaydeck.co.za";
+      const apiUrl = getApiUrl();
 
       const response = await fetch(`${apiUrl}/media-files/${id}`, {
         method: "DELETE",

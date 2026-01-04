@@ -52,6 +52,7 @@ export default function DashboardPage() {
     offlineDisplays: 0,
     systemStatus: "Checking...",
   });
+  const [displayLifecycle, setDisplayLifecycle] = useState<{ paired: number; removed: number; days: number } | null>(null);
   const [displays, setDisplays] = useState<Display[]>([]);
   const [recentActivity, setRecentActivity] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +124,23 @@ export default function DashboardPage() {
           (auditData && (auditData.Items ?? auditData.items ?? auditData.value ?? auditData.Value))
         );
 
+        // Fetch display lifecycle stats (paired/removed)
+        try {
+          const lifecycleRes = await fetch(`${apiUrl}/organizations/${orgId}/stats/display-lifecycle?days=30`, { headers });
+          if (lifecycleRes.ok) {
+            const lifecycleData = await lifecycleRes.json().catch(() => null);
+            const counts = lifecycleData?.Counts ?? lifecycleData?.counts;
+            const paired = Number(counts?.Paired ?? counts?.paired ?? 0);
+            const removed = Number(counts?.Removed ?? counts?.removed ?? 0);
+            const days = Number(lifecycleData?.Days ?? lifecycleData?.days ?? 30);
+            setDisplayLifecycle({ paired, removed, days });
+          } else {
+            setDisplayLifecycle(null);
+          }
+        } catch {
+          setDisplayLifecycle(null);
+        }
+
         // Check System Health
         let healthStatus = "Healthy";
         try {
@@ -161,7 +179,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Displays</CardTitle>
@@ -207,6 +225,24 @@ export default function DashboardPage() {
             <div className="text-2xl font-bold">{stats.systemStatus}</div>
             <p className="text-xs text-muted-foreground">
               API Connection • UI build: {APP_VERSION}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer transition-colors hover:bg-muted/50"
+          onClick={() => router.push(`/dashboard/audit-log?action=display.delete&days=${displayLifecycle?.days ?? 30}`)}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Displays removed ({displayLifecycle?.days ?? 30}d)</CardTitle>
+            <Monitor className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{displayLifecycle ? displayLifecycle.removed : "—"}</div>
+            <p className="text-xs text-muted-foreground">
+              {displayLifecycle
+                ? `Paired: ${displayLifecycle.paired} • Removed: ${displayLifecycle.removed}`
+                : "Click to view audit log"}
             </p>
           </CardContent>
         </Card>

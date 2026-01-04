@@ -57,6 +57,73 @@ Timestamp format: "yyyy-MM-ddTHH:mm:ss" (ISO 8601).
 
 ---
 
+## Provisioning Token / Device History (Audit)
+
+DisplayDeck records **token lifecycle events** so you can understand:
+
+- which **device** (HardwareId) created/used a token
+- when a token was **claimed**, **unpaired**, or **rejected**
+- the **impact** (how many campaign/menu assignments were connected at the time)
+
+### Event types
+
+Common `EventType` values:
+
+- `issued` — device requested a pairing code/token
+- `claimed` — account claimed token and linked it to a display
+- `first_heartbeat_ok` — first successful heartbeat for token; includes snapshot counts
+- `heartbeat_rejected` — heartbeat rejected (not found / expired / not claimed / not linked)
+- `unpaired` — token was explicitly unpaired (manual unpair or display deletion)
+- `display_deleted` — display was deleted (token was present at deletion time)
+
+`Details` is a JSON blob and may include:
+
+- `Reason` (e.g. `manual_unpair`, `display_deleted`, `not_found`, `not_linked`)
+- `CampaignAssignments`, `MenuAssignments`
+- `MediaFilesDistinct`, `MenusInCampaignsDistinct`
+
+### Token-centric history (by token)
+
+- `GET /organizations/{OrganizationId}/provisioning-token-events?token=ABC123&limit=100&beforeId=0`
+
+Requires: `audit:read`
+
+This returns events for a single token. It still works **after unpair**, because authorization can be validated against historical events.
+
+### Device-centric history (by HardwareId)
+
+- `GET /organizations/{OrganizationId}/provisioning-device-events?hardwareId=HW123&limit=100&beforeId=0`
+
+Requires: `audit:read`
+
+This returns the device history **across all tokens** (including tokens that were unpaired).
+
+### Device list + stats
+
+- `GET /organizations/{OrganizationId}/provisioning-devices?afterHardwareId=...&limit=200`
+
+Requires: `audit:read`
+
+Returns a per-device rollup:
+
+- `HardwareId`
+- `LastSeenAt`
+- `EventsCount`, `TokensCount`, `DisplaysCount`
+
+### Unpair a display token
+
+- `POST /organizations/{OrganizationId}/displays/{DisplayId}/unpair`
+
+Requires: `displays:write`
+
+Behavior:
+
+- clears `Displays.ProvisioningToken`
+- detaches the token from `ProvisioningTokens` (so future heartbeats are rejected)
+- records an `unpaired` lifecycle event that is attributed to the device (HardwareId)
+
+---
+
 ## Plans and Roles
 
 - `GET /plans` → Array of plans

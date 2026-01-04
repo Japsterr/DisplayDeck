@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { DashboardPreview } from "./DashboardPreview";
 
 export function MenuDesignerSpotlight() {
   return (
@@ -7,6 +8,10 @@ export function MenuDesignerSpotlight() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,_var(--tw-gradient-stops))] from-purple-900/10 via-background to-background" />
 
       <div className="container relative mx-auto px-4 md:px-6">
+        <div className="max-w-5xl mx-auto mb-12">
+          <DashboardPreview />
+        </div>
+
         <div className="max-w-3xl mx-auto text-center space-y-4">
           <h2 className="text-3xl font-bold tracking-tighter sm:text-5xl text-white">
             Design Like a Pro. Deploy in Seconds.

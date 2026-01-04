@@ -8,8 +8,12 @@ import {
   Megaphone,
   UtensilsCrossed,
   Library,
+  BarChart3,
   Users,
   Settings,
+  ScrollText,
+  ChevronsLeft,
+  ChevronsRight,
   LogOut,
 } from "lucide-react"
 
@@ -25,6 +29,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { useRouter } from "next/navigation"
 
@@ -51,6 +56,16 @@ const items = [
     icon: Megaphone,
   },
   {
+    title: "Analytics",
+    url: "/dashboard/analytics",
+    icon: BarChart3,
+  },
+  {
+    title: "Audit Log",
+    url: "/dashboard/audit-log",
+    icon: ScrollText,
+  },
+  {
     title: "Menus",
     url: "/dashboard/menus",
     icon: UtensilsCrossed,
@@ -74,6 +89,7 @@ const items = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
+  const { state, toggleSidebar } = useSidebar();
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -116,6 +132,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={toggleSidebar}
+              tooltip={state === "collapsed" ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {state === "collapsed" ? <ChevronsRight /> : <ChevronsLeft />}
+              <span>{state === "collapsed" ? "Expand" : "Collapse"}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout} tooltip="Logout">
               <LogOut />

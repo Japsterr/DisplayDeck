@@ -33,7 +33,7 @@ export function Footer() {
             <h4 className="mb-4 text-sm font-semibold text-white uppercase tracking-wider">Resources</h4>
             <ul className="space-y-2 text-sm">
               <li><Link href="/docs" className="hover:text-white">Documentation</Link></li>
-              <li><Link href="http://localhost:8080" target="_blank" className="hover:text-white">API Reference</Link></li>
+              <li><Link href="/swagger/" target="_blank" className="hover:text-white">API Reference</Link></li>
               <li><Link href="https://github.com/Japsterr/DisplayDeck/discussions" target="_blank" className="hover:text-white">Community</Link></li>
             </ul>
           </div>

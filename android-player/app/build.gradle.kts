@@ -15,9 +15,8 @@ android {
     applicationId = "co.displaydeck.player"
     minSdk = 24
     targetSdk = 33
-    versionCode = 1
-    versionCode = 2
-    versionName = "0.2.0"
+    versionCode = 4
+    versionName = "0.2.2"
 
     // If you self-host on http:// LAN later, this avoids surprises.
     manifestPlaceholders["usesCleartextTraffic"] = "true"

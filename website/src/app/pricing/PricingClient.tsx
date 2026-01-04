@@ -46,65 +46,51 @@ export function PricingClient() {
       currencyLabel: isZa ? "South Africa (ZAR)" : "Global (USD)",
       tiers: {
         starter: {
-          title: "Starter Deck",
+          title: "Free",
           price: 0,
-          unit: isZa ? "/mo" : "/mo",
-          subtitle: "Free forever for small business.",
-          description:
-            "Perfect for a local shop getting started. No credit card required.",
-          bullets: [
-            "2 active displays",
-            "500MB media storage",
-            "Basic templates (fast setup)",
-            "1 static menu/list",
-            "Small watermark",
-            "Community support",
-          ],
+          unit: "/mo",
+          subtitle: "Get started in minutes.",
+          description: "Perfect for a small shop testing digital signage. No credit card required.",
+          bullets: ["2 active displays", "500MB media storage"],
           ctaLabel: "Get Started Free",
           ctaHref: "/register",
           highlighted: false,
         },
         business: {
-          title: "Business",
-          price: isZa ? 179 : 12,
-          unit: "/screen/mo",
-          subtitle: "The easy yes.",
-          description:
-            "Professional signage that pays for itself with clearer upsells, promos, and better presentation.",
-          bullets: [
-            "Unlimited displays",
-            "Menu Designer (full access)",
-            "Scheduling (breakfast → lunch → dinner)",
-            "10GB media storage",
-            "Remove watermark",
-            isZa ? "Local support (WhatsApp + email)" : "Email support",
-          ],
+          title: "Starter",
+          price: isZa ? 150 : 10,
+          unit: "/mo",
+          subtitle: "For growing stores.",
+          description: "More screens and storage for daily updates and promotions.",
+          bullets: ["5 active displays", "700MB media storage"],
           ctaLabel: "Start Now",
           ctaHref: "/register",
           highlighted: true,
         },
         pro: {
-          title: "Pro / Network",
-          price: isZa ? 249 : 18,
-          unit: "/screen/mo",
-          subtitle: "For multi-site and advanced layouts.",
-          description:
-            "For businesses running multiple branches or wanting dynamic lists and multi-zone signage.",
-          bullets: [
-            "Everything in Business",
-            "Dynamic lists (live data / sheet sync)",
-            "Advanced layout zones",
-            "50GB media storage",
-            isZa ? "Priority support" : "Priority support",
-          ],
-          ctaLabel: "Talk to Us",
+          title: "Pro",
+          price: isZa ? 250 : 16,
+          unit: "/mo",
+          subtitle: "For multi-display setups.",
+          description: "Ideal for larger floors and multiple content zones.",
+          bullets: ["10 active displays", "1GB media storage"],
+          ctaLabel: "Start Now",
           ctaHref: "/register",
           highlighted: false,
         },
+        enterprise: {
+          title: "Enterprise",
+          price: isZa ? 0 : 0,
+          unit: "",
+          subtitle: "Unlimited scale.",
+          description: "Unlimited displays, 10GB storage, and a custom quote for your rollout.",
+          bullets: ["Unlimited displays", "10GB media storage"],
+          ctaLabel: "Contact Us",
+          ctaHref: "/integrations",
+          highlighted: false,
+        },
       },
-      footerNote: isZa
-        ? "Local payments available (EFT, debit order, Ozow-style instant EFT)."
-        : "Prefer a local payment method? Switch to South Africa pricing.",
+      footerNote: "",
     };
   }, [mode]);
 
@@ -142,12 +128,13 @@ export function PricingClient() {
         <div className="text-xs text-neutral-500 hidden sm:block">{pricing.currencyLabel}</div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
         {(
           [
             pricing.tiers.starter,
             pricing.tiers.business,
             pricing.tiers.pro,
+            pricing.tiers.enterprise,
           ] as const
         ).map((tier) => (
           <div
@@ -169,10 +156,12 @@ export function PricingClient() {
             <div className="text-sm text-blue-300 font-semibold mb-4">{tier.subtitle}</div>
 
             <div className="text-3xl font-bold text-white mb-4">
-              {formatPrice(mode, tier.price)}
-              <span className="text-sm font-normal text-muted-foreground">
-                {tier.unit}
-              </span>
+              {tier.title === "Enterprise" ? "Custom" : formatPrice(mode, tier.price)}
+              {tier.unit ? (
+                <span className="text-sm font-normal text-muted-foreground">
+                  {tier.unit}
+                </span>
+              ) : null}
             </div>
 
             <p className="text-muted-foreground mb-6 flex-1">{tier.description}</p>
@@ -198,14 +187,11 @@ export function PricingClient() {
         ))}
       </div>
 
-      <div className="max-w-4xl mx-auto text-center mt-10 text-sm text-neutral-400">
-        <p>{pricing.footerNote}</p>
-        {mode === "ZA" ? (
-          <p className="mt-3 text-neutral-500">
-            Want the full "Brakpan Special" hardware + installation bundle? We can supply the TV, mounting, and setup as a once-off package.
-          </p>
-        ) : null}
-      </div>
+      {pricing.footerNote ? (
+        <div className="max-w-4xl mx-auto text-center mt-10 text-sm text-neutral-400">
+          <p>{pricing.footerNote}</p>
+        </div>
+      ) : null}
     </>
   );
 }
