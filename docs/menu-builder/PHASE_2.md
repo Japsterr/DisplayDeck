@@ -175,14 +175,63 @@ For multi-screen displays (e.g., 3-panel drive-thru):
 | QSR | Fast food, takeaway | Large images, price badges |
 | Drive-Thru | Outdoor displays | Numbered items, max legibility |
 
+## Drag-and-Drop Reordering
+
+Implemented in Phase 2:
+
+### Section Reordering
+- Each section has a grip handle (⋮⋮) on the left side
+- Drag sections to reorder them visually
+- Display order is automatically updated and saved to database
+- Visual feedback: shadow and ring highlight during drag
+
+### Item Reordering
+- Each item row has a grip handle in the first column
+- Drag items within a section to reorder
+- Changes persist immediately to the database
+- Works seamlessly with the existing Order field
+
+### Technical Implementation
+- Uses `@hello-pangea/dnd` library (React 18+ compatible fork of react-beautiful-dnd)
+- `DragDropContext` wraps the entire sections list
+- Nested `Droppable` zones for sections and items
+- `Draggable` wrappers on each section card and item row
+
+## Animated Transitions
+
+Implemented in Phase 2:
+
+### Page Load Animations
+- Staggered fade-in effect for sections (0.1s delay between each)
+- Staggered fade-in for items within sections (0.05s delay)
+- Smooth translateY animation from below
+
+### Hover Effects
+- Menu items scale up slightly (1.02x) on hover
+- Shadow effect increases on hover
+- Product images zoom in (1.05x) on hover
+- Price elements have a subtle "pop" animation
+
+### CSS Implementation
+```css
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.menu-section { animation: menuFadeIn 0.5s ease-out forwards; }
+.menu-item { animation: menuFadeIn 0.4s ease-out forwards; }
+.menu-item:hover { transform: scale(1.02); box-shadow: 0 8px 25px rgba(0,0,0,0.2); }
+```
+
 ## Future Roadmap (Phase 3+)
 
-- [ ] Drag-and-drop section/item reordering
+- [x] ~~Drag-and-drop section/item reordering~~ ✅ Done
+- [x] ~~Animated transitions~~ ✅ Done
 - [ ] POS system integration
 - [ ] Scheduled price changes
 - [ ] A/B testing for menu layouts
 - [ ] Analytics (popular items, view counts)
 - [ ] Multi-language support
-- [ ] Animated transitions
 - [ ] Video backgrounds
 - [ ] QR code integration

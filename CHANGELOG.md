@@ -17,6 +17,16 @@
   - Combo support with included items list.
   - Multi-panel display support for drive-thru configurations.
 
+- **Menu Builder (Phase 2 — Drag-and-Drop & Animations)**:
+  - Added drag-and-drop reordering for menu sections using grip handles.
+  - Added drag-and-drop reordering for menu items within sections.
+  - Visual feedback during drag operations (shadow highlight, ring indicator).
+  - Changes automatically persist to the database on drop.
+  - Added staggered fade-in animations for sections and items on page load.
+  - Added hover effects: scale transform and shadow on menu items.
+  - Added image zoom effect on hover for product images.
+  - Animation timing uses staggered delays based on section/item index.
+
 - **Provisioning audit / observability**:
   - Added `ProvisioningTokenEvents` table to record token lifecycle and device history.
   - New org endpoints:
