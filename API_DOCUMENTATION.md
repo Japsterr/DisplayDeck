@@ -395,3 +395,43 @@ Example response (shape)
 - `GET /analytics/plays`
 - `GET /analytics/summary/media`
 - `GET /analytics/summary/campaigns`
+---
+
+## Content Templates
+
+- `GET /templates` — List all templates (system + org-specific)
+  - Query params: `category`, `type`
+  - Response: `{ "value": [ { "Id": 1, "Name": "...", "Category": "...", "ContentType": "...", "PreviewImage": "...", "IsSystemTemplate": true, "UsageCount": 0 } ] }`
+
+- `POST /templates` — Create a new template
+  - Request: `{ "Name": "...", "Description": "...", "Category": "...", "ContentType": "campaign|menu|infoboard", "TemplateData": {} }`
+  - Response: `{ "Id": 1, "Name": "..." }`
+
+- `DELETE /templates/{Id}` — Delete a template (non-system only)
+  - Response: 204 No Content
+  - Errors: 403 if system template, 404 if not found
+
+---
+
+## Content Schedules
+
+- `GET /organizations/{OrganizationId}/content-schedules` — List schedules
+  - Response: `{ "Items": [ { "Id": 1, "Name": "...", "ContentType": "campaign|menu|infoboard", "ContentId": 123, "StartDate": "...", "EndDate": "...", "IsActive": true } ] }`
+
+- `POST /organizations/{OrganizationId}/content-schedules` — Create a schedule
+  - Request: `{ "Name": "...", "ContentType": "campaign", "ContentId": 123, "StartDate": "2026-01-01", "EndDate": "2026-12-31", "StartTime": "09:00", "EndTime": "17:00", "DaysOfWeek": ["Monday","Tuesday"], "Priority": "normal", "IsActive": true }`
+  - Response: `{ "Id": 1, "Name": "..." }`
+
+- `PUT /organizations/{OrganizationId}/content-schedules/{Id}` — Update a schedule
+- `DELETE /organizations/{OrganizationId}/content-schedules/{Id}` — Delete a schedule
+
+---
+
+## Layout Templates
+
+- `GET /layout-templates` — List layout templates
+  - Response: `{ "value": [ { "Id": 1, "Name": "...", "ZoneCount": 2, "PreviewImage": "...", "IsSystemTemplate": true } ] }`
+
+- `POST /layout-templates` — Create layout template
+- `PUT /layout-templates/{Id}` — Update layout template
+- `DELETE /layout-templates/{Id}` — Delete layout template

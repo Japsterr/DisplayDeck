@@ -426,4 +426,45 @@ Edge cases:
 
 ---
 
+## v0.3.0+ Features
+
+### Scheduling System
+Content scheduling with priority-based resolution. Schedules can target campaigns, menus, or infoboards with time-based rules.
+
+### Multi-Zone Layouts
+7 pre-built layout templates for split-screen displays. Each zone can show different content types simultaneously.
+
+### Remote Display Management
+Send commands to displays: reboot, screenshot, volume, brightness, refresh, clear cache. Commands queued and acknowledged.
+
+### Analytics Dashboard
+Display uptime tracking, content performance metrics, organization-wide statistics.
+
+### Templates Library
+Reusable content templates with categories. 5 system templates included with preview images.
+
+### Team Management
+Roles (Owner, Admin, Editor, Viewer) with granular permissions. Team invitations, location grouping.
+
+### Transition Effects
+8 transition types for campaigns: fade, slide (4 directions), zoom in/out. Configurable duration.
+
+---
+
+## v0.3.1 Bug Fixes (2026-01-05)
+
+- Fixed template creation failing due to empty Tags/TemplateData JSONB cast errors
+- Fixed schedule creation: ContentId now maps to CampaignId/MenuId/InfoBoardId based on ContentType
+- Added template DELETE endpoint for non-system templates
+- Added 5 SVG preview images for system templates
+- Fixed legacy media URLs via migration (localhost paths → relative paths)
+- Improved dashboard Recent Activity display with icons and human-readable text
+- Added client-side validation for schedule content selection
+
+Migrations:
+- `migrations/2026-01-05_fix_legacy_media_urls.sql` - Fixes old localhost URLs
+- `migrations/2026-01-05_add_template_thumbnails.sql` - Adds preview images to system templates
+
+---
+
 Made with Delphi. Contributions welcome via PR.
