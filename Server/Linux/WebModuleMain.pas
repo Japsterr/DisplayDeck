@@ -56,6 +56,15 @@ uses
   AWSSigV4,
   ProvisioningTokenRepository,
   ProvisioningTokenEventRepository,
+  // New repositories for comprehensive features
+  ContentScheduleRepository,
+  LayoutTemplateRepository,
+  DisplayZoneRepository,
+  DisplayCommandRepository,
+  IntegrationRepository,
+  ContentTemplateRepository,
+  TeamRepository,
+  AnalyticsRepository,
   uServerContainer,
   System.Hash,
   System.Threading,
@@ -5247,8 +5256,13 @@ begin
         if SameText(Request.Method,'GET') then
         begin
           var Cmp := Cmp0;
-          var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Cmp.Id)); O.AddPair('Name', Cmp.Name); O.AddPair('Orientation', Cmp.Orientation);
-            Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          var O := TJSONObject.Create; 
+          O.AddPair('Id', TJSONNumber.Create(Cmp.Id)); 
+          O.AddPair('Name', Cmp.Name); 
+          O.AddPair('Orientation', Cmp.Orientation);
+          O.AddPair('TransitionType', Cmp.TransitionType);
+          O.AddPair('TransitionDuration', TJSONNumber.Create(Cmp.TransitionDuration));
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
           Exit;
         end
         else if SameText(Request.Method,'PUT') then
@@ -5257,8 +5271,23 @@ begin
             if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
             var Name := Body.GetValue<string>('Name',''); var Orientation := Body.GetValue<string>('Orientation','');
             if (Name='') or (Orientation='') then begin JSONError(400,'Missing fields'); Exit; end;
-            var Cmp := TCampaignRepository.UpdateCampaign(Id, Name, Orientation); if Cmp=nil then begin JSONError(404,'Not found'); Exit; end;
-            try var O := TJSONObject.Create; O.AddPair('Id', TJSONNumber.Create(Cmp.Id)); O.AddPair('Name', Cmp.Name); O.AddPair('Orientation', Cmp.Orientation);
+            
+            var TransitionType := Body.GetValue<string>('TransitionType','');
+            var TransitionDuration := Body.GetValue<Integer>('TransitionDuration', 500);
+            
+            var Cmp: TCampaign;
+            if TransitionType <> '' then
+              Cmp := TCampaignRepository.UpdateCampaignWithTransition(Id, Name, Orientation, TransitionType, TransitionDuration)
+            else
+              Cmp := TCampaignRepository.UpdateCampaign(Id, Name, Orientation);
+            
+            if Cmp=nil then begin JSONError(404,'Not found'); Exit; end;
+            try var O := TJSONObject.Create; 
+              O.AddPair('Id', TJSONNumber.Create(Cmp.Id)); 
+              O.AddPair('Name', Cmp.Name); 
+              O.AddPair('Orientation', Cmp.Orientation);
+              O.AddPair('TransitionType', Cmp.TransitionType);
+              O.AddPair('TransitionDuration', TJSONNumber.Create(Cmp.TransitionDuration));
               Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
             finally Cmp.Free; end; Exit;
           finally Body.Free; end;
@@ -5953,8 +5982,8 @@ begin
           end;
         finally Q.Free; end;
 
-        // Fallback: no proof-of-play yet. Return assigned menu/campaign so the dashboard can still show intent.
-        // Try menu first (menus and campaigns are mutually exclusive by enforcement).
+        // Fallback: no proof-of-play yet. Return assigned menu/campaign/infoboard so the dashboard can still show intent.
+        // Try menu first (menus, campaigns, and infoboards are mutually exclusive by enforcement).
         var Qm := TFDQuery.Create(nil);
         try
           Qm.Connection := C;
@@ -5986,6 +6015,43 @@ begin
           end;
         finally
           Qm.Free;
+        end;
+
+        // Try InfoBoard
+        var Qib := TFDQuery.Create(nil);
+        try
+          Qib.Connection := C;
+          Qib.SQL.Text := 'select ib.InfoBoardID, ib.Name, ib.PublicToken from DisplayInfoBoards dib join InfoBoards ib on ib.InfoBoardID=dib.InfoBoardID ' +
+                         'where dib.DisplayID=:D and dib.IsPrimary=true order by dib.Id desc limit 1';
+          Qib.ParamByName('D').AsInteger := DisplayId;
+          Qib.Open;
+          if not Qib.Eof then
+          begin
+            var O := TJSONObject.Create;
+            try
+              O.AddPair('ItemType', 'infoboard');
+              O.AddPair('DisplayId', TJSONNumber.Create(DisplayId));
+              O.AddPair('InfoBoardId', TJSONNumber.Create(Qib.FieldByName('InfoBoardID').AsInteger));
+              O.AddPair('InfoBoardName', Qib.FieldByName('Name').AsString);
+              O.AddPair('InfoBoardPublicToken', Qib.FieldByName('PublicToken').AsString);
+              O.AddPair('MenuId', TJSONNull.Create);
+              O.AddPair('MenuName', TJSONNull.Create);
+              O.AddPair('MenuPublicToken', TJSONNull.Create);
+              O.AddPair('CampaignId', TJSONNull.Create);
+              O.AddPair('CampaignName', TJSONNull.Create);
+              O.AddPair('MediaFileId', TJSONNull.Create);
+              O.AddPair('MediaFileName', TJSONNull.Create);
+              O.AddPair('MediaFileType', TJSONNull.Create);
+              O.AddPair('PlaybackTimestamp', TJSONNull.Create);
+              O.AddPair('StartedAt', TJSONNull.Create);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse;
+            finally
+              O.Free;
+            end;
+            Exit;
+          end;
+        finally
+          Qib.Free;
         end;
 
         // Try primary campaign + first media item
@@ -6317,6 +6383,758 @@ begin
         finally C.Free; end;
         Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
       finally Body.Free; end;
+      Exit;
+    end;
+
+    // ==================== CONTENT SCHEDULES ====================
+    // List content schedules for organization
+    if SameText(NormalizedPath, '/content-schedules') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+      var Schedules := TContentScheduleRepository.ListByOrganization(TokOrg);
+      try
+        var Arr := TJSONArray.Create;
+        for var S in Schedules do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(S.Id));
+          O.AddPair('OrganizationId', TJSONNumber.Create(S.OrganizationId));
+          O.AddPair('Name', S.Name);
+          O.AddPair('ContentType', S.ContentType);
+          O.AddPair('ContentId', TJSONNumber.Create(S.ContentId));
+          O.AddPair('Priority', TJSONNumber.Create(S.Priority));
+          O.AddPair('StartDate', DateToISO8601(S.StartDate, True));
+          O.AddPair('EndDate', DateToISO8601(S.EndDate, True));
+          O.AddPair('StartTime', S.StartTime);
+          O.AddPair('EndTime', S.EndTime);
+          O.AddPair('DaysOfWeek', S.DaysOfWeek);
+          O.AddPair('IsActive', TJSONBool.Create(S.IsActive));
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Schedules.Free; end;
+      Exit;
+    end;
+
+    // Create content schedule
+    if SameText(NormalizedPath, '/content-schedules') and SameText(Request.Method, 'POST') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+      try
+        var Schedule := TContentSchedule.Create;
+        try
+          Schedule.OrganizationId := TokOrg;
+          Schedule.Name := Body.GetValue<string>('Name', '');
+          Schedule.ContentType := Body.GetValue<string>('ContentType', '');
+          Schedule.ContentId := Body.GetValue<Integer>('ContentId', 0);
+          // Map ContentId to the appropriate ID field based on ContentType
+          if SameText(Schedule.ContentType, 'campaign') then
+            Schedule.CampaignId := Schedule.ContentId
+          else if SameText(Schedule.ContentType, 'menu') then
+            Schedule.MenuId := Schedule.ContentId
+          else if SameText(Schedule.ContentType, 'infoboard') then
+            Schedule.InfoBoardId := Schedule.ContentId;
+          Schedule.Priority := Body.GetValue<Integer>('Priority', 0);
+          Schedule.StartDate := ISO8601ToDate(Body.GetValue<string>('StartDate', ''), True);
+          Schedule.HasStartDate := Body.GetValue<string>('StartDate', '') <> '';
+          Schedule.EndDate := ISO8601ToDate(Body.GetValue<string>('EndDate', ''), True);
+          Schedule.HasEndDate := Body.GetValue<string>('EndDate', '') <> '';
+          Schedule.StartTime := Body.GetValue<string>('StartTime', '');
+          Schedule.EndTime := Body.GetValue<string>('EndTime', '');
+          Schedule.DaysOfWeek := Body.GetValue<string>('DaysOfWeek', '');
+          Schedule.IsActive := Body.GetValue<Boolean>('IsActive', True);
+          if Schedule.Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+          var Created := TContentScheduleRepository.CreateSchedule(Schedule);
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Created.Id));
+            O.AddPair('Name', Created.Name);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          finally Created.Free; end;
+        finally Schedule.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // Content schedule by ID
+    if (Copy(NormalizedPath, 1, 19) = '/content-schedules/') then
+    begin
+      var Tail := Copy(NormalizedPath, 20, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var ScheduleId := StrToIntDef(IdStr, 0);
+      if ScheduleId=0 then begin JSONError(400,'Invalid schedule id'); Exit; end;
+
+      // Assign to display: /content-schedules/{id}/displays
+      if Pos('/displays', NormalizedPath) > 0 then
+      begin
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        try
+          var DisplayId := Body.GetValue<Integer>('DisplayId', 0);
+          if DisplayId=0 then begin JSONError(400,'Missing DisplayId'); Exit; end;
+          if SameText(Request.Method, 'POST') then
+          begin
+            TContentScheduleRepository.AssignToDisplay(ScheduleId, DisplayId);
+            Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+          end
+          else if SameText(Request.Method, 'DELETE') then
+          begin
+            TContentScheduleRepository.UnassignFromDisplay(ScheduleId, DisplayId);
+            Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+          end;
+        finally Body.Free; end;
+        Exit;
+      end;
+
+      var S0 := TContentScheduleRepository.GetById(ScheduleId);
+      if S0=nil then begin JSONError(404,'Not found'); Exit; end;
+      try
+        var TokOrg, TokUser: Integer; var TokRole: string;
+        if SameText(Request.Method,'GET') then
+        begin
+          if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+        end else begin
+          if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+        end;
+        if TokOrg<>S0.OrganizationId then begin JSONError(403,'Forbidden'); Exit; end;
+
+        if SameText(Request.Method,'GET') then
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(S0.Id));
+          O.AddPair('OrganizationId', TJSONNumber.Create(S0.OrganizationId));
+          O.AddPair('Name', S0.Name);
+          O.AddPair('ContentType', S0.ContentType);
+          O.AddPair('ContentId', TJSONNumber.Create(S0.ContentId));
+          O.AddPair('Priority', TJSONNumber.Create(S0.Priority));
+          O.AddPair('StartDate', DateToISO8601(S0.StartDate, True));
+          O.AddPair('EndDate', DateToISO8601(S0.EndDate, True));
+          O.AddPair('StartTime', S0.StartTime);
+          O.AddPair('EndTime', S0.EndTime);
+          O.AddPair('DaysOfWeek', S0.DaysOfWeek);
+          O.AddPair('IsActive', TJSONBool.Create(S0.IsActive));
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          Exit;
+        end
+        else if SameText(Request.Method,'PUT') then
+        begin
+          var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+          if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+          try
+            S0.Name := Body.GetValue<string>('Name', S0.Name);
+            S0.ContentType := Body.GetValue<string>('ContentType', S0.ContentType);
+            S0.ContentId := Body.GetValue<Integer>('ContentId', S0.ContentId);
+            S0.Priority := Body.GetValue<Integer>('Priority', S0.Priority);
+            var StartStr := Body.GetValue<string>('StartDate', '');
+            var EndStr := Body.GetValue<string>('EndDate', '');
+            if StartStr<>'' then S0.StartDate := ISO8601ToDate(StartStr, True);
+            if EndStr<>'' then S0.EndDate := ISO8601ToDate(EndStr, True);
+            S0.StartTime := Body.GetValue<string>('StartTime', S0.StartTime);
+            S0.EndTime := Body.GetValue<string>('EndTime', S0.EndTime);
+            S0.DaysOfWeek := Body.GetValue<string>('DaysOfWeek', S0.DaysOfWeek);
+            S0.IsActive := Body.GetValue<Boolean>('IsActive', S0.IsActive);
+            var Updated := TContentScheduleRepository.UpdateSchedule(S0);
+            try
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(Updated.Id));
+              O.AddPair('Name', Updated.Name);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            finally Updated.Free; end;
+          finally Body.Free; end;
+          Exit;
+        end
+        else if SameText(Request.Method,'DELETE') then
+        begin
+          TContentScheduleRepository.DeleteSchedule(ScheduleId);
+          Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+          Exit;
+        end;
+      finally S0.Free; end;
+    end;
+
+    // ==================== LAYOUT TEMPLATES ====================
+    if SameText(NormalizedPath, '/layout-templates') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+      var Templates := TLayoutTemplateRepository.ListByOrganization(TokOrg);
+      try
+        var Arr := TJSONArray.Create;
+        for var T in Templates do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(T.Id));
+          O.AddPair('Name', T.Name);
+          O.AddPair('Description', T.Description);
+          O.AddPair('ZoneCount', TJSONNumber.Create(T.ZoneCount));
+          O.AddPair('ZoneConfig', TJSONObject.ParseJSONValue(T.ZoneConfig));
+          O.AddPair('PreviewImage', T.PreviewImage);
+          O.AddPair('IsSystemTemplate', TJSONBool.Create(T.IsSystemTemplate));
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Templates.Free; end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/layout-templates') and SameText(Request.Method, 'POST') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+      try
+        var Template := TLayoutTemplate.Create;
+        try
+          Template.OrganizationId := TokOrg;
+          Template.Name := Body.GetValue<string>('Name', '');
+          Template.Description := Body.GetValue<string>('Description', '');
+          Template.ZoneCount := Body.GetValue<Integer>('ZoneCount', 1);
+          var ZoneVal := Body.GetValue('ZoneConfig');
+          if ZoneVal<>nil then Template.ZoneConfig := ZoneVal.ToJSON else Template.ZoneConfig := '{}';
+          Template.PreviewImage := Body.GetValue<string>('PreviewImage', '');
+          if Template.Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+          var Created := TLayoutTemplateRepository.CreateTemplate(Template);
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Created.Id));
+            O.AddPair('Name', Created.Name);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          finally Created.Free; end;
+        finally Template.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // ==================== DISPLAY ZONES ====================
+    // /displays/{id}/zones - get or manage zones for a display
+    if (Pos('/zones', NormalizedPath) > 0) and (Copy(NormalizedPath, 1, 10) = '/displays/') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
+      var Tail := Copy(NormalizedPath, 11, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var DisplayId := StrToIntDef(IdStr, 0);
+      if DisplayId=0 then begin JSONError(400,'Invalid display id'); Exit; end;
+
+      if SameText(Request.Method, 'GET') then
+      begin
+        var Zones := TDisplayZoneRepository.ListByDisplay(DisplayId);
+        try
+          var Arr := TJSONArray.Create;
+          for var Z in Zones do
+          begin
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Z.Id));
+            O.AddPair('DisplayId', TJSONNumber.Create(Z.DisplayId));
+            O.AddPair('TemplateId', TJSONNumber.Create(Z.TemplateId));
+            O.AddPair('ZoneIdentifier', Z.ZoneIdentifier);
+            O.AddPair('ContentType', Z.ContentType);
+            if Z.ContentId>0 then O.AddPair('ContentId', TJSONNumber.Create(Z.ContentId)) else O.AddPair('ContentId', TJSONNull.Create);
+            O.AddPair('Settings', TJSONObject.ParseJSONValue(Z.Settings));
+            Arr.AddElement(O);
+          end;
+          var Root := TJSONObject.Create;
+          Root.AddPair('value', Arr);
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+          Root.Free;
+        finally Zones.Free; end;
+        Exit;
+      end
+      else if SameText(Request.Method, 'POST') then
+      begin
+        // Assign layout to display
+        var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        try
+          var TemplateId := Body.GetValue<Integer>('TemplateId', 0);
+          if TemplateId=0 then begin JSONError(400,'Missing TemplateId'); Exit; end;
+          TDisplayZoneRepository.AssignLayout(DisplayId, TemplateId);
+          Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+        finally Body.Free; end;
+        Exit;
+      end
+      else if SameText(Request.Method, 'PUT') then
+      begin
+        // Update zone content
+        var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        try
+          var ZoneId := Body.GetValue<Integer>('ZoneId', 0);
+          if ZoneId=0 then begin JSONError(400,'Missing ZoneId'); Exit; end;
+          var Zone := TDisplayZoneRepository.GetById(ZoneId);
+          if Zone=nil then begin JSONError(404,'Zone not found'); Exit; end;
+          try
+            Zone.ContentType := Body.GetValue<string>('ContentType', Zone.ContentType);
+            Zone.ContentId := Body.GetValue<Integer>('ContentId', Zone.ContentId);
+            var SettingsVal := Body.GetValue('Settings');
+            if SettingsVal<>nil then Zone.Settings := SettingsVal.ToJSON;
+            var Updated := TDisplayZoneRepository.UpdateZone(Zone);
+            try
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(Updated.Id));
+              O.AddPair('ZoneIdentifier', Updated.ZoneIdentifier);
+              Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            finally Updated.Free; end;
+          finally Zone.Free; end;
+        finally Body.Free; end;
+        Exit;
+      end;
+    end;
+
+    // ==================== DISPLAY COMMANDS (Remote Management) ====================
+    // /displays/{id}/commands
+    if (Pos('/commands', NormalizedPath) > 0) and (Copy(NormalizedPath, 1, 10) = '/displays/') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['displays:write'], TokOrg, TokUser, TokRole) then Exit;
+      var Tail := Copy(NormalizedPath, 11, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var DisplayId := StrToIntDef(IdStr, 0);
+      if DisplayId=0 then begin JSONError(400,'Invalid display id'); Exit; end;
+
+      if SameText(Request.Method, 'GET') then
+      begin
+        // Get pending commands for display (used by Android player)
+        var Commands := TDisplayCommandRepository.GetPendingForDisplay(DisplayId);
+        try
+          var Arr := TJSONArray.Create;
+          for var Cmd in Commands do
+          begin
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Cmd.Id));
+            O.AddPair('CommandType', Cmd.CommandType);
+            O.AddPair('Payload', TJSONObject.ParseJSONValue(Cmd.Payload));
+            O.AddPair('CreatedAt', DateToISO8601(Cmd.CreatedAt, True));
+            Arr.AddElement(O);
+          end;
+          var Root := TJSONObject.Create;
+          Root.AddPair('value', Arr);
+          Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+          Root.Free;
+        finally Commands.Free; end;
+        Exit;
+      end
+      else if SameText(Request.Method, 'POST') then
+      begin
+        // Send command to display
+        var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+        if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+        try
+          var Cmd := TDisplayCommand.Create;
+          try
+            Cmd.DisplayId := DisplayId;
+            Cmd.CommandType := Body.GetValue<string>('CommandType', '');
+            var PayloadVal := Body.GetValue('Payload');
+            if PayloadVal<>nil then Cmd.Payload := PayloadVal.ToJSON else Cmd.Payload := '{}';
+            Cmd.IssuedByUserId := TokUser;
+            if Cmd.CommandType='' then begin JSONError(400,'Missing CommandType'); Exit; end;
+            var Created := TDisplayCommandRepository.CreateCommand(Cmd);
+            try
+              var O := TJSONObject.Create;
+              O.AddPair('Id', TJSONNumber.Create(Created.Id));
+              O.AddPair('CommandType', Created.CommandType);
+              O.AddPair('Status', Created.Status);
+              Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+            finally Created.Free; end;
+          finally Cmd.Free; end;
+        finally Body.Free; end;
+        Exit;
+      end;
+    end;
+
+    // Command acknowledgment: /display-commands/{id}/ack
+    if (Copy(NormalizedPath, 1, 18) = '/display-commands/') and (Pos('/ack', NormalizedPath) > 0) then
+    begin
+      var Tail := Copy(NormalizedPath, 19, MaxInt);
+      var Slash := Pos('/', Tail);
+      var IdStr := Tail; if Slash>0 then IdStr := Copy(Tail,1,Slash-1);
+      var CmdId := StrToIntDef(IdStr, 0);
+      if CmdId=0 then begin JSONError(400,'Invalid command id'); Exit; end;
+      
+      if SameText(Request.Method, 'POST') then
+      begin
+        var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+        try
+          var Status := 'acknowledged';
+          if Body<>nil then Status := Body.GetValue<string>('Status', 'acknowledged');
+          if SameText(Status, 'completed') then
+            TDisplayCommandRepository.MarkAsCompleted(CmdId, '')
+          else if SameText(Status, 'failed') then
+            TDisplayCommandRepository.MarkAsFailed(CmdId, 'Device reported failure')
+          else
+            TDisplayCommandRepository.MarkAsAcknowledged(CmdId);
+          Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+        finally if Body<>nil then Body.Free; end;
+        Exit;
+      end;
+    end;
+
+    // ==================== INTEGRATIONS ====================
+    if SameText(NormalizedPath, '/integrations') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['settings:read'], TokOrg, TokUser, TokRole) then Exit;
+      var Integrations := TIntegrationRepository.ListByOrganization(TokOrg);
+      try
+        var Arr := TJSONArray.Create;
+        for var I in Integrations do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(I.Id));
+          O.AddPair('Name', I.Name);
+          O.AddPair('IntegrationType', I.IntegrationType);
+          O.AddPair('IsActive', TJSONBool.Create(I.IsActive));
+          O.AddPair('LastSyncAt', DateToISO8601(I.LastSyncAt, True));
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Integrations.Free; end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/integrations') and SameText(Request.Method, 'POST') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['settings:write'], TokOrg, TokUser, TokRole) then Exit;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+      try
+        var Conn := TIntegrationConnection.Create;
+        try
+          Conn.OrganizationId := TokOrg;
+          Conn.Name := Body.GetValue<string>('Name', '');
+          Conn.IntegrationType := Body.GetValue<string>('IntegrationType', '');
+          var ConfigVal := Body.GetValue('Config');
+          if ConfigVal<>nil then Conn.Config := ConfigVal.ToJSON else Conn.Config := '{}';
+          if Conn.Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+          if Conn.IntegrationType='' then begin JSONError(400,'Missing IntegrationType'); Exit; end;
+          var Created := TIntegrationRepository.CreateConnection(Conn);
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Created.Id));
+            O.AddPair('Name', Created.Name);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          finally Created.Free; end;
+        finally Conn.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // ==================== CONTENT TEMPLATES ====================
+    if SameText(NormalizedPath, '/templates') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['campaigns:read'], TokOrg, TokUser, TokRole) then Exit;
+      var Category := Request.QueryFields.Values['category'];
+      var ContentType := Request.QueryFields.Values['type'];
+      var Templates := TContentTemplateRepository.ListByOrganization(TokOrg, Category, ContentType);
+      try
+        var Arr := TJSONArray.Create;
+        for var T in Templates do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(T.Id));
+          O.AddPair('Name', T.Name);
+          O.AddPair('Description', T.Description);
+          O.AddPair('Category', T.Category);
+          O.AddPair('ContentType', T.ContentType);
+          O.AddPair('PreviewImage', T.PreviewImage);
+          O.AddPair('IsSystemTemplate', TJSONBool.Create(T.IsSystemTemplate));
+          O.AddPair('UsageCount', TJSONNumber.Create(T.UsageCount));
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Templates.Free; end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/templates') and SameText(Request.Method, 'POST') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+      try
+        var Template := TContentTemplate.Create;
+        try
+          Template.OrganizationId := TokOrg;
+          Template.Name := Body.GetValue<string>('Name', '');
+          Template.Description := Body.GetValue<string>('Description', '');
+          Template.Category := Body.GetValue<string>('Category', '');
+          Template.ContentType := Body.GetValue<string>('ContentType', '');
+          var DataVal := Body.GetValue('TemplateData');
+          if DataVal<>nil then Template.TemplateData := DataVal.ToJSON else Template.TemplateData := '{}';
+          Template.PreviewImage := Body.GetValue<string>('PreviewImage', '');
+          if Template.Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+          var Created := TContentTemplateRepository.CreateTemplate(Template);
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Created.Id));
+            O.AddPair('Name', Created.Name);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          finally Created.Free; end;
+        finally Template.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // Delete template by ID
+    if (Copy(NormalizedPath, 1, 11) = '/templates/') and SameText(Request.Method, 'DELETE') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['campaigns:write'], TokOrg, TokUser, TokRole) then Exit;
+      var IdStr := Copy(NormalizedPath, 12, MaxInt);
+      var TemplateId := StrToIntDef(IdStr, 0);
+      if TemplateId = 0 then begin JSONError(400, 'Invalid template id'); Exit; end;
+      // Verify template exists and belongs to org (and is not a system template)
+      var ExistingTemplate := TContentTemplateRepository.GetById(TemplateId);
+      if ExistingTemplate = nil then begin JSONError(404, 'Template not found'); Exit; end;
+      try
+        if ExistingTemplate.IsSystemTemplate then begin JSONError(403, 'Cannot delete system templates'); Exit; end;
+        if (ExistingTemplate.OrganizationId > 0) and (ExistingTemplate.OrganizationId <> TokOrg) then begin JSONError(403, 'Forbidden'); Exit; end;
+        TContentTemplateRepository.DeleteTemplate(TemplateId);
+        Response.StatusCode := 204; Response.ContentType := 'application/json'; Response.Content := ''; Response.SendResponse;
+      finally ExistingTemplate.Free; end;
+      Exit;
+    end;
+
+    // ==================== TEAM MANAGEMENT ====================
+    // Roles
+    if SameText(NormalizedPath, '/roles') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['settings:read'], TokOrg, TokUser, TokRole) then Exit;
+      var Roles := TTeamRepository.ListRoles(TokOrg);
+      try
+        var Arr := TJSONArray.Create;
+        for var R in Roles do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(R.Id));
+          O.AddPair('Name', R.Name);
+          O.AddPair('Description', R.Description);
+          O.AddPair('Permissions', TJSONObject.ParseJSONValue(R.Permissions));
+          O.AddPair('IsSystemRole', TJSONBool.Create(R.IsSystemRole));
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Roles.Free; end;
+      Exit;
+    end;
+
+    // Team invitations
+    if SameText(NormalizedPath, '/team/invitations') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['settings:read'], TokOrg, TokUser, TokRole) then Exit;
+      var Invites := TTeamRepository.ListInvitations(TokOrg);
+      try
+        var Arr := TJSONArray.Create;
+        for var I in Invites do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(I.Id));
+          O.AddPair('Email', I.Email);
+          O.AddPair('RoleId', TJSONNumber.Create(I.RoleId));
+          O.AddPair('ExpiresAt', DateToISO8601(I.ExpiresAt, True));
+          if I.HasAcceptedAt then O.AddPair('AcceptedAt', DateToISO8601(I.AcceptedAt, True)) else O.AddPair('AcceptedAt', TJSONNull.Create);
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Invites.Free; end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/team/invitations') and SameText(Request.Method, 'POST') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['settings:write'], TokOrg, TokUser, TokRole) then Exit;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+      try
+        var Invite := TTeamInvitation.Create;
+        try
+          Invite.OrganizationId := TokOrg;
+          Invite.Email := Body.GetValue<string>('Email', '');
+          Invite.RoleId := Body.GetValue<Integer>('RoleId', 0);
+          Invite.InvitedByUserId := TokUser;
+          Invite.TokenHash := HashSha256Hex(GenerateOpaqueToken);
+          Invite.ExpiresAt := Now + 7; // 7 days
+          if Invite.Email='' then begin JSONError(400,'Missing Email'); Exit; end;
+          if Invite.RoleId=0 then begin JSONError(400,'Missing RoleId'); Exit; end;
+          var Created := TTeamRepository.CreateInvitation(Invite);
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Created.Id));
+            O.AddPair('Email', Created.Email);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          finally Created.Free; end;
+        finally Invite.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // Locations
+    if SameText(NormalizedPath, '/locations') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['settings:read'], TokOrg, TokUser, TokRole) then Exit;
+      var Locations := TTeamRepository.ListLocations(TokOrg);
+      try
+        var Arr := TJSONArray.Create;
+        for var L in Locations do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('Id', TJSONNumber.Create(L.Id));
+          O.AddPair('Name', L.Name);
+          O.AddPair('Address', L.Address);
+          O.AddPair('City', L.City);
+          O.AddPair('State', L.State);
+          O.AddPair('Country', L.Country);
+          O.AddPair('Timezone', L.Timezone);
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Locations.Free; end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/locations') and SameText(Request.Method, 'POST') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['settings:write'], TokOrg, TokUser, TokRole) then Exit;
+      var Body := TJSONObject.ParseJSONValue(Request.Content) as TJSONObject;
+      if Body=nil then begin JSONError(400,'Invalid JSON'); Exit; end;
+      try
+        var Loc := TLocation.Create;
+        try
+          Loc.OrganizationId := TokOrg;
+          Loc.Name := Body.GetValue<string>('Name', '');
+          Loc.Address := Body.GetValue<string>('Address', '');
+          Loc.City := Body.GetValue<string>('City', '');
+          Loc.State := Body.GetValue<string>('State', '');
+          Loc.Country := Body.GetValue<string>('Country', '');
+          Loc.Timezone := Body.GetValue<string>('Timezone', '');
+          if Loc.Name='' then begin JSONError(400,'Missing Name'); Exit; end;
+          var Created := TTeamRepository.CreateLocation(Loc);
+          try
+            var O := TJSONObject.Create;
+            O.AddPair('Id', TJSONNumber.Create(Created.Id));
+            O.AddPair('Name', Created.Name);
+            Response.StatusCode := 201; Response.ContentType := 'application/json'; Response.Content := O.ToJSON; Response.SendResponse; O.Free;
+          finally Created.Free; end;
+        finally Loc.Free; end;
+      finally Body.Free; end;
+      Exit;
+    end;
+
+    // ==================== ENHANCED ANALYTICS ====================
+    if SameText(NormalizedPath, '/analytics/dashboard') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['analytics:read'], TokOrg, TokUser, TokRole) then Exit;
+      var Stats := TAnalyticsRepository.GetOrganizationDashboardStats(TokOrg);
+      Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Stats; Response.SendResponse;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/analytics/uptime') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['analytics:read'], TokOrg, TokUser, TokRole) then Exit;
+      var FromStr := Request.QueryFields.Values['from'];
+      var ToStr := Request.QueryFields.Values['to'];
+      var StartDate: TDateTime := Date - 30;
+      var EndDate: TDateTime := Date;
+      var TempDate: TDateTime;
+      if (FromStr<>'') and TryStrToDate(FromStr, TempDate) then StartDate := TempDate;
+      if (ToStr<>'') and TryStrToDate(ToStr, TempDate) then EndDate := TempDate;
+      var Summary := TAnalyticsRepository.GetUptimeSummary(TokOrg, Trunc(StartDate), Trunc(EndDate));
+      try
+        var Arr := TJSONArray.Create;
+        for var S in Summary do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('DisplayId', TJSONNumber.Create(S.DisplayId));
+          O.AddPair('DisplayName', S.DisplayName);
+          O.AddPair('TotalOnlineMinutes', TJSONNumber.Create(S.TotalOnlineMinutes));
+          O.AddPair('TotalOfflineMinutes', TJSONNumber.Create(S.TotalOfflineMinutes));
+          O.AddPair('AvgUptimePercent', TJSONNumber.Create(S.AvgUptimePercent));
+          O.AddPair('LastHeartbeat', DateToISO8601(S.LastHeartbeat, True));
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Summary.Free; end;
+      Exit;
+    end;
+
+    if SameText(NormalizedPath, '/analytics/top-content') and SameText(Request.Method, 'GET') then
+    begin
+      var TokOrg, TokUser: Integer; var TokRole: string;
+      if not RequireAuth(['analytics:read'], TokOrg, TokUser, TokRole) then Exit;
+      var FromStr := Request.QueryFields.Values['from'];
+      var ToStr := Request.QueryFields.Values['to'];
+      var LimitStr := Request.QueryFields.Values['limit'];
+      var StartDate: TDateTime := Date - 30;
+      var EndDate: TDateTime := Date;
+      var Limit: Integer := 10;
+      var TempDate: TDateTime;
+      if (FromStr<>'') and TryStrToDate(FromStr, TempDate) then StartDate := TempDate;
+      if (ToStr<>'') and TryStrToDate(ToStr, TempDate) then EndDate := TempDate;
+      if LimitStr<>'' then Limit := StrToIntDef(LimitStr, 10);
+      var Content := TAnalyticsRepository.GetTopContent(TokOrg, Trunc(StartDate), Trunc(EndDate), Limit);
+      try
+        var Arr := TJSONArray.Create;
+        for var C in Content do
+        begin
+          var O := TJSONObject.Create;
+          O.AddPair('ContentType', C.ContentType);
+          O.AddPair('ContentId', TJSONNumber.Create(C.ContentId));
+          O.AddPair('TotalViews', TJSONNumber.Create(C.TotalViews));
+          O.AddPair('TotalDuration', TJSONNumber.Create(C.TotalDuration));
+          O.AddPair('AvgDurationPerView', TJSONNumber.Create(C.AvgDurationPerView));
+          O.AddPair('UniqueDisplays', TJSONNumber.Create(C.UniqueDisplays));
+          Arr.AddElement(O);
+        end;
+        var Root := TJSONObject.Create;
+        Root.AddPair('value', Arr);
+        Response.StatusCode := 200; Response.ContentType := 'application/json'; Response.Content := Root.ToJSON; Response.SendResponse;
+        Root.Free;
+      finally Content.Free; end;
       Exit;
     end;
 

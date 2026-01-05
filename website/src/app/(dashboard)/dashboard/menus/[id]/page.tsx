@@ -789,6 +789,8 @@ export default function MenuEditorPage() {
     if (!secRes.ok) throw new Error(await secRes.text());
     const secData = await secRes.json();
     const secList = (secData.value || []) as MenuSection[];
+    // Sort sections by DisplayOrder
+    secList.sort((a, b) => (a.DisplayOrder ?? 0) - (b.DisplayOrder ?? 0));
     setSections(secList);
 
     const itemPairs = await Promise.all(
@@ -796,7 +798,10 @@ export default function MenuEditorPage() {
         const res = await fetch(`${apiUrl}/menu-sections/${s.Id}/items`, { headers });
         if (!res.ok) return { sectionId: s.Id, items: [] as MenuItem[] };
         const data = await res.json();
-        return { sectionId: s.Id, items: (data.value || []) as MenuItem[] };
+        const items = (data.value || []) as MenuItem[];
+        // Sort items by DisplayOrder
+        items.sort((a, b) => (a.DisplayOrder ?? 0) - (b.DisplayOrder ?? 0));
+        return { sectionId: s.Id, items };
       })
     );
 

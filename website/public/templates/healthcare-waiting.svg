@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 225" width="400" height="225">
+  <rect fill="#e8f4f8" width="400" height="225"/>
+  
+  <!-- Header -->
+  <rect fill="#00a8cc" x="0" y="0" width="400" height="45"/>
+  <text fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold" x="20" y="28">🏥 HEALTHCARE CENTER</text>
+  
+  <!-- Main content area -->
+  <rect fill="white" x="20" y="60" width="170" height="145" rx="6"/>
+  <rect fill="white" x="210" y="60" width="170" height="145" rx="6"/>
+  
+  <!-- Left panel - Wait times -->
+  <text fill="#00a8cc" font-family="Arial, sans-serif" font-size="12" font-weight="bold" x="35" y="85">Current Wait Times</text>
+  <rect fill="#e8f4f8" x="35" y="95" width="140" height="25" rx="4"/>
+  <text fill="#333" font-family="Arial, sans-serif" font-size="10" x="45" y="112">General: ~15 min</text>
+  <rect fill="#e8f4f8" x="35" y="125" width="140" height="25" rx="4"/>
+  <text fill="#333" font-family="Arial, sans-serif" font-size="10" x="45" y="142">Urgent: ~5 min</text>
+  
+  <!-- Health tip -->
+  <rect fill="#d4edda" x="35" y="160" width="140" height="35" rx="4"/>
+  <text fill="#155724" font-family="Arial, sans-serif" font-size="9" x="45" y="175">💡 Health Tip:</text>
+  <text fill="#155724" font-family="Arial, sans-serif" font-size="8" x="45" y="188">Stay hydrated!</text>
+  
+  <!-- Right panel - Announcements -->
+  <text fill="#00a8cc" font-family="Arial, sans-serif" font-size="12" font-weight="bold" x="225" y="85">Announcements</text>
+  <rect fill="#f0f0f0" x="225" y="95" width="140" height="8" rx="2"/>
+  <rect fill="#f0f0f0" x="225" y="110" width="120" height="8" rx="2"/>
+  <rect fill="#f0f0f0" x="225" y="125" width="130" height="8" rx="2"/>
+  
+  <!-- Services -->
+  <text fill="#00a8cc" font-family="Arial, sans-serif" font-size="11" font-weight="bold" x="225" y="155">Services Available</text>
+  <circle fill="#28a745" cx="235" cy="170" r="4"/>
+  <text fill="#333" font-family="Arial, sans-serif" font-size="9" x="245" y="173">Lab Open</text>
+  <circle fill="#28a745" cx="235" cy="185" r="4"/>
+  <text fill="#333" font-family="Arial, sans-serif" font-size="9" x="245" y="188">Pharmacy Open</text>
+</svg>

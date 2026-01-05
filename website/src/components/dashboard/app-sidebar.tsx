@@ -18,6 +18,9 @@ import {
   LogOut,
   Sun,
   Moon,
+  Calendar,
+  FileText,
+  Plug,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 
@@ -45,29 +48,19 @@ const items = [
     icon: LayoutDashboard,
   },
   {
-    title: "Roadmap",
-    url: "/dashboard/roadmap",
-    icon: ListTodo,
-  },
-  {
     title: "Displays",
     url: "/dashboard/displays",
     icon: Monitor,
   },
   {
-    title: "Campaigns",
+    title: "Schedules",
+    url: "/dashboard/schedules",
+    icon: Calendar,
+  },
+  {
+    title: "Ad Campaigns",
     url: "/dashboard/campaigns",
     icon: Megaphone,
-  },
-  {
-    title: "Analytics",
-    url: "/dashboard/analytics",
-    icon: BarChart3,
-  },
-  {
-    title: "Audit Log",
-    url: "/dashboard/audit-log",
-    icon: ScrollText,
   },
   {
     title: "Menus",
@@ -80,19 +73,44 @@ const items = [
     icon: LayoutGrid,
   },
   {
+    title: "Templates",
+    url: "/dashboard/templates",
+    icon: FileText,
+  },
+  {
     title: "Media Library",
     url: "/dashboard/media",
     icon: Library,
   },
   {
-    title: "Users",
-    url: "/dashboard/users",
+    title: "Analytics",
+    url: "/dashboard/analytics",
+    icon: BarChart3,
+  },
+  {
+    title: "Integrations",
+    url: "/dashboard/integrations",
+    icon: Plug,
+  },
+  {
+    title: "Team",
+    url: "/dashboard/team",
     icon: Users,
+  },
+  {
+    title: "Audit Log",
+    url: "/dashboard/audit-log",
+    icon: ScrollText,
   },
   {
     title: "Settings",
     url: "/dashboard/settings",
     icon: Settings,
+  },
+  {
+    title: "Roadmap",
+    url: "/dashboard/roadmap",
+    icon: ListTodo,
   },
 ]
 

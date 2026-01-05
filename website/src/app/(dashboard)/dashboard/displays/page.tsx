@@ -45,7 +45,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface NowPlaying {
-  ItemType?: "media" | "menu";
+  ItemType?: "media" | "menu" | "infoboard";
   DisplayId: number;
   CampaignId?: number | null;
   MediaFileId?: number | null;
@@ -57,6 +57,9 @@ interface NowPlaying {
   MenuId?: number | null;
   MenuName?: string | null;
   MenuPublicToken?: string | null;
+  InfoBoardId?: number | null;
+  InfoBoardName?: string | null;
+  InfoBoardPublicToken?: string | null;
 }
 
 interface Display {
@@ -487,7 +490,7 @@ export default function DisplaysPage() {
                         <div className="text-sm text-muted-foreground">Loading now playing…</div>
                       ) : nowPlaying ? (
                         <div className="flex flex-col gap-1">
-                          {(nowPlaying.ItemType || "media") === "menu" ? (
+                          {nowPlaying.ItemType === "menu" ? (
                             <>
                               {/* Menu preview iframe */}
                               {nowPlaying.MenuPublicToken && (
@@ -517,6 +520,38 @@ export default function DisplaysPage() {
                               </div>
                               <div className="text-xs text-muted-foreground">
                                 Showing assigned menu (no playback logs yet).
+                              </div>
+                            </>
+                          ) : nowPlaying.ItemType === "infoboard" ? (
+                            <>
+                              {/* InfoBoard preview iframe */}
+                              {nowPlaying.InfoBoardPublicToken && (
+                                <div className="w-full aspect-video rounded-md border overflow-hidden bg-black">
+                                  <iframe
+                                    src={`${window.location.origin}/display/infoboard/${nowPlaying.InfoBoardPublicToken}?preview=1`}
+                                    className="w-full h-full border-0"
+                                    title={nowPlaying.InfoBoardName || "InfoBoard preview"}
+                                    loading="lazy"
+                                    style={{ pointerEvents: "none" }}
+                                  />
+                                </div>
+                              )}
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">Info Board:</span>{" "}
+                                {nowPlaying.InfoBoardId ? (
+                                  <button
+                                    type="button"
+                                    className="underline underline-offset-4"
+                                    onClick={() => router.push(`/dashboard/infoboards/${nowPlaying.InfoBoardId}`)}
+                                  >
+                                    {nowPlaying.InfoBoardName || `#${nowPlaying.InfoBoardId}`}
+                                  </button>
+                                ) : (
+                                  <span>{nowPlaying.InfoBoardName || "Assigned info board"}</span>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Showing assigned info board (no playback logs yet).
                               </div>
                             </>
                           ) : (

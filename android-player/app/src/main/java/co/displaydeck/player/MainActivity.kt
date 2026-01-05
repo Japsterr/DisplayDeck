@@ -3,11 +3,23 @@ package co.displaydeck.player
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.view.WindowManager
 import android.view.View
+import android.view.MotionEvent
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.AlphaAnimation
+import android.view.animation.Animation
+import android.view.animation.AnimationSet
+import android.view.animation.ScaleAnimation
+import android.view.animation.TranslateAnimation
+import android.widget.FrameLayout
 import android.widget.TextView
 import android.util.Base64
+import android.media.AudioManager
+import android.content.Context
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -28,8 +40,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -44,6 +58,24 @@ class MainActivity : AppCompatActivity() {
   private lateinit var debugOverlay: TextView
   private lateinit var versionOverlay: TextView
   private val overlayLines = ArrayDeque<String>()
+
+  // Multi-zone layout support
+  private lateinit var zoneContainer: FrameLayout
+  private val zoneViews = mutableMapOf<String, View>()
+  private var currentLayoutId: Int? = null
+
+  // Touch interaction tracking
+  private var touchStartTime: Long = 0
+  private var touchStartX: Float = 0f
+  private var touchStartY: Float = 0f
+
+  // Transition effects
+  private var currentTransitionType: String = "fade"
+  private var transitionDurationMs: Long = 500
+
+  // Remote command polling
+  private val commandPollIntervalMs = 10_000L
+  private var lastCommandId: Int = 0
 
   private val debugOverlayEnabled = false
 
@@ -71,6 +103,9 @@ class MainActivity : AppCompatActivity() {
     versionOverlay = findViewById(R.id.versionOverlay)
 
     versionOverlay.text = "v${BuildConfig.VERSION_NAME}"
+
+    // Initialize zone container for multi-zone layouts
+    zoneContainer = findViewById(R.id.zoneContainer)
 
     webView.settings.javaScriptEnabled = true
     webView.settings.domStorageEnabled = true
@@ -798,6 +833,9 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun startHeartbeat(code: String) {
+    // Start remote command polling
+    startCommandPolling(code)
+
     handler.post(object : Runnable {
       override fun run() {
         if (stopped) return
@@ -819,8 +857,29 @@ class MainActivity : AppCompatActivity() {
               SettingsStore.setPairedDisplayName(this@MainActivity, displayName)
             }
 
+            // Update transition settings
+            if (hb.transitionType != null) {
+              currentTransitionType = hb.transitionType
+            }
+            if (hb.transitionDuration != null && hb.transitionDuration > 0) {
+              transitionDurationMs = hb.transitionDuration.toLong()
+            }
+
             runOnUiThread {
               if (stopped) return@runOnUiThread
+
+              // Check for multi-zone layout first
+              if (hb.layout != null && hb.layout.zones.isNotEmpty()) {
+                showMultiZoneLayout(hb.layout)
+                return@runOnUiThread
+              }
+
+              // Clear zone views if switching to single-content mode
+              if (currentLayoutId != null) {
+                clearZoneViews()
+                zoneContainer.visibility = View.GONE
+              }
+
               when (hb.assignmentType) {
                 "menu" -> {
                   val token = hb.menuPublicToken
@@ -862,7 +921,10 @@ class MainActivity : AppCompatActivity() {
     val assignmentType: String,
     val menuPublicToken: String?,
     val campaignId: Int?,
-    val infoBoardPublicToken: String?
+    val infoBoardPublicToken: String?,
+    val layout: LayoutConfig?,
+    val transitionType: String?,
+    val transitionDuration: Int?
   )
 
   private fun requestPairingCode(hardwareId: String): String {
@@ -904,7 +966,24 @@ class MainActivity : AppCompatActivity() {
     val menuToken = assignmentObj?.optString("MenuPublicToken")?.takeIf { it.isNotBlank() }
     val campaignId = if (assignmentObj?.has("CampaignId") == true && !assignmentObj.isNull("CampaignId")) assignmentObj.optInt("CampaignId") else null
     val infoBoardToken = assignmentObj?.optString("InfoBoardPublicToken")?.takeIf { it.isNotBlank() }
-    return HeartbeatStatus(displayName = displayName, assignmentType = type, menuPublicToken = menuToken, campaignId = campaignId, infoBoardPublicToken = infoBoardToken)
+
+    // Parse layout for multi-zone support
+    val layout = parseLayoutFromHeartbeat(assignmentObj)
+
+    // Parse transition settings
+    val transitionType = assignmentObj?.optString("TransitionType")?.takeIf { it.isNotBlank() }
+    val transitionDuration = if (assignmentObj?.has("TransitionDuration") == true) assignmentObj.optInt("TransitionDuration") else null
+
+    return HeartbeatStatus(
+      displayName = displayName,
+      assignmentType = type,
+      menuPublicToken = menuToken,
+      campaignId = campaignId,
+      infoBoardPublicToken = infoBoardToken,
+      layout = layout,
+      transitionType = transitionType,
+      transitionDuration = transitionDuration
+    )
   }
 
   private fun getCampaignManifest(hardwareId: String, provisioningToken: String, campaignId: Int): CampaignManifest {
@@ -950,5 +1029,524 @@ class MainActivity : AppCompatActivity() {
     val text = BufferedReader(InputStreamReader(stream)).use { it.readText() }
     if (httpCode !in 200..299) throw IllegalStateException("HTTP $httpCode: $text")
     return text
+  }
+
+  // ===== MULTI-ZONE LAYOUT SUPPORT =====
+
+  private data class ZoneConfig(
+    val zoneName: String,
+    val xPercent: Float,
+    val yPercent: Float,
+    val widthPercent: Float,
+    val heightPercent: Float,
+    val zIndex: Int,
+    val contentType: String?,
+    val contentUrl: String?,
+    val menuPublicToken: String?,
+    val campaignId: Int?
+  )
+
+  private data class LayoutConfig(
+    val layoutId: Int,
+    val layoutName: String,
+    val zones: List<ZoneConfig>
+  )
+
+  private fun parseLayoutFromHeartbeat(assignmentObj: JSONObject?): LayoutConfig? {
+    if (assignmentObj == null) return null
+    val layoutObj = assignmentObj.optJSONObject("Layout") ?: return null
+    val layoutId = layoutObj.optInt("Id", 0)
+    if (layoutId == 0) return null
+
+    val zonesArr = layoutObj.optJSONArray("Zones") ?: return null
+    val zones = mutableListOf<ZoneConfig>()
+
+    for (i in 0 until zonesArr.length()) {
+      val z = zonesArr.optJSONObject(i) ?: continue
+      zones.add(ZoneConfig(
+        zoneName = z.optString("ZoneName", "zone$i"),
+        xPercent = z.optDouble("XPercent", 0.0).toFloat(),
+        yPercent = z.optDouble("YPercent", 0.0).toFloat(),
+        widthPercent = z.optDouble("WidthPercent", 100.0).toFloat(),
+        heightPercent = z.optDouble("HeightPercent", 100.0).toFloat(),
+        zIndex = z.optInt("ZIndex", 0),
+        contentType = z.optString("ContentType").takeIf { it.isNotBlank() },
+        contentUrl = z.optString("ContentUrl").takeIf { it.isNotBlank() },
+        menuPublicToken = z.optString("MenuPublicToken").takeIf { it.isNotBlank() },
+        campaignId = if (z.has("CampaignId") && !z.isNull("CampaignId")) z.optInt("CampaignId") else null
+      ))
+    }
+
+    return LayoutConfig(
+      layoutId = layoutId,
+      layoutName = layoutObj.optString("Name", "Layout"),
+      zones = zones.sortedBy { it.zIndex }
+    )
+  }
+
+  private fun showMultiZoneLayout(layout: LayoutConfig) {
+    val key = "layout:${layout.layoutId}"
+    if (currentContentKey == key) return
+
+    currentContentKey = key
+    currentLayoutId = layout.layoutId
+    stopCampaignPlayback()
+    stopVideo()
+
+    // Clear existing zone views
+    clearZoneViews()
+
+    codeContainer.visibility = View.GONE
+    playerView.visibility = View.GONE
+    webView.visibility = View.GONE
+    zoneContainer.visibility = View.VISIBLE
+    zoneContainer.removeAllViews()
+
+    val parentWidth = zoneContainer.width.takeIf { it > 0 } ?: window.decorView.width
+    val parentHeight = zoneContainer.height.takeIf { it > 0 } ?: window.decorView.height
+
+    for (zone in layout.zones) {
+      val zoneView = createZoneView(zone, parentWidth, parentHeight)
+      zoneContainer.addView(zoneView)
+      zoneViews[zone.zoneName] = zoneView
+    }
+  }
+
+  private fun createZoneView(zone: ZoneConfig, parentWidth: Int, parentHeight: Int): View {
+    val x = (zone.xPercent / 100f * parentWidth).toInt()
+    val y = (zone.yPercent / 100f * parentHeight).toInt()
+    val w = (zone.widthPercent / 100f * parentWidth).toInt()
+    val h = (zone.heightPercent / 100f * parentHeight).toInt()
+
+    val webView = WebView(this).apply {
+      layoutParams = FrameLayout.LayoutParams(w, h).also { lp ->
+        lp.leftMargin = x
+        lp.topMargin = y
+      }
+      settings.javaScriptEnabled = true
+      settings.domStorageEnabled = true
+      settings.mediaPlaybackRequiresUserGesture = false
+      settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+      setBackgroundColor(Color.BLACK)
+      webViewClient = WebViewClient()
+      webChromeClient = WebChromeClient()
+
+      // Enable touch events for interactive content
+      setOnTouchListener { v, event -> handleZoneTouch(zone.zoneName, event); false }
+    }
+
+    // Load content based on zone configuration
+    when {
+      zone.menuPublicToken != null -> {
+        val url = "${SettingsStore.PUBLIC_BASE_URL}/display/menu-ssr/${zone.menuPublicToken}"
+        webView.loadUrl(url)
+      }
+      zone.contentUrl != null -> {
+        val normalizedUrl = normalizeMediaUrl(zone.contentUrl)
+        if (zone.contentType?.startsWith("video/") == true) {
+          // For video zones, use HTML5 video
+          webView.loadDataWithBaseURL("${SettingsStore.PUBLIC_BASE_URL}/",
+            createVideoHtml(normalizedUrl), "text/html", "utf-8", null)
+        } else {
+          // For image zones
+          webView.loadDataWithBaseURL("${SettingsStore.PUBLIC_BASE_URL}/",
+            createImageHtml(normalizedUrl), "text/html", "utf-8", null)
+        }
+      }
+      zone.campaignId != null -> {
+        // Load campaign content in this zone
+        loadCampaignInZone(webView, zone.campaignId)
+      }
+      else -> {
+        webView.setBackgroundColor(Color.BLACK)
+      }
+    }
+
+    return webView
+  }
+
+  private fun clearZoneViews() {
+    for ((_, view) in zoneViews) {
+      if (view is WebView) {
+        view.stopLoading()
+        view.loadUrl("about:blank")
+      }
+    }
+    zoneViews.clear()
+    currentLayoutId = null
+  }
+
+  private fun loadCampaignInZone(zoneWebView: WebView, campaignId: Int) {
+    Thread {
+      try {
+        val hardwareId = SettingsStore.getOrCreateHardwareId(this)
+        val provisioningToken = SettingsStore.getPairingCode(this).trim()
+        val manifest = getCampaignManifest(hardwareId, provisioningToken, campaignId)
+        val items = manifest.items.sortedBy { it.displayOrder }
+
+        if (items.isEmpty()) {
+          runOnUiThread { zoneWebView.setBackgroundColor(Color.BLACK) }
+          return@Thread
+        }
+
+        // Simple zone campaign playback - cycle through items
+        var idx = 0
+        val zoneRunnable = object : Runnable {
+          override fun run() {
+            if (stopped) return
+            val item = items[idx % items.size]
+            idx++
+
+            runOnUiThread {
+              when {
+                item.menuPublicToken != null -> {
+                  val url = "${SettingsStore.PUBLIC_BASE_URL}/display/menu-ssr/${item.menuPublicToken}"
+                  zoneWebView.loadUrl(url)
+                }
+                item.downloadUrl != null -> {
+                  val normalizedUrl = normalizeMediaUrl(item.downloadUrl)
+                  if (item.fileType?.startsWith("video/") == true) {
+                    zoneWebView.loadDataWithBaseURL("${SettingsStore.PUBLIC_BASE_URL}/",
+                      createVideoHtml(normalizedUrl), "text/html", "utf-8", null)
+                  } else {
+                    zoneWebView.loadDataWithBaseURL("${SettingsStore.PUBLIC_BASE_URL}/",
+                      createImageHtml(normalizedUrl), "text/html", "utf-8", null)
+                  }
+                }
+              }
+            }
+
+            val duration = (if (item.durationSec > 0) item.durationSec else 10).toLong() * 1000L
+            handler.postDelayed(this, duration.coerceAtLeast(3_000L))
+          }
+        }
+        handler.post(zoneRunnable)
+      } catch (_: Exception) {
+        runOnUiThread { zoneWebView.setBackgroundColor(Color.BLACK) }
+      }
+    }.start()
+  }
+
+  private fun createVideoHtml(url: String): String {
+    val urlB64 = Base64.encodeToString(url.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+    return """
+      <!doctype html>
+      <html>
+        <head><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}video{width:100%;height:100%;object-fit:cover}</style>
+        </head>
+        <body>
+          <video id="m" autoplay muted playsinline loop></video>
+          <script>
+            (function(){
+              var v = document.getElementById('m');
+              try { v.src = atob('$urlB64'); v.play(); } catch(e){}
+            })();
+          </script>
+        </body>
+      </html>
+    """.trimIndent()
+  }
+
+  private fun createImageHtml(url: String): String {
+    val safeUrl = url.replace("&", "&amp;").replace("\"", "&quot;")
+      .replace("<", "&lt;").replace(">", "&gt;")
+    return """
+      <!doctype html>
+      <html>
+        <head><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}img{width:100%;height:100%;object-fit:cover}</style>
+        </head>
+        <body><img src="$safeUrl" /></body>
+      </html>
+    """.trimIndent()
+  }
+
+  // ===== TOUCH INTERACTION SUPPORT =====
+
+  private fun handleZoneTouch(zoneName: String, event: MotionEvent) {
+    when (event.action) {
+      MotionEvent.ACTION_DOWN -> {
+        touchStartTime = System.currentTimeMillis()
+        touchStartX = event.x
+        touchStartY = event.y
+      }
+      MotionEvent.ACTION_UP -> {
+        val duration = System.currentTimeMillis() - touchStartTime
+        val dx = event.x - touchStartX
+        val dy = event.y - touchStartY
+        val distance = kotlin.math.sqrt((dx * dx + dy * dy).toDouble())
+
+        val interactionType = when {
+          distance > 100 && kotlin.math.abs(dx) > kotlin.math.abs(dy) -> if (dx > 0) "swipe_right" else "swipe_left"
+          distance > 100 -> if (dy > 0) "swipe_down" else "swipe_up"
+          duration > 500 -> "long_press"
+          else -> "tap"
+        }
+
+        recordTouchInteraction(zoneName, interactionType, event.x, event.y)
+      }
+    }
+  }
+
+  private fun recordTouchInteraction(zoneName: String, interactionType: String, x: Float, y: Float) {
+    Thread {
+      try {
+        val hardwareId = SettingsStore.getOrCreateHardwareId(this)
+        val provisioningToken = SettingsStore.getPairingCode(this).trim()
+
+        val url = URL("${SettingsStore.API_BASE_URL}/device/interaction")
+        val body = JSONObject()
+          .put("HardwareId", hardwareId)
+          .put("ProvisioningToken", provisioningToken)
+          .put("ZoneName", zoneName)
+          .put("InteractionType", interactionType)
+          .put("X", x.toInt())
+          .put("Y", y.toInt())
+          .put("Timestamp", System.currentTimeMillis())
+
+        postJson(url, body)
+      } catch (_: Exception) {
+        // Silently ignore interaction recording failures
+      }
+    }.start()
+  }
+
+  // ===== TRANSITION EFFECTS =====
+
+  private fun applyTransition(view: View, transitionType: String, onComplete: (() -> Unit)? = null) {
+    val animation: Animation = when (transitionType.lowercase()) {
+      "fade" -> AlphaAnimation(0f, 1f).apply {
+        duration = transitionDurationMs
+        interpolator = AccelerateDecelerateInterpolator()
+      }
+      "slide_left" -> TranslateAnimation(
+        Animation.RELATIVE_TO_PARENT, 1f, Animation.RELATIVE_TO_PARENT, 0f,
+        Animation.RELATIVE_TO_PARENT, 0f, Animation.RELATIVE_TO_PARENT, 0f
+      ).apply {
+        duration = transitionDurationMs
+        interpolator = AccelerateDecelerateInterpolator()
+      }
+      "slide_right" -> TranslateAnimation(
+        Animation.RELATIVE_TO_PARENT, -1f, Animation.RELATIVE_TO_PARENT, 0f,
+        Animation.RELATIVE_TO_PARENT, 0f, Animation.RELATIVE_TO_PARENT, 0f
+      ).apply {
+        duration = transitionDurationMs
+        interpolator = AccelerateDecelerateInterpolator()
+      }
+      "slide_up" -> TranslateAnimation(
+        Animation.RELATIVE_TO_PARENT, 0f, Animation.RELATIVE_TO_PARENT, 0f,
+        Animation.RELATIVE_TO_PARENT, 1f, Animation.RELATIVE_TO_PARENT, 0f
+      ).apply {
+        duration = transitionDurationMs
+        interpolator = AccelerateDecelerateInterpolator()
+      }
+      "slide_down" -> TranslateAnimation(
+        Animation.RELATIVE_TO_PARENT, 0f, Animation.RELATIVE_TO_PARENT, 0f,
+        Animation.RELATIVE_TO_PARENT, -1f, Animation.RELATIVE_TO_PARENT, 0f
+      ).apply {
+        duration = transitionDurationMs
+        interpolator = AccelerateDecelerateInterpolator()
+      }
+      "zoom_in" -> AnimationSet(true).apply {
+        addAnimation(ScaleAnimation(0.5f, 1f, 0.5f, 1f,
+          Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f))
+        addAnimation(AlphaAnimation(0f, 1f))
+        duration = transitionDurationMs
+        interpolator = AccelerateDecelerateInterpolator()
+      }
+      "zoom_out" -> AnimationSet(true).apply {
+        addAnimation(ScaleAnimation(1.5f, 1f, 1.5f, 1f,
+          Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f))
+        addAnimation(AlphaAnimation(0f, 1f))
+        duration = transitionDurationMs
+        interpolator = AccelerateDecelerateInterpolator()
+      }
+      else -> AlphaAnimation(1f, 1f).apply { duration = 0 } // No transition
+    }
+
+    animation.setAnimationListener(object : Animation.AnimationListener {
+      override fun onAnimationStart(animation: Animation?) {}
+      override fun onAnimationEnd(animation: Animation?) { onComplete?.invoke() }
+      override fun onAnimationRepeat(animation: Animation?) {}
+    })
+
+    view.startAnimation(animation)
+  }
+
+  // ===== REMOTE COMMAND SUPPORT =====
+
+  private data class RemoteCommand(
+    val id: Int,
+    val commandType: String,
+    val payload: JSONObject?
+  )
+
+  private fun startCommandPolling(provisioningToken: String) {
+    handler.post(object : Runnable {
+      override fun run() {
+        if (stopped) return
+        Thread {
+          try {
+            val commands = fetchPendingCommands(provisioningToken)
+            for (cmd in commands) {
+              executeCommand(cmd)
+              acknowledgeCommand(provisioningToken, cmd.id)
+            }
+          } catch (_: Exception) {
+            // Silently ignore command polling failures
+          }
+          handler.postDelayed(this, commandPollIntervalMs)
+        }.start()
+      }
+    })
+  }
+
+  private fun fetchPendingCommands(provisioningToken: String): List<RemoteCommand> {
+    val hardwareId = SettingsStore.getOrCreateHardwareId(this)
+    val url = URL("${SettingsStore.API_BASE_URL}/device/commands?hardwareId=$hardwareId&provisioningToken=$provisioningToken")
+    val conn = (url.openConnection() as HttpURLConnection)
+    conn.requestMethod = "GET"
+    conn.connectTimeout = 8_000
+    conn.readTimeout = 8_000
+
+    val httpCode = conn.responseCode
+    if (httpCode !in 200..299) return emptyList()
+
+    val text = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+    val arr = JSONArray(text)
+    val commands = mutableListOf<RemoteCommand>()
+
+    for (i in 0 until arr.length()) {
+      val obj = arr.optJSONObject(i) ?: continue
+      val id = obj.optInt("Id", 0)
+      if (id <= lastCommandId) continue
+
+      commands.add(RemoteCommand(
+        id = id,
+        commandType = obj.optString("CommandType", ""),
+        payload = obj.optJSONObject("Payload")
+      ))
+    }
+
+    return commands
+  }
+
+  private fun executeCommand(cmd: RemoteCommand) {
+    when (cmd.commandType.lowercase()) {
+      "reboot" -> {
+        // Attempt soft restart of the app
+        runOnUiThread {
+          val intent = packageManager.getLaunchIntentForPackage(packageName)
+          intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+          startActivity(intent)
+          finish()
+        }
+      }
+      "screenshot" -> {
+        runOnUiThread {
+          captureAndUploadScreenshot(cmd.id)
+        }
+      }
+      "volume" -> {
+        val level = cmd.payload?.optInt("level", 50) ?: 50
+        setSystemVolume(level)
+      }
+      "refresh" -> {
+        runOnUiThread {
+          webView.reload()
+          for ((_, view) in zoneViews) {
+            if (view is WebView) view.reload()
+          }
+        }
+      }
+      "set_brightness" -> {
+        val brightness = cmd.payload?.optInt("brightness", 100) ?: 100
+        setScreenBrightness(brightness)
+      }
+      "clear_cache" -> {
+        runOnUiThread {
+          webView.clearCache(true)
+          for ((_, view) in zoneViews) {
+            if (view is WebView) view.clearCache(true)
+          }
+        }
+      }
+    }
+
+    lastCommandId = maxOf(lastCommandId, cmd.id)
+  }
+
+  private fun acknowledgeCommand(provisioningToken: String, commandId: Int) {
+    try {
+      val hardwareId = SettingsStore.getOrCreateHardwareId(this)
+      val url = URL("${SettingsStore.API_BASE_URL}/device/commands/$commandId/ack")
+      val body = JSONObject()
+        .put("HardwareId", hardwareId)
+        .put("ProvisioningToken", provisioningToken)
+        .put("Status", "completed")
+      postJson(url, body)
+    } catch (_: Exception) {
+      // Ignore ack failures
+    }
+  }
+
+  private fun captureAndUploadScreenshot(commandId: Int) {
+    try {
+      // Capture the current screen
+      val rootView = window.decorView.rootView
+      val bitmap = Bitmap.createBitmap(rootView.width, rootView.height, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(bitmap)
+      rootView.draw(canvas)
+
+      // Compress to JPEG
+      val outputStream = ByteArrayOutputStream()
+      bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+      val imageBytes = outputStream.toByteArray()
+      val base64Image = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+
+      // Upload screenshot
+      Thread {
+        try {
+          val hardwareId = SettingsStore.getOrCreateHardwareId(this)
+          val provisioningToken = SettingsStore.getPairingCode(this).trim()
+          val url = URL("${SettingsStore.API_BASE_URL}/device/screenshot")
+          val body = JSONObject()
+            .put("HardwareId", hardwareId)
+            .put("ProvisioningToken", provisioningToken)
+            .put("CommandId", commandId)
+            .put("ImageData", base64Image)
+            .put("ContentType", "image/jpeg")
+          postJson(url, body)
+        } catch (_: Exception) {
+          // Ignore upload failures
+        }
+      }.start()
+
+      bitmap.recycle()
+    } catch (_: Exception) {
+      // Ignore screenshot failures
+    }
+  }
+
+  private fun setSystemVolume(level: Int) {
+    try {
+      val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+      val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+      val targetVolume = (level / 100f * maxVolume).toInt().coerceIn(0, maxVolume)
+      audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+    } catch (_: Exception) {
+      // Ignore volume control failures
+    }
+  }
+
+  private fun setScreenBrightness(brightness: Int) {
+    try {
+      val layoutParams = window.attributes
+      layoutParams.screenBrightness = (brightness / 100f).coerceIn(0.01f, 1f)
+      window.attributes = layoutParams
+    } catch (_: Exception) {
+      // Ignore brightness control failures
+    }
   }
 }

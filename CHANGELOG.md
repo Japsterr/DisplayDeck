@@ -1,5 +1,136 @@
 # Changelog
 
+## 0.3.1 - 2026-01-05
+
+### Bug Fixes and Improvements
+
+**Template System Fixes**
+- Fixed template creation failing due to empty Tags/TemplateData causing PostgreSQL JSONB cast errors
+- Server now converts empty Tags to `'[]'` and empty TemplateData to `'{}'`
+- Added template DELETE endpoint (`DELETE /templates/{id}`) for non-system templates
+- Added delete option in templates page UI (only visible for non-system templates)
+- Added 5 preview images for system templates (SVG placeholders in `/public/templates/`)
+
+**Schedule Creation Fixes**
+- Fixed schedule creation failing due to ContentId not mapping to CampaignId/MenuId/InfoBoardId
+- Server now properly maps ContentId to the correct ID field based on ContentType (campaign, menu, infoboard)
+- Added client-side validation requiring content selection before schedule creation
+
+**Legacy Media URL Migration**
+- Created migration `2026-01-05_fix_legacy_media_urls.sql` to fix media files with localhost URLs
+- Converted `http://localhost:9000/` and `http://localhost:3000/minio/` paths to relative paths
+- Fixed 5 legacy media files with broken thumbnail/storage URLs
+
+**Template Preview Images**
+- Created SVG preview images for all 5 system templates:
+  - Restaurant Menu - Classic (`restaurant-menu.svg`)
+  - Coffee Shop Menu (`coffee-shop.svg`)
+  - Retail Promo Board (`retail-promo.svg`)
+  - Corporate Announcement (`corporate-announcement.svg`)
+  - Healthcare Waiting Room (`healthcare-waiting.svg`)
+- Added migration `2026-01-05_add_template_thumbnails.sql` to update thumbnailurl in database
+
+### Technical Details
+- Server: Modified `ContentTemplateRepository.pas` CreateTemplate/UpdateTemplate for JSON handling
+- Server: Modified `WebModuleMain.pas` for schedule ContentId mapping and DELETE endpoint
+- Website: Modified `templates/page.tsx` with delete functionality
+- Website: Modified `schedules/page.tsx` with contentId validation
+- Database: 2 new migrations applied
+
+## 0.3.0 - 2026-01-06
+
+### Major Feature Release: Comprehensive Digital Signage Platform
+
+This release adds all high and medium priority features from the ROADMAP, transforming DisplayDeck into a full-featured digital signage platform.
+
+#### High Priority Features
+
+**Scheduling System**
+- New database tables: `ContentSchedules`, `DisplaySchedules`, `DisplayScheduleItems`
+- Full CRUD API endpoints for content schedules
+- Priority-based schedule resolution (emergency, high, normal, low, fallback)
+- Time-based scheduling with day-of-week support
+- Display assignment and bulk scheduling
+- New dashboard page at `/dashboard/schedules`
+
+**Multi-Zone Layouts**
+- New database tables: `LayoutTemplates`, `DisplayZones`
+- 7 pre-built layout templates (full-screen, side-banner, L-shape, quad, PIP, header-footer, thirds)
+- Zone configuration with percentage-based positioning
+- Android player now renders multiple content zones simultaneously
+- Each zone can display different content types (menu, campaign, media, infoboard)
+
+**Remote Display Management**
+- New database tables: `DisplayCommands`, `DisplayScreenshots`
+- Remote command queue with status tracking
+- Commands: reboot, screenshot, volume, refresh, brightness, clear_cache
+- Android player polls for and executes remote commands
+- Screenshot capture and upload to server
+- Command acknowledgement system
+
+**Analytics Dashboard**
+- New database tables: `DisplayUptimeLogs`, `ContentMetrics`
+- Enhanced analytics API endpoints: `/analytics/dashboard`, `/analytics/uptime`, `/analytics/top-content`
+- Organization-wide dashboard statistics
+- Display uptime tracking and summaries
+- Top performing content metrics
+
+#### Medium Priority Features
+
+**Transition Effects**
+- Campaign-level transition settings (type and duration)
+- 8 transition types: none, fade, slide_left, slide_right, slide_up, slide_down, zoom_in, zoom_out
+- Configurable duration (100-2000ms)
+- Campaign editor settings panel with transition configuration
+- Android player implements all transition animations
+
+**Touch Interaction Support**
+- Android player tracks touch events in all zones
+- Interaction types: tap, long_press, swipe_left, swipe_right, swipe_up, swipe_down
+- Touch events recorded via `/device/interaction` API
+- Coordinates and timestamps captured for analytics
+
+**External Integrations**
+- New database tables: `IntegrationConnections`, `IntegrationData`
+- Integration types: weather, RSS, social media, API
+- Cached data with configurable refresh intervals
+- New dashboard page at `/dashboard/integrations`
+
+**Templates Library**
+- New database table: `ContentTemplates`
+- Content templates for campaigns and layouts
+- Categories: promotional, event, menu, info, social
+- Usage tracking and preview support
+- New dashboard page at `/dashboard/templates` with content and layout tabs
+
+**Team Management**
+- New database tables: `Roles`, `TeamInvitations`, `Locations`
+- Default roles: Owner, Admin, Editor, Viewer with granular permissions
+- Team invitation system with email/code options
+- Location grouping for multi-site deployments
+- New dashboard page at `/dashboard/team` with members, invitations, roles, locations tabs
+
+### Android TV Player
+- Multi-zone layout rendering with dynamic zone creation
+- Remote command polling and execution
+- Touch interaction tracking and recording
+- Transition effect animations
+- Screenshot capture and upload
+- Volume and brightness control
+- Cache clearing and page refresh commands
+
+### Server
+- 8 new repository files for new entities
+- ~500 lines of new API endpoints
+- Updated Campaign entity with transition fields
+- Enhanced heartbeat response with layout configuration
+
+### Website
+- 4 new dashboard pages (schedules, templates, integrations, team)
+- Campaign editor settings panel for transitions
+- Updated sidebar with logical page ordering
+- New icons for new features
+
 ## 0.2.6 - 2026-01-04
 
 ### Android TV Player

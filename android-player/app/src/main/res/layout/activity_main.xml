@@ -18,6 +18,13 @@
     android:layout_height="match_parent"
     android:visibility="gone" />
 
+  <!-- Multi-zone layout container -->
+  <FrameLayout
+    android:id="@+id/zoneContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:visibility="gone" />
+
   <TextView
     android:id="@+id/debugOverlay"
     android:layout_width="match_parent"

@@ -11,6 +11,7 @@ type
     class function ListByOrganization(const OrgId: Integer): TObjectList<TCampaign>;
     class function CreateCampaign(const OrgId: Integer; const Name, Orientation: string): TCampaign;
     class function UpdateCampaign(const Id: Integer; const Name, Orientation: string): TCampaign;
+    class function UpdateCampaignWithTransition(const Id: Integer; const Name, Orientation, TransitionType: string; TransitionDuration: Integer): TCampaign;
     class procedure DeleteCampaign(const Id: Integer);
   end;
 
@@ -38,6 +39,8 @@ begin
   Result.OrganizationId := Q.FieldByName('OrganizationID').AsInteger;
   Result.Name := Q.FieldByName('Name').AsString;
   Result.Orientation := Q.FieldByName('Orientation').AsString;
+  Result.TransitionType := Q.FieldByName('TransitionType').AsString;
+  Result.TransitionDuration := Q.FieldByName('TransitionDuration').AsInteger;
   Result.CreatedAt := Q.FieldByName('CreatedAt').AsDateTime;
   Result.UpdatedAt := Q.FieldByName('UpdatedAt').AsDateTime;
 end;
@@ -110,6 +113,27 @@ begin
       Q.ParamByName('Id').AsInteger := Id;
       Q.ParamByName('Name').AsString := Name;
       Q.ParamByName('Orient').AsString := Orientation;
+      Q.Open;
+      if Q.Eof then Exit(nil);
+      Result := MapCampaign(Q);
+    finally Q.Free; end;
+  finally C.Free; end;
+end;
+
+class function TCampaignRepository.UpdateCampaignWithTransition(const Id: Integer; const Name, Orientation, TransitionType: string; TransitionDuration: Integer): TCampaign;
+var C: TFDConnection; Q: TFDQuery;
+begin
+  C := NewConnection;
+  try
+    Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := C;
+      Q.SQL.Text := 'update Campaigns set Name=:Name, Orientation=:Orient, TransitionType=:TransType, TransitionDuration=:TransDur, UpdatedAt=now() where CampaignID=:Id returning *';
+      Q.ParamByName('Id').AsInteger := Id;
+      Q.ParamByName('Name').AsString := Name;
+      Q.ParamByName('Orient').AsString := Orientation;
+      Q.ParamByName('TransType').AsString := TransitionType;
+      Q.ParamByName('TransDur').AsInteger := TransitionDuration;
       Q.Open;
       if Q.Eof then Exit(nil);
       Result := MapCampaign(Q);

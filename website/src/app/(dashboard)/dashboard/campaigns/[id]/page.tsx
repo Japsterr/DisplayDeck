@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Trash2, Save, Clock, GripVertical, Image as ImageIcon, FileVideo, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Clock, GripVertical, Image as ImageIcon, FileVideo, UtensilsCrossed, Sparkles, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 
@@ -13,6 +13,32 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+
+const TRANSITION_TYPES = [
+  { value: "none", label: "None" },
+  { value: "fade", label: "Fade" },
+  { value: "slide_left", label: "Slide Left" },
+  { value: "slide_right", label: "Slide Right" },
+  { value: "slide_up", label: "Slide Up" },
+  { value: "slide_down", label: "Slide Down" },
+  { value: "zoom_in", label: "Zoom In" },
+  { value: "zoom_out", label: "Zoom Out" },
+] as const;
 
 function getApiUrl() {
   const env = process.env.NEXT_PUBLIC_API_URL;
@@ -56,6 +82,8 @@ interface Campaign {
   Id: number;
   Name: string;
   Orientation: string;
+  TransitionType?: string;
+  TransitionDuration?: number;
 }
 
 interface MediaFile {
@@ -81,6 +109,7 @@ interface CampaignItem {
   MenuId: number | null;
   DisplayOrder: number;
   Duration: number;
+  TransitionType?: string;
   MediaFile?: MediaFile; // Enriched manually
   Menu?: Menu; // Enriched manually
 }
@@ -97,6 +126,11 @@ export default function EditCampaignPage() {
   const [previewUrls, setPreviewUrls] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Transition settings
+  const [transitionType, setTransitionType] = useState<string>("fade");
+  const [transitionDuration, setTransitionDuration] = useState<number>(500);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const ensurePreviewUrl = useCallback(
     async (mediaFileId: number) => {
@@ -142,6 +176,14 @@ export default function EditCampaignPage() {
         if (!campaignRes.ok) throw new Error("Failed to fetch campaign");
         const campaignData = await campaignRes.json();
         setCampaign(campaignData);
+
+        // Set transition settings from campaign
+        if (campaignData.TransitionType) {
+          setTransitionType(campaignData.TransitionType);
+        }
+        if (campaignData.TransitionDuration) {
+          setTransitionDuration(campaignData.TransitionDuration);
+        }
 
         // 2. Fetch Media Library
         const mediaRes = await fetch(`${apiUrl}/organizations/${orgId}/media-files`, { headers });
@@ -266,6 +308,43 @@ export default function EditCampaignPage() {
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Failed to add item");
+    }
+  };
+
+  const handleSaveTransitionSettings = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+      const apiUrl = getApiUrl();
+      
+      setSaving(true);
+      const response = await fetch(`${apiUrl}/campaigns/${campaignId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Auth-Token": token,
+        },
+        body: JSON.stringify({
+          Name: campaign?.Name,
+          Orientation: campaign?.Orientation,
+          TransitionType: transitionType,
+          TransitionDuration: transitionDuration,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to save settings");
+      
+      setCampaign(prev => prev ? { ...prev, TransitionType: transitionType, TransitionDuration: transitionDuration } : null);
+      toast.success("Transition settings saved");
+      setSettingsOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to save settings");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -426,16 +505,79 @@ export default function EditCampaignPage() {
 
   return (
     <div className="flex flex-col gap-4 p-4 pt-0 h-[calc(100vh-100px)]">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">{campaign.Name}</h2>
-          <p className="text-muted-foreground text-sm">
-            {campaign.Orientation} • {items.length} items • Total Duration: {items.reduce((acc, i) => acc + i.Duration, 0)}s
-          </p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">{campaign.Name}</h2>
+            <p className="text-muted-foreground text-sm">
+              {campaign.Orientation} • {items.length} items • Total Duration: {items.reduce((acc, i) => acc + i.Duration, 0)}s
+              {campaign.TransitionType && campaign.TransitionType !== "none" && (
+                <> • <Sparkles className="inline h-3 w-3" /> {TRANSITION_TYPES.find(t => t.value === campaign.TransitionType)?.label || campaign.TransitionType}</>
+              )}
+            </p>
+          </div>
         </div>
+
+        {/* Campaign Settings Sheet */}
+        <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline">
+              <Settings2 className="mr-2 h-4 w-4" />
+              Settings
+            </Button>
+          </SheetTrigger>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Campaign Settings</SheetTitle>
+              <SheetDescription>
+                Configure transition effects and other campaign options.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="grid gap-6 py-6">
+              <div className="grid gap-2">
+                <Label htmlFor="transitionType">Transition Effect</Label>
+                <Select value={transitionType} onValueChange={setTransitionType}>
+                  <SelectTrigger id="transitionType">
+                    <SelectValue placeholder="Select transition" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRANSITION_TYPES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  The animation used when transitioning between playlist items.
+                </p>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="transitionDuration">Transition Duration (ms)</Label>
+                <Input
+                  id="transitionDuration"
+                  type="number"
+                  value={transitionDuration}
+                  onChange={(e) => setTransitionDuration(parseInt(e.target.value) || 500)}
+                  min={100}
+                  max={2000}
+                  step={100}
+                />
+                <p className="text-xs text-muted-foreground">
+                  How long the transition animation takes (100-2000ms).
+                </p>
+              </div>
+
+              <Separator />
+
+              <Button onClick={handleSaveTransitionSettings} disabled={saving}>
+                {saving ? "Saving..." : "Save Settings"}
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">

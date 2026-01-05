@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 225" width="400" height="225">
+  <rect fill="#2d1810" width="400" height="225"/>
+  <rect fill="#3d2317" x="20" y="20" width="360" height="185" rx="10"/>
+  
+  <!-- Coffee cup icon -->
+  <circle fill="#c9a66b" cx="70" cy="80" r="30"/>
+  <ellipse fill="#2d1810" cx="70" cy="75" rx="18" ry="12"/>
+  <rect fill="#c9a66b" x="98" y="65" width="8" height="25" rx="3"/>
+  
+  <!-- Menu items -->
+  <text fill="#c9a66b" font-family="Georgia, serif" font-size="16" font-weight="bold" x="130" y="55">☕ COFFEE MENU</text>
+  
+  <text fill="#f5e6d3" font-family="Arial, sans-serif" font-size="11" x="130" y="80">Espresso</text>
+  <text fill="#c9a66b" font-family="Arial, sans-serif" font-size="11" x="320" y="80">$3.50</text>
+  
+  <text fill="#f5e6d3" font-family="Arial, sans-serif" font-size="11" x="130" y="100">Cappuccino</text>
+  <text fill="#c9a66b" font-family="Arial, sans-serif" font-size="11" x="320" y="100">$4.50</text>
+  
+  <text fill="#f5e6d3" font-family="Arial, sans-serif" font-size="11" x="130" y="120">Latte</text>
+  <text fill="#c9a66b" font-family="Arial, sans-serif" font-size="11" x="320" y="120">$4.75</text>
+  
+  <text fill="#f5e6d3" font-family="Arial, sans-serif" font-size="11" x="130" y="140">Cold Brew</text>
+  <text fill="#c9a66b" font-family="Arial, sans-serif" font-size="11" x="320" y="140">$5.00</text>
+  
+  <!-- Decorative elements -->
+  <rect fill="#c9a66b" x="130" y="155" width="220" height="1"/>
+  <text fill="#c9a66b" font-family="Georgia, serif" font-size="10" x="200" y="175" text-anchor="middle">Fresh Roasted Daily</text>
+  
+  <!-- Coffee beans decoration -->
+  <ellipse fill="#4a2c2a" cx="340" cy="180" rx="8" ry="5" transform="rotate(-30 340 180)"/>
+  <ellipse fill="#4a2c2a" cx="355" cy="175" rx="8" ry="5" transform="rotate(15 355 175)"/>
+  <ellipse fill="#4a2c2a" cx="350" cy="190" rx="8" ry="5" transform="rotate(-10 350 190)"/>
+</svg>

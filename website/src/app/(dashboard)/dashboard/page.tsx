@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Monitor, Megaphone, AlertCircle, Activity, CheckCircle2, Clock, TrendingUp } from "lucide-react";
+import { Monitor, Megaphone, AlertCircle, Activity, CheckCircle2, Clock, TrendingUp, Tv, FileText, Utensils, Image, Users, Calendar, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow, isValid, parseISO } from "date-fns";
 import { Progress } from "@/components/ui/progress";
@@ -25,6 +25,83 @@ function safeDistanceToNow(input: string | null | undefined): string {
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function formatAuditDetails(action: string, details: string): string {
+  if (!details) return "";
+  try {
+    const data = typeof details === "string" ? JSON.parse(details) : details;
+    
+    // Format based on action type
+    if (action === "display.pair") {
+      const name = data.Name || "Unknown";
+      const token = data.ProvisioningToken || "";
+      return `Paired display "${name}" with code ${token}`;
+    }
+    
+    if (action === "display.delete" || action === "display.unpair") {
+      const token = data.ProvisioningToken || "";
+      const device = data.DeviceInfo?.model || data.DeviceInfo?.manufacturer || "";
+      if (device) {
+        return `Removed ${device} device (${token})`;
+      }
+      return `Removed display with code ${token}`;
+    }
+    
+    if (action === "display.update") {
+      const name = data.Name || "";
+      return name ? `Updated display "${name}"` : "Updated display settings";
+    }
+    
+    if (action.startsWith("campaign.")) {
+      const name = data.Name || data.CampaignName || "";
+      const verb = action.split(".")[1];
+      return name ? `${verb.charAt(0).toUpperCase() + verb.slice(1)}d campaign "${name}"` : `Campaign ${verb}d`;
+    }
+    
+    if (action.startsWith("menu.")) {
+      const name = data.Name || data.MenuName || "";
+      const verb = action.split(".")[1];
+      return name ? `${verb.charAt(0).toUpperCase() + verb.slice(1)}d menu "${name}"` : `Menu ${verb}d`;
+    }
+    
+    if (action.startsWith("media.")) {
+      const name = data.FileName || data.Name || "";
+      const verb = action.split(".")[1];
+      return name ? `${verb.charAt(0).toUpperCase() + verb.slice(1)}d media "${name}"` : `Media ${verb}d`;
+    }
+    
+    if (action.startsWith("user.")) {
+      const email = data.Email || "";
+      const verb = action.split(".")[1];
+      return email ? `User ${verb}: ${email}` : `User ${verb}`;
+    }
+    
+    if (action.startsWith("schedule.")) {
+      const name = data.Name || "";
+      const verb = action.split(".")[1];
+      return name ? `${verb.charAt(0).toUpperCase() + verb.slice(1)}d schedule "${name}"` : `Schedule ${verb}d`;
+    }
+    
+    // Generic fallback - extract key info
+    const name = data.Name || data.name || "";
+    if (name) return `${name}`;
+    
+    // Last resort - show first few meaningful values
+    const keys = Object.keys(data).filter(k => 
+      typeof data[k] === "string" && 
+      !k.toLowerCase().includes("id") && 
+      data[k].length < 50
+    );
+    if (keys.length > 0) {
+      return keys.slice(0, 2).map(k => data[k]).join(" • ");
+    }
+    
+    return "";
+  } catch {
+    // If parsing fails, truncate the raw string
+    return details.length > 60 ? details.substring(0, 60) + "..." : details;
+  }
 }
 
 interface Display {
@@ -307,19 +384,57 @@ export default function DashboardPage() {
               {recentActivity.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">No recent activity</div>
               ) : (
-                recentActivity.map((log) => (
-                  <div key={log.AuditLogId} className="flex items-start gap-4 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-none">{log.Action}</p>
-                      <p className="text-sm text-muted-foreground mt-1 truncate">
-                        {log.Details}
-                      </p>
+                recentActivity.map((log) => {
+                  const formattedDetails = formatAuditDetails(log.Action, log.Details);
+                  const actionParts = log.Action.split(".");
+                  const actionType = actionParts[0];
+                  const actionVerb = actionParts[1] || "";
+                  
+                  // Get icon and color based on action type
+                  const getActionIcon = () => {
+                    switch (actionType) {
+                      case "display": return <Tv className="h-4 w-4" />;
+                      case "campaign": return <Megaphone className="h-4 w-4" />;
+                      case "menu": return <Utensils className="h-4 w-4" />;
+                      case "media": return <Image className="h-4 w-4" />;
+                      case "user": return <Users className="h-4 w-4" />;
+                      case "schedule": return <Calendar className="h-4 w-4" />;
+                      default: return <Settings className="h-4 w-4" />;
+                    }
+                  };
+                  
+                  const getActionColor = () => {
+                    if (actionVerb === "delete" || actionVerb === "unpair") return "text-red-500 bg-red-500/10";
+                    if (actionVerb === "create" || actionVerb === "pair") return "text-green-500 bg-green-500/10";
+                    if (actionVerb === "update") return "text-blue-500 bg-blue-500/10";
+                    return "text-gray-500 bg-gray-500/10";
+                  };
+                  
+                  const formatActionLabel = () => {
+                    const typeLabel = actionType.charAt(0).toUpperCase() + actionType.slice(1);
+                    const verbLabel = actionVerb ? actionVerb.charAt(0).toUpperCase() + actionVerb.slice(1) : "";
+                    return verbLabel ? `${typeLabel} ${verbLabel}` : typeLabel;
+                  };
+                  
+                  return (
+                    <div key={log.AuditLogId} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                      <div className={`p-2 rounded-full ${getActionColor()}`}>
+                        {getActionIcon()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium leading-none">{formatActionLabel()}</p>
+                        {formattedDetails && (
+                          <p className="text-sm text-muted-foreground mt-1 truncate">
+                            {formattedDetails}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        {safeDistanceToNow(log.CreatedAt)}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      {safeDistanceToNow(log.CreatedAt)}
-                    </Badge>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </CardContent>
